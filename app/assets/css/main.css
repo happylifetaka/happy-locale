@@ -265,11 +265,11 @@ button.danger {
 
 .workspace-choices {
   display: grid;
-  width: min(100% - 2rem, 58rem);
+  width: min(100% - 2rem, 36rem);
   margin: 0 auto;
   padding-bottom: clamp(3rem, 8vw, 6rem);
   gap: 1.25rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   flex: 1;
 }
 

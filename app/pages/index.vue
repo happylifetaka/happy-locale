@@ -2,9 +2,9 @@
   <main class="home-page">
     <section class="home-introduction">
       <p class="home-eyebrow">
-        カード・PDF翻訳支援ツール
+        カード翻訳支援ツール
       </p>
-      <h1>何を編集しますか？</h1>
+      <h1>カードの翻訳を始めましょう</h1>
       <p>
         ブラウザ上で翻訳作業を進められます。
       </p>
@@ -39,29 +39,6 @@
             サンプル（デモ）を開く
           </NuxtLink>
         </div>
-      </article>
-
-      <article class="workspace-choice-card">
-        <div class="workspace-choice-icon pdf" aria-hidden="true">
-          <span>PDF</span>
-        </div>
-        <div>
-          <p class="workspace-choice-label">
-            文書から作る
-          </p>
-          <h2>PDF翻訳</h2>
-          <p>
-            PDFから文字を抽出してCSV出力。
-            利用者がCSV上で翻訳後、元のページへ訳文を配置します。
-          </p>
-        </div>
-        <ul>
-          <li>文字PDF・画像PDFの判定</li>
-          <li>検索可能な訳文の埋め込み</li>
-        </ul>
-        <NuxtLink class="button primary workspace-choice-action" to="/pdf">
-          PDF翻訳を始める
-        </NuxtLink>
       </article>
     </section>
     <DataPrivacyFooter />

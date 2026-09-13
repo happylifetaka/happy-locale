@@ -1,9 +1,9 @@
 <script setup lang="ts">
 const route = useRoute()
 
-/** 編集画面は専用ツールバーを持つため、共通ナビゲーションとの二重表示を避ける。 */
+/** カード編集画面は専用ツールバーを持つため、共通ナビゲーションとの二重表示を避ける。 */
 const showHomeNavigation = computed(() =>
-  !route.path.startsWith('/cards') && !route.path.startsWith('/pdf'),
+  !route.path.startsWith('/cards'),
 )
 </script>
 

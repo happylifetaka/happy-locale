@@ -5,8 +5,6 @@ const route = useRoute()
 const currentWorkspace = computed(() => {
   if (route.path.startsWith('/cards'))
     return '/cards'
-  if (route.path.startsWith('/pdf'))
-    return '/pdf'
   return '/'
 })
 
@@ -36,9 +34,6 @@ async function switchWorkspace(event: Event) {
       </option>
       <option value="/cards">
         カード編集
-      </option>
-      <option value="/pdf">
-        PDF翻訳
       </option>
     </select>
   </div>

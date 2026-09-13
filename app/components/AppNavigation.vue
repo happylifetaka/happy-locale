@@ -5,8 +5,6 @@ const route = useRoute()
 const activeWorkspace = computed(() => {
   if (route.path.startsWith('/cards'))
     return 'cards'
-  if (route.path.startsWith('/pdf'))
-    return 'pdf'
   return 'home'
 })
 </script>
@@ -24,13 +22,6 @@ const activeWorkspace = computed(() => {
         :aria-current="activeWorkspace === 'cards' ? 'page' : undefined"
       >
         カード編集
-      </NuxtLink>
-      <NuxtLink
-        to="/pdf"
-        :class="{ active: activeWorkspace === 'pdf' }"
-        :aria-current="activeWorkspace === 'pdf' ? 'page' : undefined"
-      >
-        PDF翻訳
       </NuxtLink>
     </nav>
   </header>
