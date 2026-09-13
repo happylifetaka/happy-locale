@@ -1096,6 +1096,15 @@ button.danger {
   margin: 0;
 }
 
+.data-privacy-footer__messages {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.data-privacy-footer strong {
+  color: #626c79;
+}
+
 .notice {
   position: fixed;
   z-index: 3;
