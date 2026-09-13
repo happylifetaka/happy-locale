@@ -15,6 +15,8 @@ OCRで原文を読み取り、CSVで訳文をまとめて編集できます。
 
 ## 画面例
 
+[公開サイトで試す](https://happylifetaka.github.io/happy-locale/)
+
 トップページの「サンプル（デモ）を開く」から、サンプルカード5枚で領域検出・翻訳確認・印刷を試せます。デモではプロジェクト保存はできません。素材の説明は[サンプルカード](samples/cards/README.md)、画面例は[翻訳確認画面](docs/translation-review-prototype.md)を参照してください。
 
 **翻訳前**
@@ -50,7 +52,7 @@ OCRで原文を読み取り、CSVで訳文をまとめて編集できます。
 
 α機能のTranslation Endpointを選んだ場合だけ、原文テキストと入出力言語をユーザー指定のHTTP(S) Endpointへ送信します。外部URLを指定した場合は外部送信になります。この機能はローカル翻訳モックとのブラウザ結合動作まで確認済みです。HappyLocaleはAPIキーやURL内の認証情報を保持・送信しません。
 
-Cloudflare Pagesで公開するビルドでは、Translation Endpointを無効化します。翻訳設定、接続確認、翻訳ボタンは表示されず、外部Endpointへのリクエストも実行しません。Translation Endpointはローカルで起動するHappyLocaleだけで利用できます。
+公開サイト用のビルドでは、外部Translation Endpointへの接続を無効化します。外部接続用の設定・接続確認は表示されず、リクエストも実行しません。デモの翻訳候補は同梱データから取得します。Translation Endpointはローカルで起動するHappyLocaleだけで利用できます。
 
 詳しい保存場所、ランタイムリソース、通信境界は[アーキテクチャ](docs/architecture.md)を参照してください。
 
