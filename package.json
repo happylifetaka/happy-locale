@@ -38,10 +38,10 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "^9.5.1",
-    "@types/node": "^26.5.1",
+    "@types/node": "^24.13.4",
     "@vue/test-utils": "^2.5.0",
     "eslint": "^10.10.0",
-    "typescript": "^7.0.2",
+    "typescript": "^5.9.3",
     "vitest": "^5.0.0",
     "vue-tsc": "^3.3.11"
   }

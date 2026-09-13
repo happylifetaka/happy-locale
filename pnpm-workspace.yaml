@@ -1,9 +1,9 @@
-shellEmulator: true
-
+minimumReleaseAgeExcludePrune: true
 trustPolicy: no-downgrade
 
 # provenance普及前の成熟した依存を除外し、直近6か月の公開物を厳格に検査する。
 trustPolicyIgnoreAfter: 262800
+shellEmulator: true
 
 allowBuilds:
   esbuild: false
