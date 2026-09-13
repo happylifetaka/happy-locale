@@ -126,7 +126,7 @@
 
 - `=1+1`、`+cmd`、`-1+1`、`@SUM(...)`で始まる原文と訳文をCSV保存し、Excel、Google Sheets、LibreOfficeで数式として実行されない
 - 上記CSVをHappyLocaleへ読み戻すと、原文と訳文から安全化用の接頭辞だけが除かれて元の値へ戻る
-- Cloudflare Pages版で翻訳設定、接続確認、文字タブの翻訳ボタンが表示されず、Translation Endpointへの通信が発生しない
+- 静的公開版（`pnpm build:static`で生成）で翻訳設定、接続確認、文字タブの翻訳ボタンが表示されず、Translation Endpointへの通信が発生しない
 - 上限超過の画像、PDF、CSV、`project.json`、フォントを選ぶと具体的なエラーが表示され、その後に正常な別ファイルを選び直せる
 - `images/`外のカード画像パスまたは`assets/`外のアセット画像パスを含む不正な`project.json`から、利用者ファイルを削除できない
 
