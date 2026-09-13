@@ -1,0 +1,90 @@
+[
+  {
+    "id": "01",
+    "filename": "01-grove.png",
+    "name": "LANTERN GROVE",
+    "type": "PLACE",
+    "detail": "FOREST / QUIET",
+    "lines": [
+      "When you enter this place, gain 2 {sun}.",
+      "Spend 1 {drop}: move one marker",
+      "from this card to your reserve."
+    ],
+    "suggestedChecks": [
+      "OCR",
+      "ruby",
+      "source icons"
+    ]
+  },
+  {
+    "id": "02",
+    "filename": "02-cloud.png",
+    "name": "CLOUD COURIER",
+    "type": "TRAVELER",
+    "detail": "AIR / MESSENGER",
+    "lines": [
+      "AFTER MOVING",
+      "Draw 2 cards, then keep 1.",
+      "If your reserve is empty, gain 1 {sun}."
+    ],
+    "suggestedChecks": [
+      "OCR",
+      "ruby",
+      "source icons",
+      "protect overlapping badge"
+    ]
+  },
+  {
+    "id": "03",
+    "filename": "03-compass.png",
+    "name": "TIDAL COMPASS",
+    "type": "TOOL",
+    "detail": "NAVIGATION",
+    "lines": [
+      "Choose a direction.",
+      "Spend 2 {drop} to move up to 3 spaces.",
+      "You may stop on an occupied space."
+    ],
+    "suggestedChecks": [
+      "OCR",
+      "ruby",
+      "source icons"
+    ]
+  },
+  {
+    "id": "04",
+    "filename": "04-orchard.png",
+    "name": "GLASS ORCHARD",
+    "type": "SITE",
+    "detail": "GROWTH",
+    "lines": [
+      "AT DAWN",
+      "Place 1 {sun} on this card.",
+      "AT DUSK",
+      "Remove 3 {sun}: gain 2 points."
+    ],
+    "suggestedChecks": [
+      "OCR",
+      "ruby",
+      "source icons",
+      "protect overlapping badge"
+    ]
+  },
+  {
+    "id": "05",
+    "filename": "05-bridge.png",
+    "name": "THE QUIET BRIDGE",
+    "type": "EVENT",
+    "detail": "ONE USE",
+    "lines": [
+      "All travelers may move 1 space.",
+      "A traveler who stays in place gains",
+      "2 {drop} instead. Discard this card."
+    ],
+    "suggestedChecks": [
+      "OCR",
+      "ruby",
+      "source icons"
+    ]
+  }
+]

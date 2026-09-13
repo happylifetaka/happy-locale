@@ -1,0 +1,11 @@
+shellEmulator: true
+
+trustPolicy: no-downgrade
+
+# provenance普及前の成熟した依存を除外し、直近6か月の公開物を厳格に検査する。
+trustPolicyIgnoreAfter: 262800
+
+allowBuilds:
+  esbuild: false
+  # 寄付案内だけを表示するpostinstallのため、実行を許可しない。
+  tesseract.js: false

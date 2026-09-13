@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="744" height="1039" viewBox="0 0 744 1039">
+<defs><g id="sun"><g fill="none" stroke="currentColor" stroke-width="3"><circle r="8"/><path d="M0-15v4M0 11v4M-15 0h4M11 0h4M-11-11l3 3M8 8l3 3M-11 11l3-3M8-8l3-3"/></g></g><g id="drop"><path d="M0-16C-3-10-12 0-12 6a12 12 0 0024 0C12 0 3-10 0-16Z" fill="currentColor"/></g></defs>
+<rect width="744" height="1039" rx="32" fill="#172d38"/>
+<rect x="18" y="18" width="708" height="1003" rx="22" fill="#ede8d8"/>
+<g font-family="Courier New, monospace" fill="#193640" color="#193640">
+<text x="48" y="49" font-size="14" letter-spacing="3">FIELD NOTES / ORIGINAL SAMPLE 02</text>
+<svg x="48" y="182" width="648" height="378" viewBox="0 0 600 350"><rect width="600" height="350" fill="#547991"/><circle cx="475" cy="70" r="45" fill="#f4db9b"/><path d="M0 275Q140 170 300 260T600 230V350H0Z" fill="#203e47"/><path d="M0 305Q180 260 310 320T600 285V350H0Z" fill="#162d35"/><path d="M75 145q0-35 40-35q10-55 70-35q35-35 60 10q55-5 60 50v25H75Z" fill="#e5e9dd"/><path d="M215 225l100-95 140 35-90 105Z" fill="#e6c78e"/><path d="M315 130l10 105 130-70M215 225l110 10 40 35" fill="none" stroke="#826b53" stroke-width="5"/><path d="M80 240h110M115 275h80" stroke="#c3d8db" stroke-width="5"/></svg>
+<text x="48" y="99" font-size="42" font-weight="bold">CLOUD COURIER</text>
+<text x="48" y="141" font-size="24" font-weight="bold">TRAVELER</text>
+<text x="48" y="167" font-size="16" letter-spacing="2">AIR / MESSENGER</text>
+<rect x="38" y="603" width="668" height="295" rx="15" fill="#fffdf4" stroke="#547991" stroke-width="3"/>
+<text x="57" y="645" font-size="22">AFTER MOVING</text>
+<text x="57" y="690" font-size="23">Draw 2 cards, then keep 1.</text>
+<text x="57" y="735" font-size="23">If your reserve is empty, gain 1 </text><use href="#sun" transform="translate(527.4 726)"/><text x="546.4" y="735" font-size="23">.</text>
+<g transform="translate(650 898)"><circle r="38" fill="#547991" stroke="#ede8d8" stroke-width="6"/><text text-anchor="middle" y="12" fill="white" font-size="36">1</text></g>
+<path d="M48 957h648" stroke="#a1aaa0"/>
+<text x="48" y="983" font-size="15">SAMPLE 02 / Fictional rules / Not a commercial game</text>
+</g></svg>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="744" height="1039" viewBox="0 0 744 1039">
+<defs><g id="sun"><g fill="none" stroke="currentColor" stroke-width="3"><circle r="8"/><path d="M0-15v4M0 11v4M-15 0h4M11 0h4M-11-11l3 3M8 8l3 3M-11 11l3-3M8-8l3-3"/></g></g><g id="drop"><path d="M0-16C-3-10-12 0-12 6a12 12 0 0024 0C12 0 3-10 0-16Z" fill="currentColor"/></g></defs>
+<rect width="744" height="1039" rx="32" fill="#172d38"/>
+<rect x="18" y="18" width="708" height="1003" rx="22" fill="#ede8d8"/>
+<g font-family="Courier New, monospace" fill="#193640" color="#193640">
+<text x="48" y="49" font-size="14" letter-spacing="3">FIELD NOTES / ORIGINAL SAMPLE 03</text>
+<svg x="48" y="68" width="648" height="378" viewBox="0 0 600 350"><rect width="600" height="350" fill="#326e83"/><circle cx="475" cy="70" r="45" fill="#f4db9b"/><path d="M0 275Q140 170 300 260T600 230V350H0Z" fill="#203e47"/><path d="M0 305Q180 260 310 320T600 285V350H0Z" fill="#162d35"/><circle cx="300" cy="175" r="120" fill="#d9bd83"/><circle cx="300" cy="175" r="99" fill="#f1ead8"/><path d="M300 60l30 115-30 115-30-115Z" fill="#476e7c"/><path d="M185 175l115-30 115 30-115 30Z" fill="#8a7556"/><circle cx="300" cy="175" r="14" fill="#ead19c"/></svg>
+<text x="48" y="500" font-size="42" font-weight="bold">TIDAL COMPASS</text>
+<text x="48" y="542" font-size="24" font-weight="bold">TOOL</text>
+<text x="48" y="568" font-size="16" letter-spacing="2">NAVIGATION</text>
+<rect x="38" y="603" width="668" height="295" rx="15" fill="#fffdf4" stroke="#326e83" stroke-width="3"/>
+<text x="57" y="645" font-size="23">Choose a direction.</text>
+<text x="57" y="690" font-size="23">Spend 2 </text><use href="#drop" transform="translate(182.39999999999998 681)"/><text x="201.39999999999998" y="690" font-size="23"> to move up to 3 spaces.</text>
+<text x="57" y="735" font-size="23">You may stop on an occupied space.</text>
+
+<path d="M48 957h648" stroke="#a1aaa0"/>
+<text x="48" y="983" font-size="15">SAMPLE 03 / Fictional rules / Not a commercial game</text>
+</g></svg>

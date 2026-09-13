@@ -1,0 +1,139 @@
+{
+  "version": 2,
+  "name": "サンプル（デモ）",
+  "demoPreset": "sample-v1",
+  "activeCardId": "sample-01",
+  "cards": [
+    {
+      "id": "sample-01",
+      "imageName": "01-grove.png",
+      "imagePath": "images/01-grove.png",
+      "imageWidth": 744,
+      "imageHeight": 1039,
+      "regions": [],
+      "printArea": {
+        "x": 0,
+        "y": 0,
+        "width": 744,
+        "height": 1039
+      },
+      "sourceDpi": {
+        "x": 300,
+        "y": 300
+      }
+    },
+    {
+      "id": "sample-02",
+      "imageName": "02-cloud.png",
+      "imagePath": "images/02-cloud.png",
+      "imageWidth": 744,
+      "imageHeight": 1039,
+      "regions": [],
+      "printArea": {
+        "x": 0,
+        "y": 0,
+        "width": 744,
+        "height": 1039
+      },
+      "sourceDpi": {
+        "x": 300,
+        "y": 300
+      }
+    },
+    {
+      "id": "sample-03",
+      "imageName": "03-compass.png",
+      "imagePath": "images/03-compass.png",
+      "imageWidth": 744,
+      "imageHeight": 1039,
+      "regions": [],
+      "printArea": {
+        "x": 0,
+        "y": 0,
+        "width": 744,
+        "height": 1039
+      },
+      "sourceDpi": {
+        "x": 300,
+        "y": 300
+      }
+    },
+    {
+      "id": "sample-04",
+      "imageName": "04-orchard.png",
+      "imagePath": "images/04-orchard.png",
+      "imageWidth": 744,
+      "imageHeight": 1039,
+      "regions": [],
+      "printArea": {
+        "x": 0,
+        "y": 0,
+        "width": 744,
+        "height": 1039
+      },
+      "sourceDpi": {
+        "x": 300,
+        "y": 300
+      }
+    },
+    {
+      "id": "sample-05",
+      "imageName": "05-bridge.png",
+      "imagePath": "images/05-bridge.png",
+      "imageWidth": 744,
+      "imageHeight": 1039,
+      "regions": [],
+      "printArea": {
+        "x": 0,
+        "y": 0,
+        "width": 744,
+        "height": 1039
+      },
+      "sourceDpi": {
+        "x": 300,
+        "y": 300
+      }
+    }
+  ],
+  "assets": [
+    {
+      "id": "sample-sun",
+      "name": "sun",
+      "sourceImageId": "sample-01",
+      "sourceRect": {
+        "x": 526.2,
+        "y": 619,
+        "width": 32,
+        "height": 36
+      },
+      "imagePath": "assets/sun.png",
+      "scale": 1,
+      "baselineOffset": 0,
+      "inlinePadding": 0.1
+    },
+    {
+      "id": "sample-drop",
+      "name": "drop",
+      "sourceImageId": "sample-01",
+      "sourceRect": {
+        "x": 167.39999999999998,
+        "y": 664,
+        "width": 32,
+        "height": 36
+      },
+      "imagePath": "assets/drop.png",
+      "scale": 1,
+      "baselineOffset": 0,
+      "inlinePadding": 0.1
+    }
+  ],
+  "fonts": [],
+  "ocrDictionary": [],
+  "glossary": [],
+  "printSettings": {
+    "columns": 3,
+    "marginMm": 9,
+    "gapMm": 1,
+    "cutMarks": true
+  }
+}
