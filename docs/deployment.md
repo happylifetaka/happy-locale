@@ -44,4 +44,19 @@ NUXT_APP_BASE_URL=/happy-locale/ mise exec -- pnpm build:static
 
 ## 配置する
 
-検査済みの `.output/public` の内容を静的ホスティングへ配置します。GitHub Pages向けのActionsやCloudflareなどへのアップロードは、このビルドとは別の作業です。現時点では、このコマンドからの自動デプロイは行いません。
+検査済みの `.output/public` の内容を静的ホスティングへ配置します。`build:static` 自体はアップロードを行いません。
+
+### GitHub Pages
+
+公開先は https://happylifetaka.github.io/happy-locale/ です。
+
+リポジトリの Settings → Pages → Build and deployment で、Sourceを「GitHub Actions」に設定します。
+`.github/workflows/ci.yml` がテスト・型検査・Lint・静的生成物の検査を行い、すべて成功した場合だけ公開します。
+
+- `main` へのpushで自動更新
+- Actions画面から手動実行も可能
+- Pull Requestでは検査のみ実行し、公開しない
+- 公開パスはリポジトリ名から設定（このリポジトリでは `/happy-locale/`）
+- 公開用の権限はデプロイジョブに限定し、外部サービスのトークンは使用しない
+
+詳細は[GitHub PagesのカスタムWorkflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)を参照してください。
