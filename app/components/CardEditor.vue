@@ -131,6 +131,7 @@ const lastSavedProjectSignature = ref<string | null>(null)
 const currentImageId = ref<string>(crypto.randomUUID())
 /** 切り替え先として読み込み中のカードID。処理終了後はnull。 */
 const loadingCardId = ref<string | null>(null)
+let editorDisposed = false
 /** カード画像の追加処理中か。 */
 const addingCards = ref(false)
 /** プロジェクトの保存処理中か。 */
@@ -681,6 +682,7 @@ watch(
 
 // 画面終了時にタイマー・イベント・画像・フォント・OCRのリソースを解放する。
 onBeforeUnmount(() => {
+  editorDisposed = true
   window.removeEventListener('keydown', handleEditorKeydown)
   projectRuntime.dispose()
   projectStore.clearProject()
@@ -805,6 +807,8 @@ function isImageFile(file: File) {
 
 /** 画像の形式・容量・寸法を確認し、表示用要素とURLを用意する。採用後の解放はruntimeが担う。 */
 async function loadImage(file: File): Promise<RuntimeLoadedImage | null> {
+  if (editorDisposed)
+    return null
   logDiagnostic('画像ファイルを受け取りました', {
     type: file.type || '(未設定)',
     size: file.size,
@@ -834,18 +838,36 @@ async function loadImage(file: File): Promise<RuntimeLoadedImage | null> {
         reject(new Error('画像のloadイベントが失敗しました。'))
       loadedImage.src = url
     })
+    if (editorDisposed) {
+      URL.revokeObjectURL(url)
+      loadedImage.removeAttribute('src')
+      return null
+    }
     assertImageDimensions(loadedImage.naturalWidth, loadedImage.naturalHeight)
     try {
       await loadedImage.decode()
+      if (editorDisposed) {
+        URL.revokeObjectURL(url)
+        loadedImage.removeAttribute('src')
+        return null
+      }
       logDiagnostic('画像のデコードが完了しました')
     }
     catch (error) {
+      if (editorDisposed) {
+        URL.revokeObjectURL(url)
+        loadedImage.removeAttribute('src')
+        return null
+      }
       // loadイベントが成功していれば画像は利用できるため、decode固有の失敗は継続する。
       logDiagnostic('decode()は失敗しましたがload済み画像を使用します', error)
     }
   }
   catch (error) {
     URL.revokeObjectURL(url)
+    loadedImage.removeAttribute('src')
+    if (editorDisposed)
+      return null
     logDiagnostic('画像を読み込めませんでした', error, 'error')
     setMessage(
       error instanceof Error ? error.message : '画像を読み込めませんでした。',
@@ -1007,7 +1029,7 @@ const { leaveConfirmationOpen, confirmLeave, resolveLeave } = useUnsavedChanges(
 
 /** 対象画像を読めてからカードと履歴を切り替え、そのカードの一括OCR候補も復元する。 */
 async function selectProjectCard(cardId: string) {
-  if (projectBusy.value)
+  if (editorDisposed || projectBusy.value)
     return
   const directory = projectDirectory.value
   const documentValue = folderDocument.value
@@ -1043,6 +1065,8 @@ async function selectProjectCard(cardId: string) {
   })
   try {
     const file = await loadFolderProjectCardImage(directory, target)
+    if (editorDisposed)
+      return
     const loaded = await loadImage(file)
     if (!loaded)
       return
@@ -1074,8 +1098,12 @@ async function selectProjectCard(cardId: string) {
     clearOCRCandidate()
     applyLoadedImage(loaded)
     await detectAndApplyCardDpi(cardId, file)
+    if (editorDisposed)
+      return
     const hasBatchCandidates = showBatchOCRCandidates(cardId)
     const thumbnail = await cacheCardThumbnail(cardId, loaded.element)
+    if (editorDisposed)
+      return
     if (thumbnail)
       void persistCardThumbnail(directory, cardId, thumbnail)
     currentView.value = 'card'
@@ -1091,6 +1119,8 @@ async function selectProjectCard(cardId: string) {
     )
   }
   catch (error) {
+    if (editorDisposed)
+      return
     logDiagnostic('カード画像を読み込めませんでした', error, 'error')
     setMessage('カード画像を読み込めませんでした。')
   }
@@ -1102,7 +1132,7 @@ async function selectProjectCard(cardId: string) {
 /** 対象カードへ切り替えて指定領域を選択する。 */
 async function selectProjectRegion(cardId: string, regionId: string) {
   await selectProjectCard(cardId)
-  if (currentImageId.value !== cardId)
+  if (editorDisposed || currentImageId.value !== cardId)
     return
   const region = editor.project.value.regions.find(item => item.id === regionId)
   if (!region)
