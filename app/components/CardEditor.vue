@@ -30,6 +30,7 @@ import type { ReusableTranslation } from '~/utils/translation-reuse'
 import type { TranslationReviewRow } from '~/utils/translation-review'
 import { storeToRefs } from 'pinia'
 import { useCardThumbnails } from '~/composables/useCardThumbnails'
+import { useEditorTranslation } from '~/composables/useEditorTranslation'
 import { usePreviewDeferral } from '~/composables/usePreviewDeferral'
 import {
   cacheFont,
@@ -72,11 +73,6 @@ import {
 } from '~/services/project/folder'
 import { loadProjectAssetImages } from '~/services/project/resources'
 import { createSampleProjectCopy, resolveSampleCandidates, sampleRegionCandidates } from '~/services/project/sample'
-import {
-  LocalTranslationProvider,
-  translationErrorMessage,
-} from '~/services/translator/local'
-import { SampleTranslationProvider } from '~/services/translator/sample'
 import { useProjectStore } from '~/stores/project'
 import { updateRecroppedAsset, validateAssetName } from '~/utils/assets'
 import { renderAssetCrop } from '~/utils/canvas/asset'
@@ -342,23 +338,25 @@ const translationEndpointEnabled
 const translationSettingsOpen = ref(false)
 /** 用語集の編集ダイアログを開いているか。 */
 const glossaryOpen = ref(false)
-/** 翻訳候補の取得処理中か。 */
-const translationRunning = ref(false)
-/** 送信確認に表示する原文・接続先・対象領域。 */
-const translationRequest = shallowRef<{
-  cardId: string
-  regionId: string
-  originalText: string
-  endpoint: string
-} | null>(null)
-/** 反映前の翻訳候補と、取得時の原文・訳文の比較基準。 */
-const translationPreview = shallowRef<{
-  cardId: string
-  regionId: string
-  originalText: string
-  currentTranslation: string
-  proposedTranslation: string
-} | null>(null)
+/** 翻訳要求と候補の状態。確定した変更だけを編集履歴に反映する。 */
+const {
+  translationRunning,
+  translationRequest,
+  translationPreview,
+  sampleTranslate,
+  translateSelectedRegion,
+  sendTranslationRequest,
+  applyTranslationPreview,
+  discardTranslationPreview,
+} = useEditorTranslation({
+  editor,
+  currentImageId,
+  isDemo,
+  translationEndpointEnabled,
+  translationSettings,
+  setMessage,
+  logDiagnostic,
+})
 /** まとめて確認するカードの複製と初期表示の条件。 */
 const translationReview = shallowRef<{
   cards: FolderProjectCard[]
@@ -711,13 +709,6 @@ function translateUntranslatedRegions() {
   openTranslationReview(undefined, true, true)
 }
 
-/** サンプル原文に対応する固定の日本語訳を取得する。 */
-function sampleTranslate(text: string) {
-  if (!isDemo.value)
-    throw new Error('サンプル翻訳はデモでのみ使用できます。')
-  return new SampleTranslationProvider().translate(text, 'EN', 'JA')
-}
-
 /** 翻訳確認に必要なカードの原画像を取得する。 */
 async function loadReviewImage(cardId: string) {
   const card = translationReview.value?.cards.find(card => card.id === cardId)
@@ -757,112 +748,6 @@ function applyTranslationReview(rows: TranslationReviewRow[], closeAfterApply: b
   if (closeAfterApply)
     translationReview.value = null
   setMessage(`${matched.applied}件の訳文を下書きとして反映しました。カード上で見た目を確認してください。`)
-}
-
-/** 選択領域の翻訳候補を取得するか、外部送信の確認を開く。 */
-async function translateSelectedRegion() {
-  const region = editor.selectedRegion.value
-  if (
-    !region
-    || (!isDemo.value
-      && (!translationEndpointEnabled || translationSettings.value.provider !== 'local'))
-    || translationRunning.value
-  ) {
-    return
-  }
-  if (isDemo.value) {
-    const cardId = currentImageId.value
-    const originalText = region.originalText
-    const currentTranslation = region.translatedText
-    translationRunning.value = true
-    try {
-      const proposedTranslation = await sampleTranslate(originalText)
-      if (cardId !== currentImageId.value)
-        return
-      translationPreview.value = { cardId, regionId: region.id, originalText, currentTranslation, proposedTranslation }
-    }
-    catch (error) {
-      setMessage(error instanceof Error ? error.message : 'サンプル翻訳に失敗しました。')
-    }
-    finally {
-      translationRunning.value = false
-    }
-    return
-  }
-  translationRequest.value = {
-    cardId: currentImageId.value,
-    regionId: region.id,
-    originalText: region.originalText,
-    endpoint: translationSettings.value.endpoint,
-  }
-}
-
-/** 確認済みの送信先と原文を使う。取得結果は直接保存せず、カードに紐づく候補として提示する。 */
-async function sendTranslationRequest() {
-  const request = translationRequest.value
-  if (!request || translationRunning.value)
-    return
-  translationRequest.value = null
-  translationRunning.value = true
-  try {
-    const translatedText = await new LocalTranslationProvider(
-      request.endpoint,
-    ).translate(request.originalText, 'EN', 'JA')
-    if (currentImageId.value !== request.cardId) {
-      setMessage('カードが切り替わったため、翻訳候補を破棄しました。')
-      return
-    }
-    const currentRegion = editor.project.value.regions.find(
-      item => item.id === request.regionId,
-    )
-    if (!currentRegion) {
-      setMessage('対象の翻訳領域が見つかりません。')
-      return
-    }
-    translationPreview.value = {
-      cardId: request.cardId,
-      regionId: currentRegion.id,
-      originalText: request.originalText,
-      currentTranslation: currentRegion.translatedText,
-      proposedTranslation: translatedText,
-    }
-    setMessage('翻訳候補を取得しました。反映前に内容を確認してください。')
-  }
-  catch (error) {
-    logDiagnostic('ローカル翻訳に失敗しました', error, 'error')
-    setMessage(translationErrorMessage(error))
-  }
-  finally {
-    translationRunning.value = false
-  }
-}
-
-/** 候補取得後のカード切り替えや本文変更を検出し、古い候補で最新の編集を上書きしない。 */
-function applyTranslationPreview() {
-  const preview = translationPreview.value
-  if (!preview)
-    return
-  const region = editor.project.value.regions.find(
-    item => item.id === preview.regionId,
-  )
-  if (!region || preview.cardId !== currentImageId.value
-    || region.originalText !== preview.originalText || region.translatedText !== preview.currentTranslation) {
-    translationPreview.value = null
-    setMessage('対象が変更されたため、翻訳候補を反映しませんでした。候補を取得し直してください。')
-    return
-  }
-  editor.updateRegion(region.id, {
-    translatedText: preview.proposedTranslation,
-    translationStatus: statusForTranslation(preview.proposedTranslation),
-  })
-  translationPreview.value = null
-  setMessage('翻訳候補を日本語訳へ反映しました。')
-}
-
-/** 取得した翻訳候補を反映せず破棄する。 */
-function discardTranslationPreview() {
-  translationPreview.value = null
-  setMessage('翻訳候補を破棄しました。')
 }
 
 /** ローカル補正の候補と変更箇所を解除する。 */
