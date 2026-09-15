@@ -128,3 +128,18 @@ it('reports recognition failures and allows a subsequent detection', async () =>
   expect(canvas.props('regionCandidates')).toEqual([])
   expect(canvas.props('previewMode')).toBe('edited')
 })
+
+it('confirms multiple candidates in a single region undo step', async () => {
+  ocrIO.recognize.mockResolvedValue(recognized)
+  const { wrapper, panel, canvas } = await setupCandidates()
+  const initialCount = canvas.props('project').regions.length
+  panel.vm.$emit('split', canvas.props('regionCandidates')[0].id)
+  await nextTick()
+  expect(canvas.props('regionCandidates')).toHaveLength(2)
+  panel.vm.$emit('confirm')
+  await nextTick()
+  expect(canvas.props('project').regions).toHaveLength(initialCount + 2)
+  wrapper.findComponent({ name: 'EditorToolbar' }).vm.$emit('undo')
+  await nextTick()
+  expect(canvas.props('project').regions).toHaveLength(initialCount)
+})
