@@ -21,6 +21,7 @@
     "format:check": "eslint .",
     "typecheck": "nuxt typecheck && vue-tsc -p tests/tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "verify:static": "node scripts/verify-static-output.mjs"
   },
@@ -38,6 +39,7 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "^9.5.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.13.4",
     "@vitejs/plugin-vue": "^6.0.9",
     "@vue/test-utils": "^2.5.0",

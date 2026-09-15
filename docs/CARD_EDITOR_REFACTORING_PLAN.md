@@ -95,6 +95,7 @@ composable同士の循環依存や、全状態を渡す巨大なcontextは作ら
 
 ```bash
 mise exec -- pnpm test
+mise exec -- pnpm test:e2e
 mise exec -- pnpm typecheck
 mise exec -- pnpm lint
 mise exec -- pnpm build
@@ -103,6 +104,10 @@ git diff --check
 
 DOMテストでは実際のブラウザ描画・日本語IME・File System Access APIは保証できない。
 関連する実ブラウザ確認は `MANUAL_TESTS.md` と併せて記録し、未実施を成功扱いにしない。
+
+Playwrightの初回準備は `mise exec -- pnpm exec playwright install chromium`。
+`test:e2e`はローカルの3000番ポートでNuxtを起動する（開発中の既存サーバーがあれば再利用）。
+実際のOSのIME変換とフォルダ選択権限は、引き続き手動確認する。
 
 ## 実施記録
 
@@ -340,3 +345,17 @@ mise exec -- pnpm test tests/components/CardEditor.assets.test.ts
 - `useProjectSession`へフォルダ選択、文書と画像・アセットの準備、途中終了時の解放を抽出。各機能の状態を初期化する同期処理は親の`adoptOpenedProject`にまとめ、準備済みデータだけを渡す。
 - サンプル自動読込の呼出順も維持。全423テスト、型検査、lint、ビルド成功。`CardEditor.vue`は2,108行（開始時から1,885行減）。
 - 工程4の共有参照・履歴の追加確認と、翻訳中の切替抑制の明示的な確認は残っている。次はこれらを補い、工程6の表示コンポーネントとショートカットの検証・分割へ進む。
+
+### 2026-09-16: 工程6・表示コンポーネントの抽出
+
+- 削除確認の取消・確定・Undo、入力欄と確認画面のショートカット抑止、診断ログ、タブのキーボード移動と選択復元を9テストで確認した。
+- `EditorConfirmDialog`、`DiagnosticsDialog`、`EditorInspectorPanel`を抽出。各インスペクターへの機能接続は親のスロット内に置き、大量のprops/events中継を避けた。
+- 全432テスト、型検査、lint、ビルド成功。`CardEditor.vue`は1,936行。
+
+### 2026-09-16: Playwrightによる実ブラウザ確認
+
+- ユーザーの指定でPlaywrightと専用Chromiumを導入し、再実行できるE2Eテストを3件追加した。Vitestとは実行対象を分離する。
+- サンプル読込、Canvas上のドラッグによる領域作成、訳文入力後のCanvas画素の変化、削除確認の取消・確定・Undo、タブのキーボード移動、診断ログの開閉が成功した。
+- 初回の失敗は、サンプルに領域が作成済みというテストの誤った前提と、翻訳タブの選択漏れ。実操作で領域を作成し、対象タブを開く準備に修正した。製品コードの変更はない。
+- 既存432テスト、型検査、lint、ビルドも成功。画素の変化は確認するが、文字形状・配置の正しさを画像比較で保証するテストではない。
+- 日本語IMEの変換中の描画待機・確定後の反映・継続入力はユーザーに手動確認を依頼中。工程6の実ブラウザ確認全体は結果待ちとして未完了を維持する。
