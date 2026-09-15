@@ -24,6 +24,7 @@ import { useEditorFonts } from '~/composables/useEditorFonts'
 import { useEditorOCR } from '~/composables/useEditorOCR'
 import { useEditorTranslation } from '~/composables/useEditorTranslation'
 import { usePreviewDeferral } from '~/composables/usePreviewDeferral'
+import { useProjectPersistence } from '~/composables/useProjectPersistence'
 import { useRegionCandidates } from '~/composables/useRegionCandidates'
 import { useTranslationReview } from '~/composables/useTranslationReview'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
@@ -31,20 +32,17 @@ import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import {
   activateProjectCard,
-  finalizeProjectCardDeletions,
   moveProjectCard,
   renameProjectCard,
 } from '~/services/project/cards'
 import {
   addFolderProjectCards,
-  createFolderProject,
   folderProjectExists,
   listImageFiles,
   loadFolderProjectCardImage,
   openFolderProject,
   pickImageDirectory,
   pickProjectDirectory,
-  saveFolderProject,
   supportsFolderProjects,
 } from '~/services/project/folder'
 import { loadProjectAssetImages } from '~/services/project/resources'
@@ -118,11 +116,9 @@ const projectRuntime = useProjectRuntime()
 /** 描画資源と保存待ち画像の参照。差し替え・解放はruntimeを通して行う。 */
 const {
   cardImage: image,
-  cardSourceFile: sourceImageFile,
   assetSourceImage,
   directory: projectDirectory,
   cardThumbnails,
-  pendingCardThumbnailBlobs,
   assetImages,
   pendingAssetWrites,
   loadedFonts,
@@ -286,6 +282,24 @@ const {
   folderDocument,
   fonts,
   loadedFonts,
+  setMessage,
+  logDiagnostic,
+})
+/** 保存開始時のスナップショットと保存成功後の状態反映。 */
+const { saveProject } = useProjectPersistence({
+  editor,
+  projectStore,
+  projectRuntime,
+  isDemo,
+  projectBusy,
+  ocrRunning,
+  savingProject,
+  currentImageId,
+  pendingCardDeletionIds,
+  lastSavedProjectSignature,
+  removeCardThumbnail,
+  persistCardThumbnail,
+  finalizeFontCacheDeletions,
   setMessage,
   logDiagnostic,
 })
@@ -1520,108 +1534,6 @@ async function openProject(sample = false) {
     }
     stagedAssets?.forEach(bitmap => bitmap.close())
     openingProject.value = false
-  }
-}
-
-/** 保存対象の画像更新・削除予定を控え、成功したスナップショットだけを保存済みとして扱う。 */
-async function saveProject() {
-  if (isDemo.value) {
-    setMessage('デモではプロジェクトを保存できません。')
-    return
-  }
-  if (projectBusy.value || ocrRunning.value) {
-    setMessage('カードの処理が完了してから保存してください。')
-    return
-  }
-  if (!image.value || !sourceImageFile.value)
-    return
-  savingProject.value = true
-  const savedWrites = new Map(pendingAssetWrites.value)
-  const savedDeletionIds = new Set(pendingCardDeletionIds.value)
-  const wasDraft = !folderDocument.value
-  try {
-    let savedDocument: FolderProjectDocument
-    logDiagnostic('プロジェクト保存を開始しました', {
-      existingProject: Boolean(folderDocument.value),
-      projectFolderSelected: Boolean(projectDirectory.value),
-      regions: editor.project.value.regions.length,
-      pendingAssetWrites: pendingAssetWrites.value.size,
-    })
-    if (projectDirectory.value && folderDocument.value) {
-      const finalized = finalizeProjectCardDeletions(
-        folderDocument.value,
-        pendingCardDeletionIds.value,
-      )
-      savedDocument = await saveFolderProject(
-        projectDirectory.value,
-        finalized.document,
-        storedCard.value,
-        assets.value,
-        fonts.value,
-        ocrDictionary.value,
-        savedWrites,
-        finalized.deletedCards,
-        glossary.value,
-      )
-      projectStore.acceptSavedProject(savedDocument, savedDeletionIds)
-      pendingCardDeletionIds.value = new Set([...pendingCardDeletionIds.value].filter(id => !savedDeletionIds.has(id)))
-      if (finalized.deletedCards.length > 0) {
-        for (const card of finalized.deletedCards)
-          removeCardThumbnail(card.id)
-        logDiagnostic('削除予定のカードをファイルから削除しました', {
-          deleted: finalized.deletedCards.length,
-        })
-      }
-    }
-    else {
-      const directory = projectDirectory.value
-      if (!directory) {
-        setMessage('先にプロジェクトフォルダを選択してください。')
-        return
-      }
-      savedDocument = await createFolderProject(
-        directory,
-        storedCard.value,
-        sourceImageFile.value,
-        currentImageId.value,
-        assets.value,
-        fonts.value,
-        ocrDictionary.value,
-        savedWrites,
-        glossary.value,
-      )
-      projectStore.acceptSavedProject(savedDocument, savedDeletionIds)
-      if (wasDraft)
-        editor.bindSavedCard(savedDocument.activeCardId)
-    }
-    const thumbnailDirectory = projectDirectory.value
-    if (thumbnailDirectory && pendingCardThumbnailBlobs.value.size > 0) {
-      pendingCardThumbnailBlobs.value.forEach((thumbnail, cardId) => {
-        void persistCardThumbnail(thumbnailDirectory, cardId, thumbnail)
-      })
-      projectRuntime.clearPendingCardThumbnails()
-    }
-    projectRuntime.acknowledgeAssetWrites(savedWrites)
-    await finalizeFontCacheDeletions()
-    await nextTick()
-    lastSavedProjectSignature.value = savedProjectSignature(savedDocument)
-    logDiagnostic('プロジェクト保存が完了しました')
-    setMessage(`${savedDocument.name} を保存しました。`)
-  }
-  catch (error) {
-    if (isPickerCancellation(error)) {
-      logDiagnostic('保存先の選択をキャンセルしました')
-      return
-    }
-    logDiagnostic('プロジェクトを保存できませんでした', error, 'error')
-    setMessage(
-      error instanceof Error
-        ? error.message
-        : 'プロジェクトを保存できませんでした。',
-    )
-  }
-  finally {
-    savingProject.value = false
   }
 }
 
