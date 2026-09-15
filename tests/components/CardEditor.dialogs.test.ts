@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { expect, it } from 'vitest'
 import { nextTick } from 'vue'
-import { mountEditor } from './helpers/card-editor'
+import { mountEditor, mountSavedEditor } from './helpers/card-editor'
 
 it.each(['escape', 'backdrop', 'button'] as const)('cancels region deletion with %s without changing history', async (method) => {
   const { wrapper, canvas } = await mountEditor()
@@ -77,4 +77,36 @@ it('does not intercept undo from a text input', async () => {
   finally {
     input.remove()
   }
+})
+
+it('moves focus between enabled inspector tabs and skips tabs requiring a selection', async () => {
+  const { wrapper, canvas } = await mountSavedEditor(false)
+  canvas.vm.$emit('select-region', null)
+  await nextTick()
+  await wrapper.get('#inspector-tab-list').trigger('click')
+  await wrapper.get('#inspector-tab-list').trigger('keydown', { key: 'ArrowRight' })
+  await nextTick()
+  expect(wrapper.get('#inspector-tab-ocr').attributes('aria-selected')).toBe('true')
+  expect(document.activeElement?.id).toBe('inspector-tab-ocr')
+  await wrapper.get('#inspector-tab-ocr').trigger('keydown', { key: 'End' })
+  await nextTick()
+  expect(document.activeElement?.id).toBe('inspector-tab-print')
+  await wrapper.get('#inspector-tab-print').trigger('keydown', { key: 'Home' })
+  await nextTick()
+  expect(document.activeElement?.id).toBe('inspector-tab-list')
+  expect(wrapper.get('#inspector-tab-region').attributes('disabled')).toBeDefined()
+  expect(wrapper.get('#inspector-tab-text').attributes('disabled')).toBeDefined()
+})
+
+it('remembers the last detail tab when a region is selected again', async () => {
+  const { wrapper, canvas } = await mountSavedEditor()
+  canvas.vm.$emit('select-region', 'region-0')
+  await nextTick()
+  await wrapper.get('#inspector-tab-region').trigger('click')
+  canvas.vm.$emit('select-region', null)
+  await nextTick()
+  await wrapper.get('#inspector-tab-list').trigger('click')
+  canvas.vm.$emit('select-region', 'region-0')
+  await nextTick()
+  expect(wrapper.get('#inspector-tab-region').attributes('aria-selected')).toBe('true')
 })
