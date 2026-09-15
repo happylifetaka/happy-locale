@@ -25,6 +25,7 @@ import { useEditorFonts } from '~/composables/useEditorFonts'
 import { useEditorOCR } from '~/composables/useEditorOCR'
 import { useEditorTranslation } from '~/composables/useEditorTranslation'
 import { usePreviewDeferral } from '~/composables/usePreviewDeferral'
+import { useProjectCards } from '~/composables/useProjectCards'
 import { useProjectNavigation } from '~/composables/useProjectNavigation'
 import { useProjectPersistence } from '~/composables/useProjectPersistence'
 import { useRegionCandidates } from '~/composables/useRegionCandidates'
@@ -33,24 +34,16 @@ import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import {
-  moveProjectCard,
-  renameProjectCard,
 } from '~/services/project/cards'
 import {
-  addFolderProjectCards,
   folderProjectExists,
-  listImageFiles,
   openFolderProject,
-  pickImageDirectory,
   pickProjectDirectory,
   supportsFolderProjects,
 } from '~/services/project/folder'
 import { loadProjectAssetImages } from '~/services/project/resources'
 import { createSampleProjectCopy, resolveSampleCandidates } from '~/services/project/sample'
 import { useProjectStore } from '~/stores/project'
-import {
-  createCardThumbnailBlob,
-} from '~/utils/card-thumbnail'
 import {
   assertFileSize,
   assertImageDimensions,
@@ -157,10 +150,6 @@ const {
 })
 /** 次回保存時に削除するカードID。保存前なら取り消せる。 */
 const pendingCardDeletionIds = shallowRef(new Set<string>())
-/** 削除確認を待っているカード。 */
-const cardPendingDeletionConfirmation = shallowRef<FolderProjectCard | null>(
-  null,
-)
 /** 削除確認を待っている翻訳領域。 */
 const regionPendingDeletionConfirmation = shallowRef<TextRegion | null>(null)
 /** カード上でアセットの切り出し範囲を指定しているか。 */
@@ -478,6 +467,36 @@ const projectCards = computed(() => {
     ]
   }
   return documentValue.cards
+})
+/** カード一覧の改名・並べ替え・追加・削除予定。 */
+const {
+  cardPendingDeletionConfirmation,
+  renameCard,
+  moveCard,
+  requestProjectCardDeletion,
+  cancelProjectCardDeletion,
+  confirmProjectCardDeletion,
+  cancelProjectCardDeletionRequest,
+  addProjectCards,
+  addProjectCardsFromFolder,
+} = useProjectCards({
+  editor,
+  projectStore,
+  projectRuntime,
+  currentImageId,
+  loadingCardId,
+  addingCards,
+  projectBusy,
+  ocrRunning,
+  isDemo,
+  pendingCardDeletionIds,
+  isActive: () => !editorDisposed,
+  loadImage,
+  selectProjectCard,
+  setCardThumbnail,
+  persistCardThumbnail,
+  setMessage,
+  logDiagnostic,
 })
 /** 単体・一括の画像書き出しと元カードへの復帰。 */
 const { exportCardImage, exportAllCardImages } = useCardImageExport({
@@ -1058,253 +1077,6 @@ async function selectProjectCard(cardId: string) {
 
 async function selectProjectRegion(cardId: string, regionId: string) {
   await navigateToRegion(cardId, regionId)
-}
-
-/** カード名と編集中の画像名を更新する。 */
-function renameCard(cardId: string, imageName: string) {
-  const name = imageName.trim()
-  if (!name)
-    return
-  if (folderDocument.value) {
-    projectStore.replaceProject(renameProjectCard(
-      folderDocument.value,
-      cardId,
-      name,
-    ))
-  }
-  if (currentImageId.value === cardId || folderDocument.value?.activeCardId === cardId)
-    editor.renameImage(name)
-  setMessage(`カード名を「${name}」へ変更しました。`)
-}
-
-/** カード一覧の順序を一つ前または後へ移す。 */
-function moveCard(cardId: string, direction: -1 | 1) {
-  if (!folderDocument.value || pendingCardDeletionIds.value.size > 0)
-    return
-  projectStore.replaceProject(moveProjectCard(
-    folderDocument.value,
-    cardId,
-    direction,
-  ))
-}
-
-/** 削除対象のカードを確認ダイアログへ渡す。 */
-function requestProjectCardDeletion(cardId: string) {
-  const documentValue = folderDocument.value
-  if (
-    !documentValue
-    || loadingCardId.value
-    || addingCards.value
-    || ocrRunning.value
-  ) {
-    return
-  }
-  if (documentValue.cards.length <= 1) {
-    setMessage('最後の1枚は削除できません。')
-    return
-  }
-  const remainingCards = documentValue.cards.filter(
-    item => !pendingCardDeletionIds.value.has(item.id),
-  )
-  if (remainingCards.length <= 1) {
-    setMessage('最後の1枚は削除できません。')
-    return
-  }
-  const card = projectCards.value.find(item => item.id === cardId)
-  if (!card)
-    return
-  cardPendingDeletionConfirmation.value = card
-}
-
-/** カード削除の確認を閉じる。 */
-function cancelProjectCardDeletion() {
-  cardPendingDeletionConfirmation.value = null
-}
-
-/** 削除はまず予定として記録する。画像ファイルの削除はプロジェクト保存の成功後まで遅らせる。 */
-async function confirmProjectCardDeletion() {
-  const card = cardPendingDeletionConfirmation.value
-  cardPendingDeletionConfirmation.value = null
-  if (!card)
-    return
-  const cardId = card.id
-
-  const documentValue = folderDocument.value
-  if (!documentValue)
-    return
-  if (documentValue.activeCardId === cardId) {
-    const index = documentValue.cards.findIndex(item => item.id === cardId)
-    const isSelectable = (item: FolderProjectCard) =>
-      item.id !== cardId && !pendingCardDeletionIds.value.has(item.id)
-    const nextCard = documentValue.cards.slice(index + 1).find(isSelectable)
-      ?? documentValue.cards.slice(0, index).reverse().find(isSelectable)
-    if (!nextCard)
-      return
-    await selectProjectCard(nextCard.id)
-    if (folderDocument.value?.activeCardId !== nextCard.id)
-      return
-  }
-
-  pendingCardDeletionIds.value = new Set(pendingCardDeletionIds.value).add(
-    cardId,
-  )
-  logDiagnostic('カードを削除予定にしました', {
-    cardId,
-    imageName: card.imageName,
-    pending: pendingCardDeletionIds.value.size,
-  })
-  setMessage(`${card.imageName} を削除予定にしました。`)
-}
-
-/** 指定カードの削除予定を取り消す。 */
-function cancelProjectCardDeletionRequest(cardId: string) {
-  if (!pendingCardDeletionIds.value.has(cardId))
-    return
-  const card = folderDocument.value?.cards.find(item => item.id === cardId)
-  const nextIds = new Set(pendingCardDeletionIds.value)
-  nextIds.delete(cardId)
-  pendingCardDeletionIds.value = nextIds
-  logDiagnostic('カードの削除予定を取り消しました', {
-    cardId,
-    imageName: card?.imageName,
-    pending: pendingCardDeletionIds.value.size,
-  })
-  setMessage(`${card?.imageName ?? 'カード'} の削除を取り消しました。`)
-}
-
-/** 追加画像とサムネイルを準備し、保存成功後にカード一覧と保存済みアセットのパスを更新する。 */
-async function addProjectCards(files: File[]) {
-  if (isDemo.value) {
-    setMessage('デモではサンプルカードのみ編集できます。')
-    return
-  }
-  if (editorDisposed || projectBusy.value)
-    return
-  const directory = projectDirectory.value
-  const documentValue = folderDocument.value
-  if (
-    !directory
-    || !documentValue
-    || addingCards.value
-    || loadingCardId.value
-    || files.length === 0
-  ) {
-    return
-  }
-  if (ocrRunning.value) {
-    setMessage('OCRの完了後にカードを追加してください。')
-    return
-  }
-  if (pendingCardDeletionIds.value.size > 0) {
-    setMessage('カードを追加する前に、削除予定を保存または取り消してください。')
-    return
-  }
-
-  addingCards.value = true
-  const assetWrites = new Map(pendingAssetWrites.value)
-  logDiagnostic('カード画像の一括追加を開始しました', {
-    requested: files.length,
-  })
-  try {
-    const additions = []
-    const thumbnails = new Map<string, Blob>()
-    for (const file of files) {
-      if (editorDisposed)
-        return
-      const loaded = await loadImage(file)
-      if (!loaded)
-        continue
-      try {
-        const id = crypto.randomUUID()
-        additions.push({
-          id,
-          file,
-          imageWidth: loaded.element.naturalWidth,
-          imageHeight: loaded.element.naturalHeight,
-        })
-        const thumbnail = await createCardThumbnailBlob(
-          loaded.element,
-          loaded.element.naturalWidth,
-          loaded.element.naturalHeight,
-        )
-        if (editorDisposed)
-          return
-        if (thumbnail)
-          thumbnails.set(id, thumbnail)
-      }
-      finally {
-        URL.revokeObjectURL(loaded.url)
-        loaded.element.removeAttribute('src')
-      }
-    }
-    if (additions.length === 0) {
-      setMessage('追加できるPNG / JPEG画像がありませんでした。')
-      return
-    }
-    const updatedDocument = await addFolderProjectCards(
-      directory,
-      documentValue,
-      additions,
-      assetWrites,
-    )
-    if (editorDisposed)
-      return
-    const previousIds = new Set(documentValue.cards.map(card => card.id))
-    projectStore.replaceProject({
-      ...folderDocument.value!,
-      cards: [
-        ...folderDocument.value!.cards,
-        ...updatedDocument.cards.filter(card => !previousIds.has(card.id)),
-      ],
-    })
-    projectStore.acceptSavedProject(updatedDocument, new Set())
-    projectRuntime.acknowledgeAssetWrites(assetWrites)
-    thumbnails.forEach((thumbnail, id) => {
-      setCardThumbnail(id, thumbnail)
-      void persistCardThumbnail(directory, id, thumbnail)
-    })
-    logDiagnostic('カード画像の一括追加が完了しました', {
-      added: additions.length,
-      cards: updatedDocument.cards.length,
-    })
-    setMessage(`${additions.length}枚のカードを追加しました。`)
-  }
-  catch (error) {
-    if (editorDisposed)
-      return
-    logDiagnostic('カード画像を追加できませんでした', error, 'error')
-    setMessage('カード画像を追加できませんでした。')
-  }
-  finally {
-    addingCards.value = false
-  }
-}
-
-/** フォルダ内の画像を列挙してカード追加へ渡す。 */
-async function addProjectCardsFromFolder() {
-  if (isDemo.value) {
-    setMessage('デモではサンプルカードのみ編集できます。')
-    return
-  }
-  try {
-    const directory = await pickImageDirectory()
-    const files = await listImageFiles(directory)
-    if (files.length === 0) {
-      setMessage('選択したフォルダ直下にPNG / JPEG画像がありません。')
-      return
-    }
-    await addProjectCards(files)
-  }
-  catch (error) {
-    if (isPickerCancellation(error))
-      return
-    logDiagnostic('フォルダからカード画像を追加できませんでした', error, 'error')
-    setMessage(
-      error instanceof Error
-        ? error.message
-        : 'フォルダからカード画像を追加できませんでした。',
-    )
-  }
 }
 
 /** アセット切り出し用の元画像をruntimeへ採用する。 */
