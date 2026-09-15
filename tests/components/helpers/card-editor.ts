@@ -19,11 +19,18 @@ vi.mock('~/composables/useUnsavedChanges', () => ({
     resolveLeave: vi.fn(),
   }),
 }))
+const ocrMocks = vi.hoisted(() => ({
+  recognize: vi.fn<import('~/services/ocr/types').OCRProvider['recognize']>(),
+  dispose: vi.fn<() => Promise<void>>(),
+  prepareRegionForOCR: vi.fn<typeof import('~/services/ocr/image').prepareRegionForOCR>(),
+}))
 vi.mock('~/services/ocr/tesseract', () => ({
   TesseractOCRProvider: class {
-    dispose = vi.fn().mockResolvedValue(undefined)
+    recognize = ocrMocks.recognize
+    dispose = ocrMocks.dispose
   },
 }))
+vi.mock('~/services/ocr/image', () => ({ prepareRegionForOCR: ocrMocks.prepareRegionForOCR }))
 const folderIO = vi.hoisted(() => ({
   loadFolderProjectCardThumbnail: vi.fn<typeof import('~/services/project/folder').loadFolderProjectCardThumbnail>(),
   loadFolderProjectCardImage: vi.fn<typeof import('~/services/project/folder').loadFolderProjectCardImage>(),
@@ -79,6 +86,8 @@ let runtime: ReturnType<typeof useProjectRuntime>
 
 beforeEach(() => {
   vi.useFakeTimers()
+  ocrMocks.dispose.mockResolvedValue(undefined)
+  ocrMocks.prepareRegionForOCR.mockResolvedValue(new Blob(['processed']))
   localStorage.clear()
   for (const [name, value] of Object.entries({
     computed,
@@ -154,8 +163,8 @@ export async function mountEditor() {
       plugins: [createPinia()],
       stubs: {
         ...Object.fromEntries(childNames.map(name => [name, true])),
-        CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project'], template: '<div />' },
-        RegionInspector: { name: 'RegionInspector', props: ['region'], template: '<div />' },
+        CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId'], template: '<div />' },
+        RegionInspector: { name: 'RegionInspector', props: ['region', 'ocrCandidate', 'ocrConfidence', 'ocrCorrectionCandidate', 'ocrCorrectionChanges', 'ocrRunning', 'ocrProgress', 'ocrStatus', 'ocrLayout'], template: '<div />' },
         TranslationPreviewDialog: { name: 'TranslationPreviewDialog', props: ['originalText', 'currentTranslation', 'proposedTranslation'], template: '<div />' },
         TranslationRequestDialog: { name: 'TranslationRequestDialog', props: ['originalText', 'endpoint'], template: '<div />' },
         TranslationReviewDialog: { name: 'TranslationReviewDialog', props: ['cards', 'initialImport', 'error', 'appliedRows', 'loadImage'], template: '<div />' },
@@ -183,3 +192,5 @@ export function unmountEditor() {
 export const { folderProjectExists, loadFolderProjectCardImage, loadFolderProjectCardThumbnail, openFolderProject, pickProjectDirectory, writeFolderProjectCardThumbnail } = folderIO
 export const { createCardThumbnailBlob, createCardThumbnailBlobFromFile } = thumbnailIO
 export const { downloadText } = downloadIO
+
+export const ocrIO = ocrMocks
