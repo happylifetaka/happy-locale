@@ -222,3 +222,17 @@ mise exec -- pnpm test tests/components/CardEditor.batch-ocr.test.ts
 - Canvas上の候補編集とバッチ結果の受け渡しは親に残し、OCR Providerと実行状態は単一領域OCRと共有する。
 - 同じ59件の画面テスト、全373テスト、型検査、lint、ビルドが成功した。
 - `CardEditor.vue`は3,133行（開始時3,993行から860行減）。次は現在のカードの領域候補検出・編集を検証する。
+
+### 2026-09-16: 現在のカードの領域検出にも終了後の処理継続を確認
+
+- ユーザーの「気になる点が出るまで進める」方針に従い、次の分割前テストで停止した。一括OCRとは別の、現在の画像全体を認識する`detectRegionCandidates`が対象。
+- 画像前処理中に画面終了すると、Providerの`dispose`後にも`recognize`を呼ぶ（期待0回、実際1回）。認識結果の成功・失敗が画面終了後に届く場合も、完了ログ・エラー通知の処理が続く。
+- 制御可能なPromiseによる3テストで再現。分割開始前の`3175fd1`でも同じ3件が同じ理由で失敗することを確認し、最新版へ復元した。今回の抽出による退行ではない。実ブラウザのWorkerでは未検証。
+- `tests/components/CardEditor.region-candidates.test.ts`に赤い再現テストを未コミットで保持。テスト型検査・lintは成功。コミット済みの一括OCR抽出は全373テスト・型検査・lint・ビルド成功済み。
+- 次の対応案: 画像全体の領域検出にも終了時の無効化と各非同期処理後の確認を入れ、遅延した進捗・結果・通知を止める。分割とは別の修正コミットとして3件を緑にしてから候補編集の抽出へ進む。
+
+再現コマンド:
+
+```bash
+mise exec -- pnpm test tests/components/CardEditor.region-candidates.test.ts
+```
