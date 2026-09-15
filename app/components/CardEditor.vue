@@ -298,6 +298,7 @@ const {
 })
 /** 現在のカードで確認・調整している領域候補。 */
 const regionCandidates = ref<RegionCandidate[]>([])
+let regionDetectionDisposed = false
 /** 移動や分割の操作対象として選択中の領域候補ID。 */
 const selectedCandidateId = ref<string | null>(null)
 /** 領域候補の位置変更や分割を戻すための履歴。 */
@@ -613,6 +614,7 @@ watch(
 
 // 画面終了時にタイマー・イベント・画像・フォント・OCRのリソースを解放する。
 onBeforeUnmount(() => {
+  regionDetectionDisposed = true
   window.removeEventListener('keydown', handleEditorKeydown)
   projectRuntime.dispose()
   projectStore.clearProject()
@@ -868,7 +870,7 @@ function undoCandidateChange() {
 async function detectRegionCandidates() {
   const source = image.value
   const project = editor.project.value
-  if (!source || ocrRunning.value)
+  if (!source || ocrRunning.value || regionDetectionDisposed)
     return
   if (isDemo.value)
     return
@@ -899,14 +901,20 @@ async function detectRegionCandidates() {
       },
       { scale, padding: 0 },
     )
+    if (regionDetectionDisposed)
+      return
     const result = await ocrProvider.recognize(blob, {
       language: 'eng',
       layout: 'sparse-text',
       onProgress: (progress) => {
+        if (regionDetectionDisposed)
+          return
         ocrProgress.value = progress.progress
         ocrStatus.value = progress.status
       },
     })
+    if (regionDetectionDisposed)
+      return
     regionCandidates.value = createRegionCandidates(result.blocks, {
       scale,
       imageWidth: project.imageWidth,
@@ -927,14 +935,18 @@ async function detectRegionCandidates() {
     }
   }
   catch (error) {
+    if (regionDetectionDisposed)
+      return
     clearRegionCandidates()
     logDiagnostic('領域候補の検出に失敗しました', error, 'error')
     setMessage('領域候補を検出できませんでした。診断ログを確認してください。')
   }
   finally {
-    ocrRunning.value = false
-    ocrProgress.value = null
-    ocrStatus.value = ''
+    if (!regionDetectionDisposed) {
+      ocrRunning.value = false
+      ocrProgress.value = null
+      ocrStatus.value = ''
+    }
   }
 }
 

@@ -236,3 +236,8 @@ mise exec -- pnpm test tests/components/CardEditor.batch-ocr.test.ts
 ```bash
 mise exec -- pnpm test tests/components/CardEditor.region-candidates.test.ts
 ```
+
+### 2026-09-16: 画像全体OCRの終了処理を修正
+
+- 承認を受け、画面終了後の認識開始・進捗・結果・エラー通知を無効化した。
+- 再現3テストを含む全376テスト、型検査、lint、ビルドが成功。候補検出・編集の分割を再開する。
