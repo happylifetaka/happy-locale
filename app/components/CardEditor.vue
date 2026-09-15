@@ -25,6 +25,7 @@ import { useEditorFonts } from '~/composables/useEditorFonts'
 import { useEditorOCR } from '~/composables/useEditorOCR'
 import { useEditorTranslation } from '~/composables/useEditorTranslation'
 import { usePreviewDeferral } from '~/composables/usePreviewDeferral'
+import { useProjectNavigation } from '~/composables/useProjectNavigation'
 import { useProjectPersistence } from '~/composables/useProjectPersistence'
 import { useRegionCandidates } from '~/composables/useRegionCandidates'
 import { useTranslationReview } from '~/composables/useTranslationReview'
@@ -32,7 +33,6 @@ import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import {
-  activateProjectCard,
   moveProjectCard,
   renameProjectCard,
 } from '~/services/project/cards'
@@ -40,7 +40,6 @@ import {
   addFolderProjectCards,
   folderProjectExists,
   listImageFiles,
-  loadFolderProjectCardImage,
   openFolderProject,
   pickImageDirectory,
   pickProjectDirectory,
@@ -1027,119 +1026,38 @@ const { leaveConfirmationOpen, confirmLeave, resolveLeave } = useUnsavedChanges(
   () => projectBusy.value,
 )
 
-/** 対象画像を読めてからカードと履歴を切り替え、そのカードの一括OCR候補も復元する。 */
-async function selectProjectCard(cardId: string) {
-  if (editorDisposed || projectBusy.value)
-    return
-  const directory = projectDirectory.value
-  const documentValue = folderDocument.value
-  if (
-    !directory
-    || !documentValue
-    || pendingCardDeletionIds.value.has(cardId)
-    || loadingCardId.value
-  ) {
-    return
-  }
-  if (documentValue.activeCardId === cardId) {
-    if (showBatchOCRCandidates(cardId))
-      setMessage(`${storedCard.value.imageName} のOCR候補を確認してください。`)
-    return
-  }
-  if (translationRunning.value) {
-    setMessage('翻訳の完了後にカードを切り替えてください。')
-    return
-  }
-  if (ocrRunning.value) {
-    setMessage('OCRの完了後にカードを切り替えてください。')
-    return
-  }
-  const target = documentValue.cards.find(card => card.id === cardId)
-  if (!target)
-    return
+/** カード画像・編集履歴の切替と、切替後の領域への移動。 */
+const { selectProjectCard: navigateToCard, selectProjectRegion: navigateToRegion } = useProjectNavigation({
+  editor,
+  projectStore,
+  projectDirectory,
+  projectBusy,
+  translationRunning,
+  ocrRunning,
+  currentImageId,
+  loadingCardId,
+  pendingCardDeletionIds,
+  view: { maskEditing, exclusionEditing, selectedExclusionId, currentView },
+  isActive: () => !editorDisposed,
+  loadImage,
+  applyLoadedImage,
+  detectAndApplyCardDpi,
+  cacheCardThumbnail,
+  persistCardThumbnail,
+  clearOCRCandidate,
+  showBatchOCRCandidates,
+  switchInspectorTab,
+  setMessage,
+  logDiagnostic,
+})
 
-  loadingCardId.value = cardId
-  logDiagnostic('カード画像の遅延読み込みを開始しました', {
-    cardId,
-    imagePath: target.imagePath,
-  })
-  try {
-    const file = await loadFolderProjectCardImage(directory, target)
-    if (editorDisposed)
-      return
-    const loaded = await loadImage(file)
-    if (!loaded)
-      return
-    editor.switchSavedProject(cardId, {
-      imageName: target.imageName,
-      imageWidth: loaded.element.naturalWidth,
-      imageHeight: loaded.element.naturalHeight,
-      regions: target.regions,
-    })
-    projectStore.replaceProject(activateProjectCard(
-      {
-        ...folderDocument.value!,
-        cards: folderDocument.value!.cards.map(card =>
-          card.id === cardId
-            ? {
-                ...card,
-                imageWidth: loaded.element.naturalWidth,
-                imageHeight: loaded.element.naturalHeight,
-              }
-            : card,
-        ),
-      },
-      cardId,
-    ))
-    currentImageId.value = cardId
-    maskEditing.value = false
-    exclusionEditing.value = false
-    selectedExclusionId.value = null
-    clearOCRCandidate()
-    applyLoadedImage(loaded)
-    await detectAndApplyCardDpi(cardId, file)
-    if (editorDisposed)
-      return
-    const hasBatchCandidates = showBatchOCRCandidates(cardId)
-    const thumbnail = await cacheCardThumbnail(cardId, loaded.element)
-    if (editorDisposed)
-      return
-    if (thumbnail)
-      void persistCardThumbnail(directory, cardId, thumbnail)
-    currentView.value = 'card'
-    logDiagnostic('編集対象カードを切り替えました', {
-      cardId,
-      regions: target.regions.length,
-      loadedImages: 1,
-    })
-    setMessage(
-      hasBatchCandidates
-        ? `${target.imageName} のOCR候補を確認してください。`
-        : `${target.imageName} を開きました。`,
-    )
-  }
-  catch (error) {
-    if (editorDisposed)
-      return
-    logDiagnostic('カード画像を読み込めませんでした', error, 'error')
-    setMessage('カード画像を読み込めませんでした。')
-  }
-  finally {
-    loadingCardId.value = null
-  }
+// 他機能の初期化時にも渡せるよう、切替操作の入口を関数宣言として保つ。
+async function selectProjectCard(cardId: string) {
+  await navigateToCard(cardId)
 }
 
-/** 対象カードへ切り替えて指定領域を選択する。 */
 async function selectProjectRegion(cardId: string, regionId: string) {
-  await selectProjectCard(cardId)
-  if (editorDisposed || currentImageId.value !== cardId)
-    return
-  const region = editor.project.value.regions.find(item => item.id === regionId)
-  if (!region)
-    return
-  editor.selectedRegionId.value = region.id
-  switchInspectorTab('text')
-  currentView.value = 'card'
+  await navigateToRegion(cardId, regionId)
 }
 
 /** カード名と編集中の画像名を更新する。 */
