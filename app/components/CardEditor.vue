@@ -181,6 +181,11 @@ const cardPendingDeletionConfirmation = shallowRef<FolderProjectCard | null>(
 const regionPendingDeletionConfirmation = shallowRef<TextRegion | null>(null)
 /** このブラウザに保存できたフォントのID一覧。 */
 const cachedFontIds = shallowRef(new Set<string>())
+let fontLoadGeneration = 0
+let fontLoadingDisposed = false
+watch(projectDirectory, () => {
+  fontLoadGeneration += 1
+}, { flush: 'sync' })
 /** プロジェクト保存後にキャッシュから削除するフォントID。 */
 const pendingFontCacheDeletionIds = shallowRef(new Set<string>())
 /** 削除確認中のフォントと、その使用箇所数。 */
@@ -648,6 +653,8 @@ watch(
 
 // 画面終了時にタイマー・イベント・画像・フォント・OCRのリソースを解放する。
 onBeforeUnmount(() => {
+  fontLoadingDisposed = true
+  fontLoadGeneration += 1
   window.removeEventListener('keydown', handleEditorKeydown)
   projectRuntime.dispose()
   projectStore.clearProject()
@@ -679,6 +686,9 @@ function setMessage(value: string) {
 
 /** 保存済みの参照に対応するフォントをブラウザのキャッシュから復元する。 */
 async function restoreCachedFonts(references: FontReference[]) {
+  if (fontLoadingDisposed)
+    return
+  const generation = ++fontLoadGeneration
   const restored = new Map<string, FontFace>()
   const cached = new Set<string>()
   await Promise.all(references.map(async (reference) => {
@@ -686,10 +696,16 @@ async function restoreCachedFonts(references: FontReference[]) {
       const face = await loadCachedFont(reference)
       if (!face)
         return
+      if (fontLoadingDisposed || generation !== fontLoadGeneration) {
+        document.fonts.delete(face)
+        return
+      }
       restored.set(reference.id, face)
       cached.add(reference.id)
     }
     catch (error) {
+      if (fontLoadingDisposed || generation !== fontLoadGeneration)
+        return
       logDiagnostic(
         `保存済みフォント「${reference.displayName}」を復元できませんでした`,
         error,
@@ -697,6 +713,10 @@ async function restoreCachedFonts(references: FontReference[]) {
       )
     }
   }))
+  if (fontLoadingDisposed || generation !== fontLoadGeneration) {
+    restored.forEach(face => document.fonts.delete(face))
+    return
+  }
   projectRuntime.replaceLoadedFonts(restored)
   cachedFontIds.value = cached
   if (restored.size > 0) {
@@ -708,13 +728,17 @@ async function restoreCachedFonts(references: FontReference[]) {
 }
 
 /** フォントBlobをキャッシュし、保存できたフォントの一覧を更新する。 */
-async function saveFontToCache(reference: FontReference, blob: Blob) {
+async function saveFontToCache(reference: FontReference, blob: Blob, generation: number) {
   try {
     await cacheFont(reference.id, blob)
+    if (fontLoadingDisposed || generation !== fontLoadGeneration)
+      return false
     cachedFontIds.value = new Set(cachedFontIds.value).add(reference.id)
     return true
   }
   catch (error) {
+    if (fontLoadingDisposed || generation !== fontLoadGeneration)
+      return false
     logDiagnostic(
       `フォント「${reference.displayName}」をブラウザへ保存できませんでした`,
       error,
@@ -1820,6 +1844,9 @@ function applyPrintAreaToUnconfiguredCards() {
 
 /** 選択フォントを読み込み、表示用と保存用の情報を登録する。 */
 async function loadFont(file: File, fontId: string | null) {
+  if (fontLoadingDisposed)
+    return
+  const generation = fontLoadGeneration
   try {
     const existing = fontId
       ? fonts.value.find(font => font.id === fontId)
@@ -1827,10 +1854,16 @@ async function loadFont(file: File, fontId: string | null) {
           font.source === 'user' && font.fileName === file.name,
         )
     const loaded = await loadUserFont(file, existing)
+    if (fontLoadingDisposed || generation !== fontLoadGeneration) {
+      document.fonts.delete(loaded.face)
+      return
+    }
     if (!existing)
       projectStore.setFonts([...fonts.value, loaded.reference])
     projectRuntime.setLoadedFont(loaded.reference.id, loaded.face)
-    const cached = await saveFontToCache(loaded.reference, loaded.blob)
+    const cached = await saveFontToCache(loaded.reference, loaded.blob, generation)
+    if (fontLoadingDisposed || generation !== fontLoadGeneration)
+      return
     setMessage(
       cached
         ? `フォント「${loaded.reference.displayName}」を読み込み、ブラウザへ保存しました。`
@@ -1838,6 +1871,8 @@ async function loadFont(file: File, fontId: string | null) {
     )
   }
   catch (error) {
+    if (fontLoadingDisposed || generation !== fontLoadGeneration)
+      return
     setMessage(
       error instanceof Error
         ? error.message
@@ -1848,6 +1883,9 @@ async function loadFont(file: File, fontId: string | null) {
 
 /** 選択したOSフォントを編集用に登録し、キャッシュへ保存する。 */
 async function loadSystemFont(font: LocalFontData, fontId: string | null) {
+  if (fontLoadingDisposed)
+    return
+  const generation = fontLoadGeneration
   try {
     const existing = fontId
       ? fonts.value.find(reference => reference.id === fontId)
@@ -1856,10 +1894,16 @@ async function loadSystemFont(font: LocalFontData, fontId: string | null) {
           && reference.postscriptName === font.postscriptName,
         )
     const loaded = await loadLocalFont(font, existing)
+    if (fontLoadingDisposed || generation !== fontLoadGeneration) {
+      document.fonts.delete(loaded.face)
+      return
+    }
     if (!existing)
       projectStore.setFonts([...fonts.value, loaded.reference])
     projectRuntime.setLoadedFont(loaded.reference.id, loaded.face)
-    const cached = await saveFontToCache(loaded.reference, loaded.blob)
+    const cached = await saveFontToCache(loaded.reference, loaded.blob, generation)
+    if (fontLoadingDisposed || generation !== fontLoadGeneration)
+      return
     setMessage(
       cached
         ? `${loaded.reference.displayName} を読み込み、ブラウザへ保存しました。`
@@ -1867,6 +1911,8 @@ async function loadSystemFont(font: LocalFontData, fontId: string | null) {
     )
   }
   catch (error) {
+    if (fontLoadingDisposed || generation !== fontLoadGeneration)
+      return
     logDiagnostic('PCフォントを読み込めませんでした', error, 'error')
     setMessage(
       error instanceof Error ? error.message : 'PCフォントを読み込めませんでした。',
