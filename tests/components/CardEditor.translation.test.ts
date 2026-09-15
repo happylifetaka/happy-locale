@@ -6,7 +6,7 @@ import { TRANSLATION_SETTINGS_STORAGE_KEY } from '~/composables/useTranslationSe
 import { LocalTranslationProvider } from '~/services/translator/local'
 import { SampleTranslationProvider } from '~/services/translator/sample'
 import { useProjectStore } from '~/stores/project'
-import { deferred, folderProjectExists, mountEditor, pickProjectDirectory, seedProject } from './helpers/card-editor'
+import { deferred, folderProjectExists, loadFolderProjectCardImage, mountEditor, mountSavedEditor, pickProjectDirectory, seedProject } from './helpers/card-editor'
 
 describe('card editor translation candidates', () => {
   beforeEach(() => {
@@ -23,6 +23,31 @@ describe('card editor translation candidates', () => {
     const toolbar = wrapper.findComponent({ name: 'EditorToolbar' })
     return { ...context, toolbar }
   }
+
+  it('blocks card switching during translation and allows it after the request finishes', async () => {
+    const result = deferred<string>()
+    vi.mocked(LocalTranslationProvider.prototype.translate).mockReturnValueOnce(result.promise)
+    const { wrapper, canvas, inspector } = await mountSavedEditor()
+    canvas.vm.$emit('select-region', 'region-0')
+    await nextTick()
+    inspector.vm.$emit('translate')
+    await nextTick()
+    wrapper.findComponent({ name: 'TranslationRequestDialog' }).vm.$emit('send')
+    await flushPromises()
+    expect(LocalTranslationProvider.prototype.translate).toHaveBeenCalledOnce()
+    const calls = vi.mocked(loadFolderProjectCardImage).mock.calls.length
+    const list = wrapper.findComponent({ name: 'CardList' })
+    list.vm.$emit('select', 'two')
+    await flushPromises()
+    expect(loadFolderProjectCardImage).toHaveBeenCalledTimes(calls)
+    expect(useProjectStore().document!.activeCardId).toBe('one')
+    result.resolve('Translated')
+    await flushPromises()
+    wrapper.findComponent({ name: 'TranslationPreviewDialog' }).vm.$emit('cancel')
+    list.vm.$emit('select', 'two')
+    await flushPromises()
+    expect(useProjectStore().document!.activeCardId).toBe('two')
+  })
 
   async function requestPreview() {
     const context = await setupTranslation()

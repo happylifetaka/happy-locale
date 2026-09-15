@@ -1,7 +1,36 @@
 // @vitest-environment happy-dom
-import { expect, it } from 'vitest'
+import type { FolderProjectDocument } from '~/types/editor'
+import { flushPromises } from '@vue/test-utils'
+import { expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
-import { mountEditor, mountSavedEditor } from './helpers/card-editor'
+import { useProjectStore } from '~/stores/project'
+import { deferred, mountEditor, mountSavedEditor, saveFolderProject } from './helpers/card-editor'
+
+it('blocks undo during saving and restores keyboard undo after saving', async () => {
+  const { canvas, inspector, toolbar } = await mountSavedEditor()
+  canvas.vm.$emit('select-region', 'region-0')
+  await nextTick()
+  inspector.vm.$emit('update', 'region-0', { translatedText: 'Saved edit' })
+  await nextTick()
+  const snapshot = JSON.parse(JSON.stringify(useProjectStore().document!)) as FolderProjectDocument
+  const saved = deferred<FolderProjectDocument>()
+  vi.mocked(saveFolderProject).mockReturnValueOnce(saved.promise)
+  toolbar.vm.$emit('save-project')
+  await flushPromises()
+  expect(saveFolderProject).toHaveBeenCalledOnce()
+  const blocked = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, cancelable: true })
+  window.dispatchEvent(blocked)
+  await nextTick()
+  expect(inspector.props('region').translatedText).toBe('Saved edit')
+  expect(blocked.defaultPrevented).toBe(false)
+  saved.resolve(snapshot)
+  await flushPromises()
+  const undo = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, cancelable: true })
+  window.dispatchEvent(undo)
+  await nextTick()
+  expect(inspector.props('region').translatedText).toBe('Before 0')
+  expect(undo.defaultPrevented).toBe(true)
+})
 
 it.each(['escape', 'backdrop', 'button'] as const)('cancels region deletion with %s without changing history', async (method) => {
   const { wrapper, canvas } = await mountEditor()

@@ -4,7 +4,7 @@ import { flushPromises } from '@vue/test-utils'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { useProjectStore } from '~/stores/project'
-import { deferred, editorRuntime, mountSavedEditor, unmountEditor } from './helpers/card-editor'
+import { deferred, editorRuntime, mountSavedEditor, saveFolderProject, unmountEditor } from './helpers/card-editor'
 
 const fontIO = vi.hoisted(() => ({
   loadUserFont: vi.fn<typeof import('~/services/fonts/user-font').loadUserFont>(),
@@ -90,6 +90,59 @@ it('does not adopt a font that finishes loading after unmount', async () => {
   expect(useProjectStore().fonts).toEqual([])
   expect(editorRuntime().loadedFonts.value.size).toBe(0)
   expect(fontIO.cacheFont).not.toHaveBeenCalled()
+})
+
+it('keeps a deleted font cached after save failure and deletes its cache after retry succeeds', async () => {
+  const { wrapper, toolbar } = await mountSavedEditor()
+  const library = wrapper.findComponent({ name: 'FontLibrary' })
+  library.vm.$emit('load', file, null)
+  await flushPromises()
+  library.vm.$emit('remove', reference.id)
+  await nextTick()
+  expect(fontIO.removeCachedFont).not.toHaveBeenCalled()
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  vi.mocked(saveFolderProject).mockRejectedValueOnce(new Error('disk full'))
+  toolbar.vm.$emit('save-project')
+  await flushPromises()
+  expect(toolbar.props('saveStatus')).toBe('unsaved')
+  expect(fontIO.removeCachedFont).not.toHaveBeenCalled()
+  vi.mocked(saveFolderProject).mockResolvedValueOnce(JSON.parse(JSON.stringify(useProjectStore().document!)))
+  toolbar.vm.$emit('save-project')
+  await flushPromises()
+  expect(fontIO.removeCachedFont).toHaveBeenCalledExactlyOnceWith(reference.id)
+  expect(toolbar.props('saveStatus')).toBe('saved')
+})
+
+it('removes font references from both cards and does not resurrect them through previous card histories', async () => {
+  const { wrapper, toolbar, canvas, inspector } = await mountSavedEditor()
+  const library = wrapper.findComponent({ name: 'FontLibrary' })
+  library.vm.$emit('load', file, null)
+  await flushPromises()
+  const list = wrapper.findComponent({ name: 'CardList' })
+  for (const [cardId, regionId] of [['one', 'region-0'], ['two', 'region-1']]) {
+    list.vm.$emit('select', cardId)
+    await flushPromises()
+    canvas.vm.$emit('select-region', regionId)
+    await nextTick()
+    inspector.vm.$emit('update', regionId, { fontId: reference.id })
+    inspector.vm.$emit('update', regionId, { translatedText: 'Later' })
+    await nextTick()
+  }
+  library.vm.$emit('remove', reference.id)
+  await nextTick()
+  expect(wrapper.get('#font-delete-description').text()).toContain('2件')
+  await wrapper.get('[aria-labelledby="font-delete-title"] .confirmation-danger').trigger('click')
+  await flushPromises()
+  for (const cardId of ['one', 'two']) {
+    list.vm.$emit('select', cardId)
+    await flushPromises()
+    toolbar.vm.$emit('undo')
+    toolbar.vm.$emit('redo')
+    await nextTick()
+    expect(canvas.props('project').regions[0].fontId).toBeNull()
+  }
+  expect(useProjectStore().document!.cards.slice(0, 2).every(card => card.regions[0]!.fontId === null)).toBe(true)
+  expect(fontIO.removeCachedFont).not.toHaveBeenCalled()
 })
 
 it('discards a font loaded for a previous project directory and releases its FontFace', async () => {

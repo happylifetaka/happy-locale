@@ -19,6 +19,42 @@ async function setupAssetDraft() {
   return { assets, callbacks, wrapper }
 }
 
+it('renames shared asset references across cards and inactive redo history while retaining the pending image', async () => {
+  const { assets, callbacks, wrapper } = await setupAssetDraft()
+  assets.vm.$emit('confirm-draft')
+  await flushPromises()
+  const png = new Blob(['png'])
+  callbacks.shift()!(png)
+  await flushPromises()
+  const asset = useProjectStore().assets[0]!
+  const canvas = wrapper.findComponent({ name: 'CardCanvas' })
+  const inspector = wrapper.findComponent({ name: 'RegionInspector' })
+  const toolbar = wrapper.findComponent({ name: 'EditorToolbar' })
+  const list = wrapper.findComponent({ name: 'CardList' })
+  for (const cardId of ['one', 'two']) {
+    list.vm.$emit('select', cardId)
+    await flushPromises()
+    canvas.vm.$emit('add-region', { x: 1, y: 1, width: 30, height: 20 }, '#ffffff')
+    await nextTick()
+    const id = inspector.props('region').id
+    inspector.vm.$emit('update', id, { translatedText: `[icon:${asset.name}]` })
+    inspector.vm.$emit('update', id, { translatedText: `Later [icon:${asset.name}]` })
+    toolbar.vm.$emit('undo')
+    await nextTick()
+  }
+  assets.vm.$emit('rename', asset.id, 'renamed')
+  await nextTick()
+  expect(useProjectStore().assets[0]!.name).toBe('renamed')
+  expect(useProjectStore().document!.cards.slice(0, 2).map(card => card.regions[0]!.translatedText))
+    .toEqual(['[icon:renamed]', '[icon:renamed]'])
+  expect(editorRuntime().pendingAssetWrites.value.get(asset.id)).toBe(png)
+  list.vm.$emit('select', 'one')
+  await flushPromises()
+  toolbar.vm.$emit('redo')
+  await nextTick()
+  expect(canvas.props('project').regions[0].translatedText).toBe('Later [icon:renamed]')
+})
+
 it('registers an asset only after its PNG is ready', async () => {
   const { assets, callbacks } = await setupAssetDraft()
   assets.vm.$emit('confirm-draft')
