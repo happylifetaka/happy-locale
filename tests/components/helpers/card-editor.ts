@@ -30,9 +30,11 @@ const folderIO = vi.hoisted(() => ({
   writeFolderProjectCardThumbnail: vi.fn<typeof import('~/services/project/folder').writeFolderProjectCardThumbnail>(),
   pickProjectDirectory: vi.fn<typeof import('~/services/project/folder').pickProjectDirectory>(),
   folderProjectExists: vi.fn<typeof import('~/services/project/folder').folderProjectExists>(),
+  openFolderProject: vi.fn<typeof import('~/services/project/folder').openFolderProject>(),
 }))
 const thumbnailIO = vi.hoisted(() => ({
   createCardThumbnailBlobFromFile: vi.fn<typeof import('~/utils/card-thumbnail').createCardThumbnailBlobFromFile>(),
+  createCardThumbnailBlob: vi.fn<typeof import('~/utils/card-thumbnail').createCardThumbnailBlob>(),
 }))
 vi.mock('~/services/project/folder', async importOriginal => ({
   ...await importOriginal<typeof import('~/services/project/folder')>(),
@@ -41,6 +43,13 @@ vi.mock('~/services/project/folder', async importOriginal => ({
 vi.mock('~/utils/card-thumbnail', async importOriginal => ({
   ...await importOriginal<typeof import('~/utils/card-thumbnail')>(),
   ...thumbnailIO,
+}))
+const downloadIO = vi.hoisted(() => ({
+  downloadText: vi.fn<typeof import('~/utils/download').downloadText>(),
+}))
+vi.mock('~/utils/download', async importOriginal => ({
+  ...await importOriginal<typeof import('~/utils/download')>(),
+  ...downloadIO,
 }))
 
 const childNames = [
@@ -149,6 +158,7 @@ export async function mountEditor() {
         RegionInspector: { name: 'RegionInspector', props: ['region'], template: '<div />' },
         TranslationPreviewDialog: { name: 'TranslationPreviewDialog', props: ['originalText', 'currentTranslation', 'proposedTranslation'], template: '<div />' },
         TranslationRequestDialog: { name: 'TranslationRequestDialog', props: ['originalText', 'endpoint'], template: '<div />' },
+        TranslationReviewDialog: { name: 'TranslationReviewDialog', props: ['cards', 'initialImport', 'error', 'appliedRows', 'loadImage'], template: '<div />' },
       },
     },
   })
@@ -170,5 +180,6 @@ export function unmountEditor() {
 }
 
 // テストは実サービスと同じ型を持つI/Oモックの完了タイミングを制御する。
-export const { folderProjectExists, loadFolderProjectCardImage, loadFolderProjectCardThumbnail, pickProjectDirectory, writeFolderProjectCardThumbnail } = folderIO
-export const { createCardThumbnailBlobFromFile } = thumbnailIO
+export const { folderProjectExists, loadFolderProjectCardImage, loadFolderProjectCardThumbnail, openFolderProject, pickProjectDirectory, writeFolderProjectCardThumbnail } = folderIO
+export const { createCardThumbnailBlob, createCardThumbnailBlobFromFile } = thumbnailIO
+export const { downloadText } = downloadIO
