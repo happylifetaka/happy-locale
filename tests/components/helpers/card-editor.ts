@@ -32,6 +32,7 @@ vi.mock('~/services/ocr/tesseract', () => ({
 }))
 vi.mock('~/services/ocr/image', () => ({ prepareRegionForOCR: ocrMocks.prepareRegionForOCR }))
 const folderIO = vi.hoisted(() => ({
+  addFolderProjectCards: vi.fn<typeof import('~/services/project/folder').addFolderProjectCards>(),
   saveFolderProject: vi.fn<typeof import('~/services/project/folder').saveFolderProject>(),
   createFolderProject: vi.fn<typeof import('~/services/project/folder').createFolderProject>(),
   loadFolderProjectCardThumbnail: vi.fn<typeof import('~/services/project/folder').loadFolderProjectCardThumbnail>(),
@@ -199,7 +200,7 @@ export function unmountEditor() {
 }
 
 // テストは実サービスと同じ型を持つI/Oモックの完了タイミングを制御する。
-export const { createFolderProject, saveFolderProject, folderProjectExists, loadFolderProjectCardImage, loadFolderProjectCardThumbnail, openFolderProject, pickProjectDirectory, writeFolderProjectCardThumbnail } = folderIO
+export const { addFolderProjectCards, createFolderProject, saveFolderProject, folderProjectExists, loadFolderProjectCardImage, loadFolderProjectCardThumbnail, openFolderProject, pickProjectDirectory, writeFolderProjectCardThumbnail } = folderIO
 export const { createCardThumbnailBlob, createCardThumbnailBlobFromFile } = thumbnailIO
 export const canvasExports = canvasIO
 export const { downloadBlob, downloadText } = downloadIO

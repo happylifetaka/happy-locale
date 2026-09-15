@@ -1178,7 +1178,7 @@ async function addProjectCards(files: File[]) {
     setMessage('デモではサンプルカードのみ編集できます。')
     return
   }
-  if (projectBusy.value)
+  if (editorDisposed || projectBusy.value)
     return
   const directory = projectDirectory.value
   const documentValue = folderDocument.value
@@ -1209,25 +1209,33 @@ async function addProjectCards(files: File[]) {
     const additions = []
     const thumbnails = new Map<string, Blob>()
     for (const file of files) {
+      if (editorDisposed)
+        return
       const loaded = await loadImage(file)
       if (!loaded)
         continue
-      const id = crypto.randomUUID()
-      additions.push({
-        id,
-        file,
-        imageWidth: loaded.element.naturalWidth,
-        imageHeight: loaded.element.naturalHeight,
-      })
-      const thumbnail = await createCardThumbnailBlob(
-        loaded.element,
-        loaded.element.naturalWidth,
-        loaded.element.naturalHeight,
-      )
-      if (thumbnail)
-        thumbnails.set(id, thumbnail)
-      URL.revokeObjectURL(loaded.url)
-      loaded.element.removeAttribute('src')
+      try {
+        const id = crypto.randomUUID()
+        additions.push({
+          id,
+          file,
+          imageWidth: loaded.element.naturalWidth,
+          imageHeight: loaded.element.naturalHeight,
+        })
+        const thumbnail = await createCardThumbnailBlob(
+          loaded.element,
+          loaded.element.naturalWidth,
+          loaded.element.naturalHeight,
+        )
+        if (editorDisposed)
+          return
+        if (thumbnail)
+          thumbnails.set(id, thumbnail)
+      }
+      finally {
+        URL.revokeObjectURL(loaded.url)
+        loaded.element.removeAttribute('src')
+      }
     }
     if (additions.length === 0) {
       setMessage('追加できるPNG / JPEG画像がありませんでした。')
@@ -1239,6 +1247,8 @@ async function addProjectCards(files: File[]) {
       additions,
       assetWrites,
     )
+    if (editorDisposed)
+      return
     const previousIds = new Set(documentValue.cards.map(card => card.id))
     projectStore.replaceProject({
       ...folderDocument.value!,
@@ -1260,6 +1270,8 @@ async function addProjectCards(files: File[]) {
     setMessage(`${additions.length}枚のカードを追加しました。`)
   }
   catch (error) {
+    if (editorDisposed)
+      return
     logDiagnostic('カード画像を追加できませんでした', error, 'error')
     setMessage('カード画像を追加できませんでした。')
   }
