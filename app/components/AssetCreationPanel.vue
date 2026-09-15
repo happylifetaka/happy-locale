@@ -4,6 +4,7 @@ import { validateAssetName } from '~/utils/assets'
 import { renderAssetCrop } from '~/utils/canvas/asset'
 
 const props = defineProps<{
+  running?: boolean
   image: HTMLImageElement
   draft: AssetCreationDraft
   existingAssets: { id: string, name: string }[]
@@ -430,10 +431,10 @@ function updateNumber(
       <button
         type="button"
         class="primary"
-        :disabled="Boolean(nameError)"
+        :disabled="running || Boolean(nameError)"
         @click="$emit('confirm')"
       >
-        {{ draft.editingAssetId ? 'アセットを更新' : 'アセットを確定' }}
+        {{ running ? '画像を作成中…' : draft.editingAssetId ? 'アセットを更新' : 'アセットを確定' }}
       </button>
       <button type="button" @click="$emit('cancel')">
         キャンセル

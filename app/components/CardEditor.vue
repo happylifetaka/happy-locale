@@ -185,6 +185,9 @@ const cardPendingDeletionConfirmation = shallowRef<FolderProjectCard | null>(
 const regionPendingDeletionConfirmation = shallowRef<TextRegion | null>(null)
 /** 登録・再切り出しを確定する前のアセット設定。 */
 const assetCreationDraft = ref<AssetCreationDraft | null>(null)
+const assetCreationPending = shallowRef<AssetCreationDraft | null>(null)
+const assetCreationRunning = computed(() => assetCreationPending.value !== null && assetCreationPending.value === assetCreationDraft.value)
+let assetCreationDisposed = false
 /** 再切り出し対象の既存アセットID。 */
 const assetRecropId = ref<string | null>(null)
 /** このブラウザに保存できたフォントのID一覧。 */
@@ -628,6 +631,7 @@ watch(
 
 // 画面終了時にタイマー・イベント・画像・フォント・OCRのリソースを解放する。
 onBeforeUnmount(() => {
+  assetCreationDisposed = true
   window.removeEventListener('keydown', handleEditorKeydown)
   projectRuntime.dispose()
   projectStore.clearProject()
@@ -1861,7 +1865,7 @@ function cancelAssetCreation() {
 async function confirmAssetCreation() {
   const draft = assetCreationDraft.value
   const sourceImage = assetSourceImage.value
-  if (!draft || !sourceImage)
+  if (!draft || !sourceImage || assetCreationRunning.value || assetCreationDisposed)
     return
   const name = draft.name.trim()
   const nameError = validateAssetName(
@@ -1880,66 +1884,94 @@ async function confirmAssetCreation() {
     setMessage('更新対象のアセットが見つかりませんでした。')
     return
   }
-  const id = existingAsset?.id ?? crypto.randomUUID()
-  const source = renderAssetCrop(
-    sourceImage,
-    draft.sourceRect,
-    draft.removeBackground,
-    {
-      threshold: draft.backgroundThreshold,
-      feather: draft.edgeFeather,
-      backgroundColor: draft.backgroundColor,
-    },
-    draft.manualMaskStrokes,
-  )
-  const blob = await new Promise<Blob | null>(resolve =>
-    source.toBlob(resolve, 'image/png'),
-  )
-  if (!blob) {
-    setMessage('アセット画像を作成できませんでした。')
-    return
+  const sourceImageId = assetSourceImageId.value
+  const isCurrent = () => !assetCreationDisposed
+    && assetCreationDraft.value === draft
+    && assetSourceImage.value === sourceImage
+    && assetSourceImageId.value === sourceImageId
+  assetCreationPending.value = draft
+  try {
+    const id = existingAsset?.id ?? crypto.randomUUID()
+    const source = renderAssetCrop(
+      sourceImage,
+      draft.sourceRect,
+      draft.removeBackground,
+      {
+        threshold: draft.backgroundThreshold,
+        feather: draft.edgeFeather,
+        backgroundColor: draft.backgroundColor,
+      },
+      draft.manualMaskStrokes,
+    )
+    const blob = await new Promise<Blob | null>(resolve =>
+      source.toBlob(resolve, 'image/png'),
+    )
+    if (!isCurrent())
+      return
+    if (existingAsset && assets.value.find(asset => asset.id === existingAsset.id) !== existingAsset) {
+      setMessage('生成中に更新対象が変更されました。再試行してください。')
+      return
+    }
+    const currentNameError = validateAssetName(name, assets.value, draft.editingAssetId ?? undefined)
+    if (currentNameError) {
+      setMessage(currentNameError)
+      return
+    }
+    if (!blob) {
+      setMessage('アセット画像を作成できませんでした。')
+      return
+    }
+    if (existingAsset && existingAsset.name !== name) {
+      editor.renameAssetToken(existingAsset.id, existingAsset.name, name)
+      if (folderDocument.value) {
+        projectStore.replaceProject(renameProjectAssetTokens(
+          folderDocument.value,
+          existingAsset.name,
+          name,
+          existingAsset.id,
+        ))
+      }
+    }
+    const updatedAsset = existingAsset
+      ? updateRecroppedAsset(
+          existingAsset,
+          name,
+          assetSourceImageId.value,
+          draft.sourceRect,
+        )
+      : {
+          id,
+          name,
+          sourceImageId: assetSourceImageId.value,
+          sourceRect: draft.sourceRect,
+          imagePath: `assets/${id}.png`,
+          scale: 1,
+          baselineOffset: 0,
+          inlinePadding: 0,
+        }
+    projectStore.setAssets(existingAsset
+      ? assets.value.map(asset => asset.id === id ? updatedAsset : asset)
+      : [...assets.value, updatedAsset])
+    projectRuntime.setAssetImage(id, source)
+    projectRuntime.setPendingAssetWrite(id, blob)
+    assetCreationDraft.value = null
+    setMessage(
+      existingAsset
+        ? `アセット「${name}」を更新しました。`
+        : `アセット「${name}」を登録しました。`,
+    )
   }
-  if (existingAsset && existingAsset.name !== name) {
-    editor.renameAssetToken(existingAsset.id, existingAsset.name, name)
-    if (folderDocument.value) {
-      projectStore.replaceProject(renameProjectAssetTokens(
-        folderDocument.value,
-        existingAsset.name,
-        name,
-        existingAsset.id,
-      ))
+  catch (error) {
+    if (isCurrent()) {
+      logDiagnostic('アセット画像を作成できませんでした', error, 'error')
+      setMessage('アセット画像を作成できませんでした。再試行してください。')
     }
   }
-  const updatedAsset = existingAsset
-    ? updateRecroppedAsset(
-        existingAsset,
-        name,
-        assetSourceImageId.value,
-        draft.sourceRect,
-      )
-    : {
-        id,
-        name,
-        sourceImageId: assetSourceImageId.value,
-        sourceRect: draft.sourceRect,
-        imagePath: `assets/${id}.png`,
-        scale: 1,
-        baselineOffset: 0,
-        inlinePadding: 0,
-      }
-  projectStore.setAssets(existingAsset
-    ? assets.value.map(asset => asset.id === id ? updatedAsset : asset)
-    : [...assets.value, updatedAsset])
-  projectRuntime.setAssetImage(id, source)
-  projectRuntime.setPendingAssetWrite(id, blob)
-  assetCreationDraft.value = null
-  setMessage(
-    existingAsset
-      ? `アセット「${name}」を更新しました。`
-      : `アセット「${name}」を登録しました。`,
-  )
+  finally {
+    if (assetCreationPending.value === draft)
+      assetCreationPending.value = null
+  }
 }
-
 /** 共有定義・全カードのトークン・編集履歴を揃えて改名し、Undo後の参照切れを防ぐ。 */
 function renameAsset(id: string, name: string) {
   const asset = assets.value.find(item => item.id === id)
@@ -2828,6 +2860,7 @@ async function exportAllCardImages(format: 'png' | 'jpeg') {
       :zoom="assetZoom"
       :selecting="assetEditing"
       :creation-draft="assetCreationDraft"
+      :creation-running="assetCreationRunning"
       @image="openAssetSourceImage"
       @toggle-selecting="toggleAssetEditing"
       @add="addAsset"

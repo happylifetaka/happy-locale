@@ -12,6 +12,7 @@ defineProps<{
   zoom: number
   selecting: boolean
   creationDraft: AssetCreationDraft | null
+  creationRunning?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -56,6 +57,7 @@ function update(id: string, patch: Partial<ImageAsset>) {
         :image="image"
         :draft="creationDraft"
         :existing-assets="assets"
+        :running="creationRunning"
         @update="$emit('updateDraft', $event)"
         @confirm="$emit('confirmDraft')"
         @cancel="$emit('cancelDraft')"
