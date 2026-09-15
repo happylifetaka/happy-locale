@@ -1184,11 +1184,13 @@ function isPickerCancellation(error: unknown) {
 
 /** 文書・カード画像・アセット画像の読み込みを終えてから編集画面を差し替える。 */
 async function openProject(sample = false) {
-  if (projectBusy.value || ocrRunning.value) {
+  if (editorDisposed || projectBusy.value || ocrRunning.value) {
     setMessage('カードの処理が完了してからプロジェクトを開いてください。')
     return
   }
   if (!await confirmLeave())
+    return
+  if (editorDisposed || projectBusy.value)
     return
   openingProject.value = true
   let stagedImage: RuntimeLoadedImage | null = null
@@ -1196,8 +1198,13 @@ async function openProject(sample = false) {
   logDiagnostic('「プロジェクトを開く」を開始しました')
   try {
     const directory = sample ? await createSampleProjectCopy(useRuntimeConfig().app.baseURL) : await pickProjectDirectory()
+    if (editorDisposed)
+      return
     logDiagnostic('プロジェクトフォルダの権限を取得しました')
-    if (!(await folderProjectExists(directory))) {
+    const exists = await folderProjectExists(directory)
+    if (editorDisposed)
+      return
+    if (!exists) {
       startNewFolderProject(directory)
       logDiagnostic('新規プロジェクト用のフォルダを選択しました', {
         folderName: directory.name,
@@ -1208,6 +1215,8 @@ async function openProject(sample = false) {
       return
     }
     const opened = await openFolderProject(directory)
+    if (editorDisposed)
+      return
     logDiagnostic('project.jsonと画像ファイルを取得しました', {
       cards: opened.document.cards.length,
       imageType: opened.imageFile.type || '(未設定)',
@@ -1218,6 +1227,8 @@ async function openProject(sample = false) {
       return
     stagedImage = loaded
     stagedAssets = await loadProjectAssetImages(opened.assetFiles)
+    if (editorDisposed)
+      return
     projectRuntime.setDirectory(opened.directory)
     resetBatchOCR()
     projectStore.replaceProject(opened.document)
@@ -1242,8 +1253,14 @@ async function openProject(sample = false) {
     pendingFontCacheDeletionIds.value = new Set()
     fontPendingDeletionConfirmation.value = null
     await restoreCachedFonts(opened.document.fonts)
+    if (editorDisposed)
+      return
     await detectAndApplyCardDpi(opened.card.id, opened.imageFile)
+    if (editorDisposed)
+      return
     const thumbnail = await cacheCardThumbnail(opened.card.id, loaded.element)
+    if (editorDisposed)
+      return
     if (thumbnail) {
       void persistCardThumbnail(
         opened.directory,
@@ -1255,6 +1272,8 @@ async function openProject(sample = false) {
     if (isDemo.value)
       switchInspectorTab('ocr')
     await nextTick()
+    if (editorDisposed)
+      return
     lastSavedProjectSignature.value = projectSignature()
     logDiagnostic('保存済み編集データを反映しました', {
       regions: opened.card.regions.length,
@@ -1262,6 +1281,8 @@ async function openProject(sample = false) {
     setMessage(`${opened.document.name} を開きました。`)
   }
   catch (error) {
+    if (editorDisposed)
+      return
     if (isPickerCancellation(error)) {
       logDiagnostic('フォルダ選択をキャンセルしました')
       return
