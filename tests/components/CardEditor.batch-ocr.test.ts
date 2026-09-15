@@ -3,7 +3,8 @@ import type { OCRResult } from '~/services/ocr/types'
 import { flushPromises } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
-import { deferred, editorRuntime, loadFolderProjectCardImage, mountEditor, ocrIO, seedProject, unmountEditor } from './helpers/card-editor'
+import { useProjectStore } from '~/stores/project'
+import { deferred, editorRuntime, loadFolderProjectCardImage, mountEditor, mountSavedEditor, ocrIO, seedProject, unmountEditor } from './helpers/card-editor'
 
 it.each(['resolved', 'rejected'] as const)('does not start another batch OCR card after unmount when the active request is %s', async (completion) => {
   const firstResult = deferred<OCRResult>()
@@ -37,6 +38,92 @@ it.each(['resolved', 'rejected'] as const)('does not start another batch OCR car
   expect(console.warn).toHaveBeenCalledTimes(warningsBeforeResult)
   expect(console.error).toHaveBeenCalledTimes(errorsBeforeResult)
   expect(vi.getTimerCount()).toBe(timersBeforeResult)
+})
+
+const detectedResult: OCRResult = {
+  text: 'Draw a card',
+  confidence: 95,
+  blocks: [{ text: 'Draw a card', confidence: 95, x: 10, y: 20, width: 100, height: 20 }],
+}
+
+it('runs cards sequentially, continues after failure, and confirms results in one undo step', async () => {
+  const first = deferred<OCRResult>()
+  const second = deferred<OCRResult>()
+  const third = deferred<OCRResult>()
+  ocrIO.recognize.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise).mockReturnValueOnce(third.promise)
+  const close = vi.fn()
+  vi.stubGlobal('createImageBitmap', vi.fn().mockImplementation(async () => ({ width: 100, height: 140, close })))
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  const { wrapper, canvas, toolbar } = await mountSavedEditor(false)
+  const list = wrapper.findComponent({ name: 'CardList' })
+  list.vm.$emit('start-batch-ocr')
+  await flushPromises()
+  expect(ocrIO.recognize).toHaveBeenCalledOnce()
+  expect([...list.props('batchOcrStates').values()]).toEqual([{ status: 'processing' }, { status: 'queued' }, { status: 'queued' }])
+  first.resolve(detectedResult)
+  await flushPromises()
+  expect(ocrIO.recognize).toHaveBeenCalledTimes(2)
+  second.reject(new Error('unreadable card'))
+  await flushPromises()
+  expect(ocrIO.recognize).toHaveBeenCalledTimes(3)
+  third.resolve({ text: '', confidence: null, blocks: [] })
+  await flushPromises()
+  expect(close).toHaveBeenCalledTimes(3)
+  expect(list.props('batchOcrStates')).toEqual(new Map([
+    ['one', { status: 'review', candidates: 1 }],
+    ['two', { status: 'error', message: 'unreadable card' }],
+    ['three', { status: 'empty' }],
+  ]))
+  expect(list.props('batchOcrCompleted')).toBe(3)
+  expect(list.props('batchOcrRunning')).toBe(false)
+  expect(canvas.props('project').regions).toEqual([])
+  wrapper.findComponent({ name: 'RegionCandidatePanel' }).vm.$emit('confirm')
+  await flushPromises()
+  expect(useProjectStore().document!.cards[0]!.regions).toEqual([expect.objectContaining({ originalText: 'Draw a card' })])
+  expect(list.props('batchOcrStates').has('one')).toBe(false)
+  toolbar.vm.$emit('undo')
+  await nextTick()
+  expect(useProjectStore().document!.cards[0]!.regions).toEqual([])
+})
+
+it('preserves edited candidates across card switches and advances review after discarding a card', async () => {
+  ocrIO.recognize.mockResolvedValue(detectedResult)
+  vi.stubGlobal('createImageBitmap', vi.fn().mockImplementation(async () => ({ width: 100, height: 140, close: vi.fn() })))
+  const { wrapper, canvas } = await mountSavedEditor(false)
+  const list = wrapper.findComponent({ name: 'CardList' })
+  list.vm.$emit('start-batch-ocr')
+  await flushPromises()
+  const firstCandidate = canvas.props('regionCandidates')[0]
+  const bounds = { x: 12, y: 20, width: 60, height: 30 }
+  canvas.vm.$emit('update-region-candidate-bounds', firstCandidate.id, bounds)
+  await nextTick()
+  list.vm.$emit('select', 'two')
+  await flushPromises()
+  expect(useProjectStore().document!.activeCardId).toBe('two')
+  expect(canvas.props('regionCandidates')[0].x).not.toBe(bounds.x)
+  list.vm.$emit('select', 'one')
+  await flushPromises()
+  expect(canvas.props('regionCandidates')[0]).toMatchObject({ id: firstCandidate.id, ...bounds })
+  wrapper.findComponent({ name: 'RegionCandidatePanel' }).vm.$emit('cancel')
+  await flushPromises()
+  expect(useProjectStore().document!.activeCardId).toBe('two')
+  expect(list.props('batchOcrStates').has('one')).toBe(false)
+  expect(canvas.props('regionCandidates')).toHaveLength(1)
+})
+
+it('does not run when fewer than two eligible cards remain after edits and pending deletion', async () => {
+  const { wrapper, canvas } = await mountSavedEditor(false)
+  canvas.vm.$emit('add-region', { x: 1, y: 1, width: 30, height: 20 }, '#ffffff')
+  await nextTick()
+  const list = wrapper.findComponent({ name: 'CardList' })
+  list.vm.$emit('delete', 'three')
+  await nextTick()
+  await wrapper.get('[aria-labelledby="card-delete-title"] .confirmation-danger').trigger('click')
+  await flushPromises()
+  list.vm.$emit('start-batch-ocr')
+  await flushPromises()
+  expect(ocrIO.recognize).not.toHaveBeenCalled()
+  expect(wrapper.get('.notice').text()).toContain('領域未作成のカードが2枚以上')
 })
 
 it('keeps the current result for review when the user cancels between cards', async () => {

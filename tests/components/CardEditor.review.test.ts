@@ -1,59 +1,13 @@
 // @vitest-environment happy-dom
-import type { TextRegion } from '~/types/editor'
 import { flushPromises } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { useProjectStore } from '~/stores/project'
 import { parseTranslationCsv, serializeProjectTranslationCsv } from '~/utils/csv'
 import { createTranslationReviewRows } from '~/utils/translation-review'
-import { createCardThumbnailBlob, downloadText, folderProjectExists, loadFolderProjectCardImage, mountEditor, openFolderProject, pickProjectDirectory, seedProject } from './helpers/card-editor'
+import { downloadText, loadFolderProjectCardImage, mountSavedEditor } from './helpers/card-editor'
 
-beforeEach(() => {
-  // 画像のload/decodeだけを代替し、プロジェクトを開く処理とストア同期は実装を通す。
-  vi.stubGlobal('Image', class {
-    naturalWidth = 100
-    naturalHeight = 140
-    onload: (() => void) | null = null
-    source = ''
-    get src() { return this.source }
-    set src(value: string) {
-      this.source = value
-      queueMicrotask(() => this.onload?.())
-    }
-
-    decode = vi.fn().mockResolvedValue(undefined)
-    removeAttribute = vi.fn()
-  })
-  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:card')
-  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-  vi.mocked(createCardThumbnailBlob).mockResolvedValue(null)
-})
-
-async function setupReview() {
-  const context = await mountEditor()
-  const region: TextRegion = JSON.parse(JSON.stringify(context.inspector.props('region')))
-  const project = seedProject(['one', 'two', 'three'])
-  project.cards.forEach((card, index) => {
-    card.regions = [{ ...region, id: `region-${index}`, originalText: `Source ${index}`, translatedText: `Before ${index}`, translationStatus: 'draft' }]
-  })
-  const directory = { name: 'cards' } as FileSystemDirectoryHandle
-  vi.mocked(pickProjectDirectory).mockResolvedValue(directory)
-  vi.mocked(folderProjectExists).mockResolvedValue(true)
-  vi.mocked(loadFolderProjectCardImage).mockResolvedValue(new File(['image'], 'two.png', { type: 'image/png' }))
-  vi.mocked(openFolderProject).mockResolvedValue({
-    directory,
-    document: project,
-    card: project.cards[0]!,
-    imageFile: new File(['image'], 'one.png', { type: 'image/png' }),
-    assetFiles: new Map(),
-  })
-  const toolbar = context.wrapper.findComponent({ name: 'EditorToolbar' })
-  toolbar.vm.$emit('open-project')
-  await flushPromises()
-  expect(context.canvas.props('project').regions[0].originalText).toBe('Source 0')
-  expect(context.wrapper.get('.editor').attributes('aria-busy')).toBe('false')
-  return { ...context, toolbar, project }
-}
+const setupReview = () => mountSavedEditor()
 
 async function openReview() {
   const context = await setupReview()
