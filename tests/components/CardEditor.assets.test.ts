@@ -16,7 +16,7 @@ async function setupAssetDraft() {
   const assets = wrapper.findComponent({ name: 'AssetEditor' })
   assets.vm.$emit('add', { x: 0, y: 0, width: 20, height: 20 })
   await nextTick()
-  return { assets, callbacks }
+  return { assets, callbacks, wrapper }
 }
 
 it('registers an asset only after its PNG is ready', async () => {
@@ -108,4 +108,53 @@ it.each(['null', 'throw'] as const)('can retry after PNG creation returns %s', a
   callbacks[0]!(new Blob(['png']))
   await flushPromises()
   expect(useProjectStore().assets).toHaveLength(1)
+})
+
+it('recrops an existing asset while retaining its id and layout settings, then removes its runtime resources', async () => {
+  const { assets, callbacks } = await setupAssetDraft()
+  assets.vm.$emit('confirm-draft')
+  await flushPromises()
+  callbacks.shift()!(new Blob(['first']))
+  await flushPromises()
+  const original = useProjectStore().assets[0]!
+  assets.vm.$emit('update', original.id, { scale: 2, baselineOffset: 3, inlinePadding: 4 })
+  assets.vm.$emit('recrop', original.id)
+  assets.vm.$emit('add', { x: 2, y: 3, width: 10, height: 11 })
+  assets.vm.$emit('update-draft', { name: 'recropped' })
+  assets.vm.$emit('confirm-draft')
+  await flushPromises()
+  const replacement = new Blob(['replacement'])
+  callbacks.shift()!(replacement)
+  await flushPromises()
+  expect(useProjectStore().assets).toEqual([expect.objectContaining({
+    id: original.id,
+    name: 'recropped',
+    scale: 2,
+    baselineOffset: 3,
+    inlinePadding: 4,
+    sourceRect: { x: 2, y: 3, width: 10, height: 11 },
+  })])
+  expect(editorRuntime().pendingAssetWrites.value.get(original.id)).toBe(replacement)
+  expect(editorRuntime().assetImages.value.has(original.id)).toBe(true)
+  assets.vm.$emit('remove', original.id)
+  await nextTick()
+  expect(useProjectStore().assets).toEqual([])
+  expect(editorRuntime().pendingAssetWrites.value.has(original.id)).toBe(false)
+  expect(editorRuntime().assetImages.value.has(original.id)).toBe(false)
+})
+
+it('rejects a duplicate name before converting a new asset', async () => {
+  const { assets, callbacks, wrapper } = await setupAssetDraft()
+  assets.vm.$emit('confirm-draft')
+  await flushPromises()
+  callbacks.shift()!(new Blob(['first']))
+  await flushPromises()
+  const name = useProjectStore().assets[0]!.name
+  assets.vm.$emit('add', { x: 0, y: 0, width: 5, height: 5 })
+  assets.vm.$emit('update-draft', { name })
+  assets.vm.$emit('confirm-draft')
+  await flushPromises()
+  expect(callbacks).toHaveLength(0)
+  expect(useProjectStore().assets).toHaveLength(1)
+  expect(wrapper.get('.notice').text()).toContain('既に')
 })
