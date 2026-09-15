@@ -167,6 +167,7 @@ export function seedProject(ids = ['one', 'two', 'three']) {
 
 export async function mountEditor() {
   wrapper = shallowMount(CardEditor, {
+    attachTo: document.body,
     global: {
       plugins: [createPinia()],
       stubs: {
