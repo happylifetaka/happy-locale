@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RuntimeLoadedImage } from '~/composables/useProjectRuntime'
+import type { OpenedFolderProject } from '~/composables/useProjectSession'
 import type {
   OCRProvider,
 } from '~/services/ocr/types'
@@ -28,6 +29,7 @@ import { usePreviewDeferral } from '~/composables/usePreviewDeferral'
 import { useProjectCards } from '~/composables/useProjectCards'
 import { useProjectNavigation } from '~/composables/useProjectNavigation'
 import { useProjectPersistence } from '~/composables/useProjectPersistence'
+import { useProjectSession } from '~/composables/useProjectSession'
 import { useRegionCandidates } from '~/composables/useRegionCandidates'
 import { useTranslationReview } from '~/composables/useTranslationReview'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
@@ -36,13 +38,9 @@ import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import {
 } from '~/services/project/cards'
 import {
-  folderProjectExists,
-  openFolderProject,
-  pickProjectDirectory,
   supportsFolderProjects,
 } from '~/services/project/folder'
-import { loadProjectAssetImages } from '~/services/project/resources'
-import { createSampleProjectCopy, resolveSampleCandidates } from '~/services/project/sample'
+import { resolveSampleCandidates } from '~/services/project/sample'
 import { useProjectStore } from '~/stores/project'
 import {
   assertFileSize,
@@ -1177,131 +1175,65 @@ async function openAssetSourceImage(file: File) {
   setMessage(`${file.name} をアセット切り出し元として読み込みました。`)
 }
 
-/** ファイルやフォルダ選択のキャンセルに相当する例外か判定する。 */
-function isPickerCancellation(error: unknown) {
-  return error instanceof DOMException && error.name === 'AbortError'
+/** 完全に読み込めた文書と画像を、各機能の初期状態として採用する。 */
+function adoptOpenedProject(opened: OpenedFolderProject, loaded: RuntimeLoadedImage, images: Map<string, ImageBitmap>) {
+  projectRuntime.setDirectory(opened.directory)
+  resetBatchOCR()
+  projectStore.replaceProject(opened.document)
+  editor.loadSavedProject({
+    imageName: opened.card.imageName,
+    imageWidth: loaded.element.naturalWidth,
+    imageHeight: loaded.element.naturalHeight,
+    regions: opened.card.regions,
+  }, opened.card.id)
+  currentImageId.value = opened.card.id
+  resetCardThumbnails()
+  pendingCardDeletionIds.value = new Set()
+  cardPendingDeletionConfirmation.value = null
+  clearAssetSourceImage()
+  projectRuntime.replaceAssetImages(images)
+  applyLoadedImage(loaded)
+  projectRuntime.clearPendingAssetWrites()
+  projectRuntime.replaceLoadedFonts(new Map())
+  cachedFontIds.value = new Set()
+  pendingFontCacheDeletionIds.value = new Set()
+  fontPendingDeletionConfirmation.value = null
 }
 
-/** 文書・カード画像・アセット画像の読み込みを終えてから編集画面を差し替える。 */
+/** 読込後の表示と未保存判定を同期する。 */
+async function finishOpeningProject() {
+  currentView.value = 'card'
+  if (isDemo.value)
+    switchInspectorTab('ocr')
+  await nextTick()
+  if (editorDisposed)
+    return
+  lastSavedProjectSignature.value = projectSignature()
+}
+
+/** フォルダ選択と文書・画像の準備、未採用リソースの解放。 */
+const { openProject: openProjectSession } = useProjectSession({
+  projectBusy,
+  ocrRunning,
+  openingProject,
+  isActive: () => !editorDisposed,
+  confirmLeave,
+  baseURL: useRuntimeConfig().app.baseURL,
+  loadImage,
+  startNewFolderProject,
+  adoptProject: adoptOpenedProject,
+  restoreCachedFonts,
+  detectAndApplyCardDpi,
+  cacheCardThumbnail,
+  persistCardThumbnail,
+  onOpened: finishOpeningProject,
+  setMessage,
+  logDiagnostic,
+})
+
+// マウント時のサンプル読込からも使う操作の入口。
 async function openProject(sample = false) {
-  if (editorDisposed || projectBusy.value || ocrRunning.value) {
-    setMessage('カードの処理が完了してからプロジェクトを開いてください。')
-    return
-  }
-  if (!await confirmLeave())
-    return
-  if (editorDisposed || projectBusy.value)
-    return
-  openingProject.value = true
-  let stagedImage: RuntimeLoadedImage | null = null
-  let stagedAssets: Map<string, ImageBitmap> | null = null
-  logDiagnostic('「プロジェクトを開く」を開始しました')
-  try {
-    const directory = sample ? await createSampleProjectCopy(useRuntimeConfig().app.baseURL) : await pickProjectDirectory()
-    if (editorDisposed)
-      return
-    logDiagnostic('プロジェクトフォルダの権限を取得しました')
-    const exists = await folderProjectExists(directory)
-    if (editorDisposed)
-      return
-    if (!exists) {
-      startNewFolderProject(directory)
-      logDiagnostic('新規プロジェクト用のフォルダを選択しました', {
-        folderName: directory.name,
-      })
-      setMessage(
-        `${directory.name} を選択しました。最初のカード画像を開いてください。`,
-      )
-      return
-    }
-    const opened = await openFolderProject(directory)
-    if (editorDisposed)
-      return
-    logDiagnostic('project.jsonと画像ファイルを取得しました', {
-      cards: opened.document.cards.length,
-      imageType: opened.imageFile.type || '(未設定)',
-      imageSize: opened.imageFile.size,
-    })
-    const loaded = await loadImage(opened.imageFile)
-    if (!loaded)
-      return
-    stagedImage = loaded
-    stagedAssets = await loadProjectAssetImages(opened.assetFiles)
-    if (editorDisposed)
-      return
-    projectRuntime.setDirectory(opened.directory)
-    resetBatchOCR()
-    projectStore.replaceProject(opened.document)
-    editor.loadSavedProject({
-      imageName: opened.card.imageName,
-      imageWidth: loaded.element.naturalWidth,
-      imageHeight: loaded.element.naturalHeight,
-      regions: opened.card.regions,
-    }, opened.card.id)
-    currentImageId.value = opened.card.id
-    resetCardThumbnails()
-    pendingCardDeletionIds.value = new Set()
-    cardPendingDeletionConfirmation.value = null
-    clearAssetSourceImage()
-    projectRuntime.replaceAssetImages(stagedAssets)
-    stagedAssets = null
-    applyLoadedImage(loaded)
-    stagedImage = null
-    projectRuntime.clearPendingAssetWrites()
-    projectRuntime.replaceLoadedFonts(new Map())
-    cachedFontIds.value = new Set()
-    pendingFontCacheDeletionIds.value = new Set()
-    fontPendingDeletionConfirmation.value = null
-    await restoreCachedFonts(opened.document.fonts)
-    if (editorDisposed)
-      return
-    await detectAndApplyCardDpi(opened.card.id, opened.imageFile)
-    if (editorDisposed)
-      return
-    const thumbnail = await cacheCardThumbnail(opened.card.id, loaded.element)
-    if (editorDisposed)
-      return
-    if (thumbnail) {
-      void persistCardThumbnail(
-        opened.directory,
-        opened.card.id,
-        thumbnail,
-      )
-    }
-    currentView.value = 'card'
-    if (isDemo.value)
-      switchInspectorTab('ocr')
-    await nextTick()
-    if (editorDisposed)
-      return
-    lastSavedProjectSignature.value = projectSignature()
-    logDiagnostic('保存済み編集データを反映しました', {
-      regions: opened.card.regions.length,
-    })
-    setMessage(`${opened.document.name} を開きました。`)
-  }
-  catch (error) {
-    if (editorDisposed)
-      return
-    if (isPickerCancellation(error)) {
-      logDiagnostic('フォルダ選択をキャンセルしました')
-      return
-    }
-    logDiagnostic('プロジェクトを開けませんでした', error, 'error')
-    setMessage(
-      error instanceof Error
-        ? error.message
-        : 'プロジェクトを開けませんでした。',
-    )
-  }
-  finally {
-    if (stagedImage) {
-      URL.revokeObjectURL(stagedImage.url)
-      stagedImage.element.removeAttribute('src')
-    }
-    stagedAssets?.forEach(bitmap => bitmap.close())
-    openingProject.value = false
-  }
+  await openProjectSession(sample)
 }
 
 /** 用語集へ原語・訳語・補足を追加する。 */
