@@ -4,7 +4,7 @@ import type { OCRQueueCardState } from '~/services/ocr/queue'
 import type { OCRProvider, RegionCandidate } from '~/services/ocr/types'
 import type { FolderProjectCard, FolderProjectDocument } from '~/types/editor'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
-import { createRegionCandidates } from '~/services/ocr/candidates'
+import { cloneRegionCandidates, createRegionCandidates } from '~/services/ocr/candidates'
 import { prepareRegionForOCR } from '~/services/ocr/image'
 import { runSequentialOCRQueue } from '~/services/ocr/queue'
 import { loadFolderProjectCardImage } from '~/services/project/folder'
@@ -25,16 +25,6 @@ interface BatchOCROptions {
   clearRegionCandidates: () => void
   setMessage: (message: string) => void
   logDiagnostic: (message: string, details?: unknown, level?: 'info' | 'error') => void
-}
-
-/** 候補の履歴を独立して保存できるよう深く複製する。 */
-export function cloneRegionCandidates(
-  candidates: readonly RegionCandidate[],
-): RegionCandidate[] {
-  return candidates.map(candidate => ({
-    ...candidate,
-    lines: candidate.lines.map(line => ({ ...line })),
-  }))
 }
 
 /** カードを順に認識し、確定前の候補と進捗を管理する。 */

@@ -212,3 +212,13 @@ export function createRegionCandidates(
     }
   })
 }
+
+/** 候補の履歴を独立して保存できるよう深く複製する。 */
+export function cloneRegionCandidates(
+  candidates: readonly RegionCandidate[],
+): RegionCandidate[] {
+  return candidates.map(candidate => ({
+    ...candidate,
+    lines: candidate.lines.map(line => ({ ...line })),
+  }))
+}
