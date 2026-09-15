@@ -307,6 +307,8 @@ const regionCandidateEditHistory = ref<RegionCandidate[][]>([])
 const batchOCRRunning = ref(false)
 /** 次のカードへ進む前に一括OCRを中止する要求。 */
 const batchOCRCancelRequested = ref(false)
+/** 画面終了後は一括OCRの次工程と遅延通知を受け付けない。 */
+let batchOCRDisposed = false
 /** 一括OCRで処理を終えたカード数。 */
 const batchOCRCompleted = ref(0)
 /** 現在の一括OCRで処理するカードの総数。 */
@@ -607,6 +609,8 @@ watch(
 
 // 画面終了時にタイマー・イベント・画像・フォント・OCRのリソースを解放する。
 onBeforeUnmount(() => {
+  batchOCRDisposed = true
+  batchOCRCancelRequested.value = true
   window.removeEventListener('keydown', handleEditorKeydown)
   projectRuntime.dispose()
   projectStore.clearProject()
@@ -757,9 +761,11 @@ function nextBatchOCRReviewCard(excludeCardId?: string) {
 
 /** 確認待ちのカードへ移動して領域候補を表示する。 */
 async function openBatchOCRReview(cardId: string) {
+  if (batchOCRDisposed)
+    return
   if (currentImageId.value !== cardId)
     await selectProjectCard(cardId)
-  if (currentImageId.value === cardId && showBatchOCRCandidates(cardId))
+  if (!batchOCRDisposed && currentImageId.value === cardId && showBatchOCRCandidates(cardId))
     setMessage('OCRで検出した領域候補を確認してください。')
 }
 
@@ -1011,6 +1017,8 @@ async function detectCardRegionCandidates(
   index: number,
   total: number,
 ) {
+  if (batchOCRDisposed)
+    return []
   if (isDemo.value) {
     const candidates = sampleRegionCandidates(card)
     ocrStatus.value = `${index + 1}/${total} ${card.imageName}: デモ候補を準備しています…`
@@ -1018,9 +1026,13 @@ async function detectCardRegionCandidates(
     return candidates
   }
   const file = await loadFolderProjectCardImage(directory, card)
+  if (batchOCRDisposed)
+    return []
   assertFileSize(file, FILE_LIMITS.imageBytes, `${card.imageName}`)
   const bitmap = await createImageBitmap(file)
   try {
+    if (batchOCRDisposed)
+      return []
     assertImageDimensions(bitmap.width, bitmap.height, `${card.imageName}`)
     const scale = 2
     const blob = await prepareRegionForOCR(
@@ -1028,14 +1040,20 @@ async function detectCardRegionCandidates(
       { x: 0, y: 0, width: bitmap.width, height: bitmap.height },
       { scale, padding: 0 },
     )
+    if (batchOCRDisposed)
+      return []
     const result = await ocrProvider.recognize(blob, {
       language: 'eng',
       layout: 'sparse-text',
       onProgress: (progress) => {
+        if (batchOCRDisposed)
+          return
         ocrProgress.value = progress.progress
         ocrStatus.value = `${index + 1}/${total} ${card.imageName}: ${progress.status}`
       },
     })
+    if (batchOCRDisposed)
+      return []
     const candidates = createRegionCandidates(result.blocks, {
       scale,
       imageWidth: bitmap.width,
@@ -1054,7 +1072,7 @@ async function detectCardRegionCandidates(
 async function startBatchOCR() {
   const directory = projectDirectory.value
   const documentValue = folderDocument.value
-  if (!directory || !documentValue || ocrRunning.value)
+  if (!directory || !documentValue || ocrRunning.value || batchOCRDisposed)
     return
   const cards = batchOCREligibleCards.value
   if (cards.length < 2) {
@@ -1092,8 +1110,10 @@ async function startBatchOCR() {
         return detectCardRegionCandidates(directory, card, index, cards.length)
       },
       {
-        cancelled: () => batchOCRCancelRequested.value,
+        cancelled: () => batchOCRDisposed || batchOCRCancelRequested.value,
         onProgress: ({ cardId, index, state }) => {
+          if (batchOCRDisposed)
+            return
           updateBatchOCRState(cardId, state)
           if (state.status !== 'processing')
             batchOCRCompleted.value = index + 1
@@ -1107,6 +1127,8 @@ async function startBatchOCR() {
         },
       },
     )
+    if (batchOCRDisposed)
+      return
     logDiagnostic('複数カードの領域候補検出が終了しました', summary)
     const result = [
       `確認待ち${summary.review}枚`,
@@ -1128,17 +1150,19 @@ async function startBatchOCR() {
     }
   }
   finally {
-    batchOCRRunning.value = false
-    ocrRunning.value = false
-    ocrProgress.value = null
-    ocrStatus.value = ''
-    const currentHasResult = batchOCRStates.value.get(currentImageId.value)
-      ?.status === 'review'
-    const firstReview = currentHasResult
-      ? projectCards.value.find(card => card.id === currentImageId.value)
-      : nextBatchOCRReviewCard()
-    if (firstReview)
-      await openBatchOCRReview(firstReview.id)
+    if (!batchOCRDisposed) {
+      batchOCRRunning.value = false
+      ocrRunning.value = false
+      ocrProgress.value = null
+      ocrStatus.value = ''
+      const currentHasResult = batchOCRStates.value.get(currentImageId.value)
+        ?.status === 'review'
+      const firstReview = currentHasResult
+        ? projectCards.value.find(card => card.id === currentImageId.value)
+        : nextBatchOCRReviewCard()
+      if (firstReview)
+        await openBatchOCRReview(firstReview.id)
+    }
   }
 }
 

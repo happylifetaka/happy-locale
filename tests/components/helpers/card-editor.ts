@@ -164,6 +164,7 @@ export async function mountEditor() {
       stubs: {
         ...Object.fromEntries(childNames.map(name => [name, true])),
         CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId'], template: '<div />' },
+        CardList: { name: 'CardList', props: ['activeCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal'], template: '<div />' },
         RegionInspector: { name: 'RegionInspector', props: ['region', 'ocrCandidate', 'ocrConfidence', 'ocrCorrectionCandidate', 'ocrCorrectionChanges', 'ocrRunning', 'ocrProgress', 'ocrStatus', 'ocrLayout'], template: '<div />' },
         TranslationPreviewDialog: { name: 'TranslationPreviewDialog', props: ['originalText', 'currentTranslation', 'proposedTranslation'], template: '<div />' },
         TranslationRequestDialog: { name: 'TranslationRequestDialog', props: ['originalText', 'endpoint'], template: '<div />' },
