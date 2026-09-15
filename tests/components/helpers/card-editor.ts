@@ -32,6 +32,8 @@ vi.mock('~/services/ocr/tesseract', () => ({
 }))
 vi.mock('~/services/ocr/image', () => ({ prepareRegionForOCR: ocrMocks.prepareRegionForOCR }))
 const folderIO = vi.hoisted(() => ({
+  saveFolderProject: vi.fn<typeof import('~/services/project/folder').saveFolderProject>(),
+  createFolderProject: vi.fn<typeof import('~/services/project/folder').createFolderProject>(),
   loadFolderProjectCardThumbnail: vi.fn<typeof import('~/services/project/folder').loadFolderProjectCardThumbnail>(),
   loadFolderProjectCardImage: vi.fn<typeof import('~/services/project/folder').loadFolderProjectCardImage>(),
   writeFolderProjectCardThumbnail: vi.fn<typeof import('~/services/project/folder').writeFolderProjectCardThumbnail>(),
@@ -163,9 +165,10 @@ export async function mountEditor() {
       plugins: [createPinia()],
       stubs: {
         ...Object.fromEntries(childNames.map(name => [name, true])),
+        EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus'], template: '<div />' },
         AssetEditor: { name: 'AssetEditor', props: ['creationDraft', 'creationRunning'], template: '<div />' },
         CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId'], methods: { backgroundColorForBounds: () => '#ffffff' }, template: '<div />' },
-        CardList: { name: 'CardList', props: ['activeCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal'], template: '<div />' },
+        CardList: { name: 'CardList', props: ['activeCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal', 'pendingDeletionIds'], template: '<div />' },
         RegionInspector: { name: 'RegionInspector', props: ['region', 'ocrCandidate', 'ocrConfidence', 'ocrCorrectionCandidate', 'ocrCorrectionChanges', 'ocrRunning', 'ocrProgress', 'ocrStatus', 'ocrLayout'], template: '<div />' },
         TranslationPreviewDialog: { name: 'TranslationPreviewDialog', props: ['originalText', 'currentTranslation', 'proposedTranslation'], template: '<div />' },
         TranslationRequestDialog: { name: 'TranslationRequestDialog', props: ['originalText', 'endpoint'], template: '<div />' },
@@ -191,7 +194,7 @@ export function unmountEditor() {
 }
 
 // テストは実サービスと同じ型を持つI/Oモックの完了タイミングを制御する。
-export const { folderProjectExists, loadFolderProjectCardImage, loadFolderProjectCardThumbnail, openFolderProject, pickProjectDirectory, writeFolderProjectCardThumbnail } = folderIO
+export const { createFolderProject, saveFolderProject, folderProjectExists, loadFolderProjectCardImage, loadFolderProjectCardThumbnail, openFolderProject, pickProjectDirectory, writeFolderProjectCardThumbnail } = folderIO
 export const { createCardThumbnailBlob, createCardThumbnailBlobFromFile } = thumbnailIO
 export const { downloadText } = downloadIO
 
