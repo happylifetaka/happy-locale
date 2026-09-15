@@ -16,6 +16,7 @@
 - [開発情報・引き継ぎ](DEVELOPMENT.md)
 - [手動回帰確認](MANUAL_TESTS.md)
 - [機能ロードマップ](ROADMAP.md)
+- [CardEditor.vue分割計画](CARD_EDITOR_REFACTORING_PLAN.md)
 - [PDF翻訳ロードマップ](PDF_TRANSLATION_ROADMAP.md)
 - [Pinia移行の設計記録](DESIGN.md)
 

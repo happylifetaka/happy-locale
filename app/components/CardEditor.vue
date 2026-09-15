@@ -29,6 +29,7 @@ import type { SplitAxis, SplitText } from '~/utils/split-region'
 import type { ReusableTranslation } from '~/utils/translation-reuse'
 import type { TranslationReviewRow } from '~/utils/translation-review'
 import { storeToRefs } from 'pinia'
+import { usePreviewDeferral } from '~/composables/usePreviewDeferral'
 import {
   cacheFont,
   loadCachedFont,
@@ -228,35 +229,19 @@ const regionSplitRequest = shallowRef<{ cardId: string, region: TextRegion } | n
 const sourceIconsRequest = shallowRef<{ cardId: string, region: TextRegion } | null>(null)
 /** 子Canvasの画像書き出し等を呼び出す公開API。 */
 const canvasApi = ref<CanvasApi | null>(null)
-/** 文字入力が落ち着くまで編集画像の再描画を待っているか。 */
-const previewDeferred = ref(false)
-/** 文字入力後の遅延再描画を予約したタイマー。 */
-let previewTimer: ReturnType<typeof setTimeout> | undefined
-
-/** 描画待ちのタイマーを解除して編集プレビューを更新可能にする。 */
-function flushPreview() {
-  clearTimeout(previewTimer)
-  previewTimer = undefined
-  previewDeferred.value = false
-}
-
-/** IME変換中の重い再描画を遅らせる。編集データの更新は止めず、表示だけを入力後に追従させる。 */
-function deferPreview(composing: boolean) {
-  clearTimeout(previewTimer)
-  previewTimer = undefined
-  previewDeferred.value = true
-  if (!composing)
-    previewTimer = setTimeout(flushPreview, 500)
-}
-
 /** 操作結果や失敗理由を画面へ通知するメッセージ。 */
 const message = ref('')
 /** 自動検出した消去マスクを重ねて表示するか。 */
 const autoMaskPreview = ref(false)
 /** 右側インスペクターで現在選択しているタブ。 */
 const inspectorTab = ref<InspectorTab>('list')
-// Selection/view changes should never leave a preview waiting for IME completion.
-watch([editor.selectedRegionId, currentView, inspectorTab, image], flushPreview)
+/** 入力中の描画遅延と、編集対象を変更した際の待機解除。 */
+const { previewDeferred, deferPreview, flushPreview } = usePreviewDeferral([
+  editor.selectedRegionId,
+  currentView,
+  inspectorTab,
+  image,
+])
 /** 一覧へ移る前などに開いていた領域の詳細タブ。 */
 const lastInspectorDetailTab = ref<InspectorDetailTab>('text')
 /** 詳細画面に戻る際に表示するタブ。 */
@@ -624,7 +609,6 @@ watch(
 
 // 画面終了時にタイマー・イベント・画像・フォント・OCRのリソースを解放する。
 onBeforeUnmount(() => {
-  clearTimeout(previewTimer)
   window.removeEventListener('keydown', handleEditorKeydown)
   resetThumbnailQueue()
   projectRuntime.dispose()

@@ -19,7 +19,7 @@
     "lint:fix": "eslint . --fix",
     "format": "eslint . --fix",
     "format:check": "eslint .",
-    "typecheck": "nuxt typecheck && tsc -p tests/tsconfig.json --noEmit",
+    "typecheck": "nuxt typecheck && vue-tsc -p tests/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:static": "node scripts/verify-static-output.mjs"
@@ -39,8 +39,10 @@
   "devDependencies": {
     "@antfu/eslint-config": "^9.5.1",
     "@types/node": "^24.13.4",
+    "@vitejs/plugin-vue": "^6.0.9",
     "@vue/test-utils": "^2.5.0",
     "eslint": "^10.10.0",
+    "happy-dom": "^20.14.5",
     "typescript": "^5.9.3",
     "vitest": "^5.0.0",
     "vue-tsc": "^3.3.11"
