@@ -53,7 +53,12 @@ vi.mock('~/utils/card-thumbnail', async importOriginal => ({
   ...await importOriginal<typeof import('~/utils/card-thumbnail')>(),
   ...thumbnailIO,
 }))
+const canvasIO = vi.hoisted(() => ({
+  exportPng: vi.fn<() => Promise<Blob | null>>(),
+  exportJpeg: vi.fn<() => Promise<Blob | null>>(),
+}))
 const downloadIO = vi.hoisted(() => ({
+  downloadBlob: vi.fn<typeof import('~/utils/download').downloadBlob>(),
   downloadText: vi.fn<typeof import('~/utils/download').downloadText>(),
 }))
 vi.mock('~/utils/download', async importOriginal => ({
@@ -167,7 +172,7 @@ export async function mountEditor() {
         ...Object.fromEntries(childNames.map(name => [name, true])),
         EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus'], template: '<div />' },
         AssetEditor: { name: 'AssetEditor', props: ['creationDraft', 'creationRunning'], template: '<div />' },
-        CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId'], methods: { backgroundColorForBounds: () => '#ffffff' }, template: '<div />' },
+        CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId'], methods: { backgroundColorForBounds: () => '#ffffff', exportPng: canvasIO.exportPng, exportJpeg: canvasIO.exportJpeg }, template: '<div />' },
         CardList: { name: 'CardList', props: ['activeCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal', 'pendingDeletionIds'], template: '<div />' },
         RegionInspector: { name: 'RegionInspector', props: ['region', 'ocrCandidate', 'ocrConfidence', 'ocrCorrectionCandidate', 'ocrCorrectionChanges', 'ocrRunning', 'ocrProgress', 'ocrStatus', 'ocrLayout'], template: '<div />' },
         TranslationPreviewDialog: { name: 'TranslationPreviewDialog', props: ['originalText', 'currentTranslation', 'proposedTranslation'], template: '<div />' },
@@ -196,7 +201,8 @@ export function unmountEditor() {
 // テストは実サービスと同じ型を持つI/Oモックの完了タイミングを制御する。
 export const { createFolderProject, saveFolderProject, folderProjectExists, loadFolderProjectCardImage, loadFolderProjectCardThumbnail, openFolderProject, pickProjectDirectory, writeFolderProjectCardThumbnail } = folderIO
 export const { createCardThumbnailBlob, createCardThumbnailBlobFromFile } = thumbnailIO
-export const { downloadText } = downloadIO
+export const canvasExports = canvasIO
+export const { downloadBlob, downloadText } = downloadIO
 
 export const ocrIO = ocrMocks
 

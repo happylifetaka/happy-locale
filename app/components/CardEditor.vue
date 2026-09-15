@@ -141,6 +141,7 @@ const openingProject = ref(false)
 const projectBusy = computed(() => savingProject.value || openingProject.value || addingCards.value || Boolean(loadingCardId.value))
 /** 複数カードの画像書き出し処理中か。 */
 const exportingCards = ref(false)
+let exportDisposed = false
 /** サムネイルの要求・再生成・保存。URLの所有はruntimeに残す。 */
 const {
   setCardThumbnail,
@@ -667,6 +668,7 @@ watch(
 
 // 画面終了時にタイマー・イベント・画像・フォント・OCRのリソースを解放する。
 onBeforeUnmount(() => {
+  exportDisposed = true
   window.removeEventListener('keydown', handleEditorKeydown)
   projectRuntime.dispose()
   projectStore.clearProject()
@@ -1816,11 +1818,11 @@ async function exportCardImage(
   cardId: string,
   format: 'png' | 'jpeg',
 ) {
-  if (pendingCardDeletionIds.value.has(cardId))
+  if (exportDisposed || pendingCardDeletionIds.value.has(cardId))
     return
   if (currentImageId.value !== cardId) {
     await selectProjectCard(cardId)
-    if (currentImageId.value !== cardId)
+    if (exportDisposed || currentImageId.value !== cardId)
       return
     await nextTick()
   }
@@ -1828,6 +1830,8 @@ async function exportCardImage(
     = format === 'png'
       ? await canvasApi.value?.exportPng()
       : await canvasApi.value?.exportJpeg()
+  if (exportDisposed)
+    return
   if (!blob) {
     setMessage('カード画像を書き出せませんでした。')
     return
@@ -1843,7 +1847,7 @@ async function exportCardImage(
 
 /** 削除予定を除いたカードを順に書き出し、処理後は元の編集カードへ戻す。 */
 async function exportAllCardImages(format: 'png' | 'jpeg') {
-  if (exportingCards.value || addingCards.value || loadingCardId.value)
+  if (exportDisposed || exportingCards.value || addingCards.value || loadingCardId.value)
     return
   const cards = projectCards.value.filter(
     card => !pendingCardDeletionIds.value.has(card.id),
@@ -1856,8 +1860,12 @@ async function exportAllCardImages(format: 'png' | 'jpeg') {
   exportingCards.value = true
   try {
     for (const [index, card] of cards.entries()) {
+      if (exportDisposed)
+        return
       if (currentImageId.value !== card.id) {
         await selectProjectCard(card.id)
+        if (exportDisposed)
+          return
         if (currentImageId.value !== card.id)
           continue
         await nextTick()
@@ -1865,6 +1873,8 @@ async function exportAllCardImages(format: 'png' | 'jpeg') {
       const blob = format === 'png'
         ? await canvasApi.value?.exportPng()
         : await canvasApi.value?.exportJpeg()
+      if (exportDisposed)
+        return
       if (!blob)
         continue
       const base = editor.project.value.imageName.replace(/\.[^.]+$/u, '')
@@ -1873,13 +1883,14 @@ async function exportAllCardImages(format: 'png' | 'jpeg') {
       downloadBlob(blob, `${sequence}-${base}-ja.${extension}`)
       exported += 1
     }
-    setMessage(`${exported}枚のカードを${format.toUpperCase()}で書き出しました。`)
   }
   finally {
-    if (currentImageId.value !== originalCardId)
+    if (!exportDisposed && currentImageId.value !== originalCardId)
       await selectProjectCard(originalCardId)
     exportingCards.value = false
   }
+  if (!exportDisposed)
+    setMessage(`${exported}枚のカードを${format.toUpperCase()}で書き出しました。`)
 }
 </script>
 
