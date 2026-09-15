@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DiagnosticEntry } from './DiagnosticsDialog.vue'
 import type { RuntimeLoadedImage } from '~/composables/useProjectRuntime'
 import type { OpenedFolderProject } from '~/composables/useProjectSession'
 import type {
@@ -56,6 +57,8 @@ import { transformRegionContents } from '~/utils/regions'
 import { sourceIconProblems } from '~/utils/source-icons'
 import { findReusableTranslations } from '~/utils/translation-reuse'
 import { statusForTranslation } from '~/utils/translation-status'
+import DiagnosticsDialog from './DiagnosticsDialog.vue'
+import EditorConfirmDialog from './EditorConfirmDialog.vue'
 import RegionCandidatePanel from './RegionCandidatePanel.vue'
 
 const props = defineProps<{
@@ -67,12 +70,7 @@ interface CanvasApi {
   exportJpeg: () => Promise<Blob | null>
   backgroundColorForBounds: (bounds: RegionDraft) => string
 }
-interface DiagnosticEntry {
-  time: string
-  message: string
-  details?: string
-  level: 'info' | 'error'
-}
+
 type InspectorDetailTab = 'region' | 'ocr' | 'text'
 type InspectorTab = 'list' | 'print' | InspectorDetailTab
 
@@ -1627,112 +1625,40 @@ function removeExclusion(regionId: string, exclusionId: string) {
     <p v-if="message" class="notice" role="status">
       {{ message }}
     </p>
-    <div
+    <EditorConfirmDialog
       v-if="regionPendingDeletionConfirmation"
-      class="confirmation-backdrop"
-      @click.self="cancelRegionDeletion"
+      id="region-delete"
+      title="領域を削除しますか？"
+      @cancel="cancelRegionDeletion"
+      @confirm="confirmRegionDeletion"
     >
-      <section
-        class="confirmation-dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="region-delete-title"
-        aria-describedby="region-delete-description"
-        @keydown.esc="cancelRegionDeletion"
-      >
-        <h2 id="region-delete-title">
-          領域を削除しますか？
-        </h2>
-        <p id="region-delete-description">
-          「{{ regionPendingDeletionConfirmation.displayName.trim()
-            || regionPendingDeletionConfirmation.regionId }}」を削除します。
-          元テキスト、訳文、文字設定も削除されます。
-        </p>
-        <div class="confirmation-actions">
-          <button type="button" autofocus @click="cancelRegionDeletion">
-            キャンセル
-          </button>
-          <button
-            type="button"
-            class="confirmation-danger"
-            @click="confirmRegionDeletion"
-          >
-            削除
-          </button>
-        </div>
-      </section>
-    </div>
-    <div
+      「{{ regionPendingDeletionConfirmation.displayName.trim()
+        || regionPendingDeletionConfirmation.regionId }}」を削除します。
+      元テキスト、訳文、文字設定も削除されます。
+    </EditorConfirmDialog>
+    <EditorConfirmDialog
       v-if="cardPendingDeletionConfirmation"
-      class="confirmation-backdrop"
-      @click.self="cancelProjectCardDeletion"
+      id="card-delete"
+      title="カードを削除しますか？"
+      @cancel="cancelProjectCardDeletion"
+      @confirm="confirmProjectCardDeletion"
     >
-      <section
-        class="confirmation-dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="card-delete-title"
-        aria-describedby="card-delete-description"
-        @keydown.esc="cancelProjectCardDeletion"
-      >
-        <h2 id="card-delete-title">
-          カードを削除しますか？
-        </h2>
-        <p id="card-delete-description">
-          「{{ cardPendingDeletionConfirmation.imageName }}」と翻訳領域
-          {{ cardPendingDeletionConfirmation.regions.length }}件を一覧から削除します。
-          この変更はプロジェクト保存時に確定します。
-        </p>
-        <div class="confirmation-actions">
-          <button type="button" autofocus @click="cancelProjectCardDeletion">
-            キャンセル
-          </button>
-          <button
-            type="button"
-            class="confirmation-danger"
-            @click="confirmProjectCardDeletion"
-          >
-            削除
-          </button>
-        </div>
-      </section>
-    </div>
-    <div
+      「{{ cardPendingDeletionConfirmation.imageName }}」と翻訳領域
+      {{ cardPendingDeletionConfirmation.regions.length }}件を一覧から削除します。
+      この変更はプロジェクト保存時に確定します。
+    </EditorConfirmDialog>
+    <EditorConfirmDialog
       v-if="fontPendingDeletionConfirmation"
-      class="confirmation-backdrop"
-      @click.self="cancelFontDeletion"
+      id="font-delete"
+      title="フォントを削除しますか？"
+      @cancel="cancelFontDeletion"
+      @confirm="confirmFontDeletion"
     >
-      <section
-        class="confirmation-dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="font-delete-title"
-        aria-describedby="font-delete-description"
-        @keydown.esc="cancelFontDeletion"
-      >
-        <h2 id="font-delete-title">
-          フォントを削除しますか？
-        </h2>
-        <p id="font-delete-description">
-          「{{ fontPendingDeletionConfirmation.font.displayName }}」は
-          {{ fontPendingDeletionConfirmation.usageCount }}件の領域で使用されています。
-          削除すると、そのフォント指定は標準フォントへ戻ります。
-          この変更はプロジェクト保存時に確定します。
-        </p>
-        <div class="confirmation-actions">
-          <button type="button" autofocus @click="cancelFontDeletion">
-            キャンセル
-          </button>
-          <button
-            type="button"
-            class="confirmation-danger"
-            @click="confirmFontDeletion"
-          >
-            削除
-          </button>
-        </div>
-      </section>
-    </div>
+      「{{ fontPendingDeletionConfirmation.font.displayName }}」は
+      {{ fontPendingDeletionConfirmation.usageCount }}件の領域で使用されています。
+      削除すると、そのフォント指定は標準フォントへ戻ります。
+      この変更はプロジェクト保存時に確定します。
+    </EditorConfirmDialog>
     <div
       v-show="currentView === 'card'"
       class="editor-layout"
@@ -2020,54 +1946,12 @@ function removeExclusion(regionId: string, exclusionId: string) {
       @update-settings="updatePrintSettings"
       @update-dpi="updateCardPrintDpi"
     />
-    <div
+    <DiagnosticsDialog
       v-if="diagnosticsOpen"
-      class="confirmation-backdrop"
-      @click.self="diagnosticsOpen = false"
-    >
-      <section
-        class="diagnostics-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="diagnostics-title"
-        @keydown.esc="diagnosticsOpen = false"
-      >
-        <div class="diagnostics-dialog-title">
-          <div>
-            <h2 id="diagnostics-title">
-              診断ログ（{{ diagnostics.length }}件）
-            </h2>
-            <p>画像データやファイル内容は記録しません。</p>
-          </div>
-          <button type="button" autofocus @click="diagnosticsOpen = false">
-            閉じる
-          </button>
-        </div>
-        <ol v-if="diagnostics.length">
-          <li
-            v-for="(entry, index) in diagnostics"
-            :key="`${entry.time}-${index}`"
-            :class="{ error: entry.level === 'error' }"
-          >
-            <time>{{ entry.time }}</time>
-            <span>{{ entry.message }}</span>
-            <code v-if="entry.details">{{ entry.details }}</code>
-          </li>
-        </ol>
-        <p v-else class="muted">
-          ログはまだありません。
-        </p>
-        <div class="diagnostics-dialog-actions">
-          <button
-            type="button"
-            :disabled="diagnostics.length === 0"
-            @click="diagnostics = []"
-          >
-            ログを消去
-          </button>
-        </div>
-      </section>
-    </div>
+      :entries="diagnostics"
+      @close="diagnosticsOpen = false"
+      @clear="diagnostics = []"
+    />
     <DataPrivacyFooter />
   </div>
   <UnsavedChangesDialog :open="leaveConfirmationOpen" @resolve="resolveLeave" />

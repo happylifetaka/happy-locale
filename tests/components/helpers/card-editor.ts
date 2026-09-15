@@ -172,6 +172,8 @@ export async function mountEditor() {
       plugins: [createPinia()],
       stubs: {
         ...Object.fromEntries(childNames.map(name => [name, true])),
+        EditorConfirmDialog: false,
+        DiagnosticsDialog: false,
         EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus'], template: '<div />' },
         AssetEditor: { name: 'AssetEditor', props: ['creationDraft', 'creationRunning'], template: '<div />' },
         CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId'], methods: { backgroundColorForBounds: () => '#ffffff', exportPng: canvasIO.exportPng, exportJpeg: canvasIO.exportJpeg }, template: '<div />' },
