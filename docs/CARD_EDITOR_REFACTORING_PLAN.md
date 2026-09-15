@@ -84,11 +84,11 @@ composable同士の循環依存や、全状態を渡す巨大なcontextは作ら
 
 ### 6. 表示コンポーネント
 
-- [ ] `EditorInspectorPanel.vue`: タブ、領域一覧、各インスペクターの配置を分離する。
-- [ ] `DiagnosticsDialog.vue`: ログの表示・消去を分離する。
-- [ ] `EditorConfirmDialog.vue`: 削除確認の表示を共通化し、削除処理は機能側に残す。
+- [x] `EditorInspectorPanel.vue`: タブと表示枠組みを分離する。各インスペクターの機能接続はスロットに置く。
+- [x] `DiagnosticsDialog.vue`: ログの表示・消去を分離する。
+- [x] `EditorConfirmDialog.vue`: 削除確認の表示を共通化し、削除処理は機能側に残す。
 - [ ] ダイアログ・入力欄・処理中のUndoショートカット抑制を回帰テストする。
-- [ ] props/emitsの単なる大量中継になっていないか確認する。
+- [x] props/emitsの単なる大量中継になっていないか確認する。
 - [ ] 実ブラウザでIME、タブ操作、ダイアログ、Canvasの表示追従を確認する。
 
 ## 検証コマンド

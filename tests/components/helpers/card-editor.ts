@@ -173,6 +173,7 @@ export async function mountEditor() {
       stubs: {
         ...Object.fromEntries(childNames.map(name => [name, true])),
         EditorConfirmDialog: false,
+        EditorInspectorPanel: false,
         DiagnosticsDialog: false,
         EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus'], template: '<div />' },
         AssetEditor: { name: 'AssetEditor', props: ['creationDraft', 'creationRunning'], template: '<div />' },

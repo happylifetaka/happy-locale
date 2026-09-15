@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DiagnosticEntry } from './DiagnosticsDialog.vue'
+import type { InspectorDetailTab, InspectorTab } from './EditorInspectorPanel.vue'
 import type { RuntimeLoadedImage } from '~/composables/useProjectRuntime'
 import type { OpenedFolderProject } from '~/composables/useProjectSession'
 import type {
@@ -59,6 +60,7 @@ import { findReusableTranslations } from '~/utils/translation-reuse'
 import { statusForTranslation } from '~/utils/translation-status'
 import DiagnosticsDialog from './DiagnosticsDialog.vue'
 import EditorConfirmDialog from './EditorConfirmDialog.vue'
+import EditorInspectorPanel from './EditorInspectorPanel.vue'
 import RegionCandidatePanel from './RegionCandidatePanel.vue'
 
 const props = defineProps<{
@@ -71,17 +73,6 @@ interface CanvasApi {
   backgroundColorForBounds: (bounds: RegionDraft) => string
 }
 
-type InspectorDetailTab = 'region' | 'ocr' | 'text'
-type InspectorTab = 'list' | 'print' | InspectorDetailTab
-
-/** 右側の設定タブの表示順とラベル。 */
-const inspectorTabs: Array<{ id: InspectorTab, label: string }> = [
-  { id: 'list', label: '領域一覧' },
-  { id: 'region', label: '領域' },
-  { id: 'ocr', label: 'OCR' },
-  { id: 'text', label: '翻訳' },
-  { id: 'print', label: '印刷\n範囲' },
-]
 /** JSONに保存できるカード・共有設定を管理するストア。 */
 const projectStore = useProjectStore()
 /** カード単位の編集履歴を管理し、確定した変更をストアへ通知する。 */
@@ -409,34 +400,6 @@ function switchInspectorTab(tab: InspectorTab) {
   inspectorTab.value = tab
   if (tab === 'region' || tab === 'ocr' || tab === 'text')
     lastInspectorDetailTab.value = tab
-}
-
-/** 矢印キー等によるタブ移動とフォーカス変更を処理する。 */
-function moveInspectorTab(event: KeyboardEvent, currentIndex: number) {
-  const enabledTabs = inspectorTabs.filter(tab => canOpenInspectorTab(tab.id))
-  const current = enabledTabs.findIndex(
-    tab => tab.id === inspectorTabs[currentIndex]?.id,
-  )
-  let nextIndex: number | null = null
-  if (event.key === 'ArrowRight')
-    nextIndex = (current + 1) % enabledTabs.length
-  else if (event.key === 'ArrowLeft')
-    nextIndex = (current - 1 + enabledTabs.length) % enabledTabs.length
-  else if (event.key === 'Home')
-    nextIndex = 0
-  else if (event.key === 'End')
-    nextIndex = enabledTabs.length - 1
-  if (nextIndex === null)
-    return
-  event.preventDefault()
-  const nextTab = enabledTabs[nextIndex]
-  if (!nextTab)
-    return
-  switchInspectorTab(nextTab.id)
-  const tablist = (event.currentTarget as HTMLElement).parentElement
-  nextTick(() => tablist
-    ?.querySelector<HTMLButtonElement>(`#inspector-tab-${nextTab.id}`)
-    ?.focus())
 }
 
 /** 領域を選択し、編集に使うインスペクターを表示する。 */
@@ -1738,47 +1701,28 @@ function removeExclusion(regionId: string, exclusionId: string) {
         @update-region-candidate-bounds="updateCandidateBounds"
         @update-print-area="updatePrintArea"
       />
-      <aside class="side-panel">
-        <p v-if="isDemo" class="muted">
-          デモ：左側の「まとめて領域検出」→「選択した候補を追加」→ 左側の「まとめて翻訳」→PDF(A4)作成で翻訳からPDF作成の流れを体験できます。<br>
-          デモでは領域・原文・翻訳・アセットはデモ用データを使います。実際はOCR認識、アセット登録、翻訳をする必要があります。<br>
-        </p>
-        <div v-if="isDemo && editor.project.value.regions.length" class="batch-translation-actions">
-          <button
-            type="button"
-            :disabled="translationRunning || !batchTranslationRegions.length"
-            @click="translateUntranslatedRegions"
-          >
-            {{ translationRunning ? '翻訳候補を取得中…' : `未翻訳をまとめて取得（${batchTranslationRegions.length}件）` }}
-          </button>
-          <small>このカードの原文がある未翻訳領域が対象です。</small>
-        </div>
-        <div class="side-panel-tabs" role="tablist" aria-label="領域の管理と編集">
-          <button
-            v-for="(tab, index) in inspectorTabs"
-            :id="`inspector-tab-${tab.id}`"
-            :key="tab.id"
-            type="button"
-            role="tab"
-            :aria-selected="inspectorTab === tab.id"
-            :aria-controls="`inspector-panel-${tab.id}`"
-            :class="{ selected: inspectorTab === tab.id }"
-            :disabled="!canOpenInspectorTab(tab.id)"
-            :tabindex="inspectorTab === tab.id ? 0 : -1"
-            @click="switchInspectorTab(tab.id)"
-            @keydown="moveInspectorTab($event, index)"
-          >
-            <span>{{ tab.label }}</span>
-          </button>
-        </div>
-        <p
-          v-if="editor.selectedRegion.value && inspectorTab !== 'list'"
-          class="side-panel-selection"
-        >
-          <span>選択中</span>
-          <strong>{{ editor.selectedRegion.value.displayName.trim()
-            || editor.selectedRegion.value.regionId }}</strong>
-        </p>
+      <EditorInspectorPanel
+        :active-tab="inspectorTab"
+        :can-open-tab="canOpenInspectorTab"
+        :selection-label="editor.selectedRegion.value ? (editor.selectedRegion.value.displayName.trim() || editor.selectedRegion.value.regionId) : null"
+        @select="switchInspectorTab"
+      >
+        <template #header>
+          <p v-if="isDemo" class="muted">
+            デモ：左側の「まとめて領域検出」→「選択した候補を追加」→ 左側の「まとめて翻訳」→PDF(A4)作成で翻訳からPDF作成の流れを体験できます。<br>
+            デモでは領域・原文・翻訳・アセットはデモ用データを使います。実際はOCR認識、アセット登録、翻訳をする必要があります。<br>
+          </p>
+          <div v-if="isDemo && editor.project.value.regions.length" class="batch-translation-actions">
+            <button
+              type="button"
+              :disabled="translationRunning || !batchTranslationRegions.length"
+              @click="translateUntranslatedRegions"
+            >
+              {{ translationRunning ? '翻訳候補を取得中…' : `未翻訳をまとめて取得（${batchTranslationRegions.length}件）` }}
+            </button>
+            <small>このカードの原文がある未翻訳領域が対象です。</small>
+          </div>
+        </template>
         <div
           v-show="inspectorTab === 'list'"
           id="inspector-panel-list"
@@ -1910,7 +1854,7 @@ function removeExclusion(regionId: string, exclusionId: string) {
           @rename="renameFont"
           @remove="requestFontDeletion"
         />
-      </aside>
+      </EditorInspectorPanel>
     </div>
     <AssetEditor
       v-show="currentView === 'assets'"
