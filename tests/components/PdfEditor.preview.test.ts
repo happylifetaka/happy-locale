@@ -6,11 +6,16 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import PdfEditor from '~/features/pdf/PdfEditor.vue'
 import * as pdfService from '~/services/pdf'
 import { serializePdfTranslationCsv } from '~/services/pdf'
+import { parsePdfProject } from '~/services/pdf-project'
 
 const io = vi.hoisted(() => ({
   analyzePdf: vi.fn<typeof import('~/services/pdf').analyzePdf>(),
   renderPdfPagePreview: vi.fn<typeof import('~/services/pdf').renderPdfPagePreview>(),
+  createTranslatedPdf: vi.fn<typeof import('~/services/pdf').createTranslatedPdf>(),
+  fingerprintPdfFile: vi.fn<typeof import('~/services/pdf').fingerprintPdfFile>(),
 }))
+const downloads = vi.hoisted(() => ({ downloadBlob: vi.fn(), downloadText: vi.fn() }))
+vi.mock('~/utils/download', () => downloads)
 const ocr = vi.hoisted(() => ({
   prepareRegionForOCR: vi.fn<typeof import('~/services/ocr/image').prepareRegionForOCR>(),
   recognize: vi.fn<import('~/services/ocr/types').OCRProvider['recognize']>(),
@@ -55,6 +60,8 @@ beforeEach(() => {
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview')
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   io.renderPdfPagePreview.mockResolvedValue(new Blob(['page']))
+  io.createTranslatedPdf.mockResolvedValue(new Blob(['translated pdf']))
+  io.fingerprintPdfFile.mockResolvedValue('a'.repeat(64))
   ocr.prepareRegionForOCR.mockResolvedValue(new Blob(['ocr']))
   ocr.recognize.mockResolvedValue({ text: 'Recognized text', confidence: 90, blocks: [] })
   ocr.dispose.mockResolvedValue(undefined)
@@ -235,5 +242,143 @@ it.each([
   await flushPromises()
   expect(ocr.recognize).toHaveBeenCalledTimes(stage === 'prepare' ? 0 : 1)
   expect(addEntry).not.toHaveBeenCalled()
+  expect(formatError).not.toHaveBeenCalled()
+})
+
+async function selectTextFile(selector: string, name: string, text: string) {
+  const input = wrapper!.get(selector)
+  const file = new File([text], name)
+  Object.defineProperty(file, 'text', { value: async () => text })
+  Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+  await input.trigger('change')
+  await flushPromises()
+}
+
+it('exports the current translations, exclusions, protected areas and output settings', async () => {
+  await openPdf()
+  await importTranslations()
+  await clickButton('CSV対象から除外')
+  const area = { x: 10, y: 20, width: 80, height: 30 }
+  wrapper!.getComponent({ name: 'PdfPreviewCanvas' }).vm.$emit('add-protected-area', area)
+  await wrapper!.get('input[value="white"]').setValue(true)
+  await clickButton('3. 翻訳PDFを保存')
+  await flushPromises()
+  expect(io.createTranslatedPdf).toHaveBeenCalledOnce()
+  const args = io.createTranslatedPdf.mock.calls[0]!
+  expect(args[2].get('entry-2')).toBe('訳文2')
+  expect(args[4]).toMatchObject({ backgroundMode: 'white' })
+  expect([...args[4]!.excludedEntryIds!]).toEqual(['entry-1'])
+  expect(args[4]!.protectedAreas!.get(1)).toEqual([area])
+  expect(downloads.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), 'rules-ja.pdf')
+  expect(wrapper!.find('.pdf-processing-status').exists()).toBe(false)
+})
+
+it('saves and restores the edited document only after matching the source PDF', async () => {
+  await openPdf()
+  await importTranslations()
+  await clickButton('CSV対象から除外')
+  await clickButton('作業を保存')
+  const savedText = downloads.downloadText.mock.calls[0]![0] as string
+  expect(parsePdfProject(savedText).excludedEntryIds).toEqual(['entry-1'])
+  await wrapper!.get('textarea').setValue('Unsaved change')
+  await clickButton('原文を更新')
+  await selectTextFile('input[accept=".json,application/json"]', 'work.json', savedText)
+  await openPdf()
+  const canvas = wrapper!.getComponent({ name: 'PdfPreviewCanvas' })
+  expect(io.fingerprintPdfFile).toHaveBeenCalledOnce()
+  expect(canvas.props('entries')[0].original).toBe('Page 1')
+  expect(canvas.props('translations').get('entry-1')).toBe('訳文1')
+  expect([...canvas.props('excludedEntryIds')]).toEqual(['entry-1'])
+  expect(wrapper!.find('.pdf-processing-status').exists()).toBe(false)
+})
+
+it('keeps the current document when the project source fingerprint mismatches', async () => {
+  await openPdf()
+  await clickButton('作業を保存')
+  await selectTextFile('input[accept=".json,application/json"]', 'work.json', downloads.downloadText.mock.calls[0]![0])
+  await wrapper!.get('textarea').setValue('Keep this edit')
+  await clickButton('原文を更新')
+  io.fingerprintPdfFile.mockResolvedValueOnce('b'.repeat(64))
+  await openPdf()
+  expect(wrapper!.get('textarea').element.value).toBe('Keep this edit')
+  expect(wrapper!.find('.pdf-processing-status').exists()).toBe(false)
+})
+
+it.each(['resolve', 'reject'] as const)('ignores PDF export %s after unmount', async (completion) => {
+  await openPdf()
+  await importTranslations()
+  const pending = deferred<Blob>()
+  io.createTranslatedPdf.mockReturnValueOnce(pending.promise)
+  const formatError = vi.spyOn(pdfService, 'pdfProcessingErrorMessage')
+  await clickButton('3. 翻訳PDFを保存')
+  await flushPromises()
+  const signal = io.createTranslatedPdf.mock.calls[0]![5]!
+  wrapper!.unmount()
+  wrapper = undefined
+  expect(signal.aborted).toBe(true)
+  if (completion === 'resolve')
+    pending.resolve(new Blob(['late export']))
+  else
+    pending.reject(new Error('late export error'))
+  await flushPromises()
+  expect(downloads.downloadBlob).not.toHaveBeenCalled()
+  expect(formatError).not.toHaveBeenCalled()
+})
+
+it('does not adopt analysis if cancellation races with successful completion', async () => {
+  await openPdf()
+  await wrapper!.get('textarea').setValue('Keep this edit')
+  await clickButton('原文を更新')
+  const original = await io.analyzePdf.mock.results[0]!.value
+  const pending = deferred<PdfAnalysis>()
+  io.analyzePdf.mockReturnValueOnce(pending.promise)
+  await openPdf()
+  await wrapper!.get('.pdf-processing-status button').trigger('click')
+  expect(io.analyzePdf.mock.calls[1]![2]!.aborted).toBe(true)
+  pending.resolve(original)
+  await flushPromises()
+  expect(wrapper!.get('textarea').element.value).toBe('Keep this edit')
+  expect(wrapper!.find('.pdf-processing-status').exists()).toBe(false)
+})
+
+it('does not download an export that completes after cancellation', async () => {
+  await openPdf()
+  await importTranslations()
+  const pending = deferred<Blob>()
+  io.createTranslatedPdf.mockReturnValueOnce(pending.promise)
+  await clickButton('3. 翻訳PDFを保存')
+  await wrapper!.get('.pdf-processing-status button').trigger('click')
+  pending.resolve(new Blob(['cancelled export']))
+  await flushPromises()
+  expect(downloads.downloadBlob).not.toHaveBeenCalled()
+  expect(wrapper!.find('.pdf-processing-status').exists()).toBe(false)
+  expect(wrapper!.get('[role="status"]').text()).toContain('キャンセルしました')
+})
+
+it('does not restore a project if cancelled during source verification', async () => {
+  await openPdf()
+  await clickButton('作業を保存')
+  await selectTextFile('input[accept=".json,application/json"]', 'work.json', downloads.downloadText.mock.calls[0]![0])
+  await wrapper!.get('textarea').setValue('Keep this edit')
+  await clickButton('原文を更新')
+  const pending = deferred<string>()
+  io.fingerprintPdfFile.mockReturnValueOnce(pending.promise)
+  await openPdf()
+  await wrapper!.get('.pdf-processing-status button').trigger('click')
+  pending.resolve('a'.repeat(64))
+  await flushPromises()
+  expect(wrapper!.get('textarea').element.value).toBe('Keep this edit')
+  expect(wrapper!.find('.pdf-processing-status').exists()).toBe(false)
+})
+
+it('ignores an analysis error after unmount', async () => {
+  const pending = deferred<PdfAnalysis>()
+  io.analyzePdf.mockReturnValueOnce(pending.promise)
+  const formatError = vi.spyOn(pdfService, 'pdfProcessingErrorMessage')
+  await openPdf()
+  wrapper!.unmount()
+  wrapper = undefined
+  pending.reject(new Error('late analysis failure'))
+  await flushPromises()
   expect(formatError).not.toHaveBeenCalled()
 })
