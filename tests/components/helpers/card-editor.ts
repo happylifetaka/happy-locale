@@ -4,6 +4,7 @@ import { createPinia } from 'pinia'
 import { afterEach, beforeEach, expect, vi } from 'vitest'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import CardEditor from '~/components/CardEditor.vue'
+import RegionInspector from '~/components/RegionInspector.vue'
 import { useCardEditor } from '~/composables/useCardEditor'
 import { useProjectRuntime } from '~/composables/useProjectRuntime'
 import { useTranslationSettings } from '~/composables/useTranslationSettings'
@@ -165,11 +166,12 @@ export function seedProject(ids = ['one', 'two', 'three']) {
   return project
 }
 
-export async function mountEditor(pinia = createPinia()) {
+export async function mountEditor(pinia = createPinia(), realInspector = false) {
   wrapper = shallowMount(CardEditor, {
     attachTo: document.body,
     global: {
       plugins: [pinia],
+      components: { RegionInspector },
       stubs: {
         ...Object.fromEntries(childNames.map(name => [name, true])),
         EditorConfirmDialog: false,
@@ -177,9 +179,10 @@ export async function mountEditor(pinia = createPinia()) {
         DiagnosticsDialog: false,
         EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus'], template: '<div />' },
         AssetEditor: { name: 'AssetEditor', props: ['creationDraft', 'creationRunning'], template: '<div />' },
-        CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId', 'maskEditing', 'exclusionEditing', 'maskBrushSize', 'maskBrushMode', 'selectedExclusionId'], methods: { backgroundColorForBounds: () => '#ffffff', exportPng: canvasIO.exportPng, exportJpeg: canvasIO.exportJpeg }, template: '<div />' },
+        CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId', 'selectedExclusionId'], methods: { backgroundColorForBounds: () => '#ffffff', exportPng: canvasIO.exportPng, exportJpeg: canvasIO.exportJpeg }, template: '<div />' },
         CardList: { name: 'CardList', props: ['activeCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal', 'pendingDeletionIds'], template: '<div />' },
-        RegionInspector: { name: 'RegionInspector', props: ['region', 'ocrCandidate', 'ocrConfidence', 'ocrCorrectionCandidate', 'ocrCorrectionChanges', 'ocrRunning', 'ocrProgress', 'ocrStatus', 'ocrLayout'], template: '<div />' },
+        AssetInsertPicker: true,
+        RegionInspector: realInspector ? false : { name: 'RegionInspector', props: ['region', 'ocrCandidate', 'ocrConfidence', 'ocrCorrectionCandidate', 'ocrCorrectionChanges', 'ocrRunning', 'ocrProgress', 'ocrStatus', 'ocrLayout'], template: '<div />' },
         TranslationPreviewDialog: { name: 'TranslationPreviewDialog', props: ['originalText', 'currentTranslation', 'proposedTranslation'], template: '<div />' },
         TranslationRequestDialog: { name: 'TranslationRequestDialog', props: ['originalText', 'endpoint'], template: '<div />' },
         TranslationReviewDialog: { name: 'TranslationReviewDialog', props: ['cards', 'initialImport', 'error', 'appliedRows', 'loadImage'], template: '<div />' },
@@ -211,7 +214,7 @@ export const { downloadBlob, downloadText } = downloadIO
 
 export const ocrIO = ocrMocks
 
-export async function mountSavedEditor(withRegions = true, pinia = createPinia()) {
+export async function mountSavedEditor(withRegions = true, pinia = createPinia(), realInspector = false) {
 // 画像のload/decodeだけを代替し、プロジェクトを開く処理とストア同期は実装を通す。
   vi.stubGlobal('Image', class {
     naturalWidth = 100
@@ -230,7 +233,7 @@ export async function mountSavedEditor(withRegions = true, pinia = createPinia()
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:card')
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   vi.mocked(createCardThumbnailBlob).mockResolvedValue(null)
-  const context = await mountEditor(pinia)
+  const context = await mountEditor(pinia, realInspector)
   const region: TextRegion = JSON.parse(JSON.stringify(context.inspector.props('region')))
   const project = seedProject(['one', 'two', 'three'])
   project.cards.forEach((card, index) => {

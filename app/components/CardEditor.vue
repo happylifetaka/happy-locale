@@ -177,7 +177,7 @@ const activeInspectorDetailTab = computed<InspectorDetailTab>(() =>
 )
 /** 編集ツールの一時状態。寿命はこのエディターの表示期間とする。 */
 const editorTools = useEditorToolsStore()
-const { maskEditing, maskBrushSize, maskBrushMode, exclusionEditing } = storeToRefs(editorTools)
+const { maskEditing, exclusionEditing } = storeToRefs(editorTools)
 /** 現在選択している保護領域のID。 */
 const selectedExclusionId = ref<string | null>(null)
 /** カード編集画面の表示倍率。100が等倍。 */
@@ -1663,10 +1663,6 @@ function removeExclusion(regionId: string, exclusionId: string) {
         :preview-deferred="previewDeferred"
         :selected-region-id="editor.selectedRegionId.value"
         :auto-mask-preview="autoMaskPreview"
-        :mask-editing="maskEditing"
-        :mask-brush-size="maskBrushSize"
-        :mask-brush-mode="maskBrushMode"
-        :exclusion-editing="exclusionEditing"
         :selected-exclusion-id="selectedExclusionId"
         :zoom="cardZoom"
         :preview-mode="cardPreviewMode"
@@ -1768,10 +1764,6 @@ function removeExclusion(regionId: string, exclusionId: string) {
           :region="editor.selectedRegion.value"
           :active-tab="activeInspectorDetailTab"
           :auto-mask-preview="autoMaskPreview"
-          :mask-editing="maskEditing"
-          :mask-brush-size="maskBrushSize"
-          :mask-brush-mode="maskBrushMode"
-          :exclusion-editing="exclusionEditing"
           :selected-exclusion-id="selectedExclusionId"
           :fonts="fonts"
           :loaded-font-ids="loadedFontIds"
@@ -1800,8 +1792,6 @@ function removeExclusion(regionId: string, exclusionId: string) {
           @flush-preview="flushPreview"
           @update-auto-mask-preview="autoMaskPreview = $event"
           @toggle-mask-editing="toggleMaskEditing"
-          @update-mask-brush-size="maskBrushSize = $event"
-          @update-mask-brush-mode="maskBrushMode = $event"
           @clear-mask="editor.updateRegion($event, { manualMaskStrokes: [] })"
           @toggle-exclusion-editing="toggleExclusionEditing"
           @select-exclusion="selectedExclusionId = $event"

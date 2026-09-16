@@ -8,6 +8,7 @@ import type {
   RegionDraft,
   TextRegion,
 } from '~/types/editor'
+import { useEditorToolsStore } from '~/stores/editor-tools'
 import {
   createAutomaticTextMask,
   createBlendedBackground,
@@ -31,10 +32,6 @@ const props = defineProps<{
   previewDeferred: boolean
   selectedRegionId: string | null
   autoMaskPreview: boolean
-  maskEditing: boolean
-  maskBrushSize: number
-  maskBrushMode: 'paint' | 'erase'
-  exclusionEditing: boolean
   selectedExclusionId: string | null
   zoom: number
   previewMode: 'edited' | 'original'
@@ -63,6 +60,8 @@ const emit = defineEmits<{
   image: [file: File]
   diagnostic: [message: string]
 }>()
+
+const editorTools = useEditorToolsStore()
 
 /** 描画とポインター座標の変換に使用するCanvas要素。 */
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -574,7 +573,7 @@ function redraw() {
   if (
     !props.printAreaEditing
     && selected
-    && props.maskEditing
+    && editorTools.maskEditing
     && selected.backgroundMode === 'manual'
   ) {
     drawMaskOverlay(context, selected, [
@@ -598,8 +597,8 @@ watch(
     props.project,
     props.selectedRegionId,
     props.autoMaskPreview,
-    props.maskEditing,
-    props.exclusionEditing,
+    editorTools.maskEditing,
+    editorTools.exclusionEditing,
     props.selectedExclusionId,
     props.previewMode,
     props.assets,
@@ -910,13 +909,13 @@ function onPointerDown(event: PointerEvent) {
   }
   canvas.value?.setPointerCapture(event.pointerId)
   const selected = selectedRegion()
-  if (props.maskEditing && selected?.backgroundMode === 'manual') {
+  if (editorTools.maskEditing && selected?.backgroundMode === 'manual') {
     const point = pointFromEvent(event)
     if (!pointInsideRegion(point, selected))
       return
     draftMaskStroke.value = {
-      brushSize: props.maskBrushSize,
-      mode: props.maskBrushMode,
+      brushSize: editorTools.maskBrushSize,
+      mode: editorTools.maskBrushMode,
       points: [
         {
           x: Math.max(0, Math.min(selected.width, point.x - selected.x)),
@@ -928,7 +927,7 @@ function onPointerDown(event: PointerEvent) {
     return
   }
   const point = pointFromEvent(event)
-  if (props.exclusionEditing) {
+  if (editorTools.exclusionEditing) {
     // 保護領域の追加中は通常領域の作成へフォールスルーさせない。
     // 選択領域の外から始めたドラッグは何もせず終了する。
     if (!selected || !pointInsideRegion(point, selected))

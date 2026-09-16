@@ -13,7 +13,9 @@ import type {
   TextRegion,
   VerticalAlign,
 } from '~/types/editor'
+import { storeToRefs } from 'pinia'
 import { pickScreenColor, supportsEyeDropper } from '~/services/colors/eye-dropper'
+import { useEditorToolsStore } from '~/stores/editor-tools'
 import { findUnresolvedAssetNames } from '~/utils/assets'
 import { findGlossaryMatches } from '~/utils/glossary'
 import {
@@ -30,10 +32,6 @@ const props = defineProps<{
   region: TextRegion | null
   activeTab: 'region' | 'ocr' | 'text'
   autoMaskPreview: boolean
-  maskEditing: boolean
-  maskBrushSize: number
-  maskBrushMode: 'paint' | 'erase'
-  exclusionEditing: boolean
   selectedExclusionId: string | null
   fonts: FontReference[]
   loadedFontIds: Set<string>
@@ -54,15 +52,12 @@ const props = defineProps<{
   glossary: GlossaryEntry[]
   reusableTranslationCount: number
 }>()
-
 const emit = defineEmits<{
   update: [id: string, patch: Partial<TextRegion>]
   deferPreview: [composing: boolean]
   flushPreview: []
   updateAutoMaskPreview: [enabled: boolean]
   toggleMaskEditing: []
-  updateMaskBrushSize: [size: number]
-  updateMaskBrushMode: [mode: 'paint' | 'erase']
   clearMask: [id: string]
   toggleExclusionEditing: []
   selectExclusion: [id: string]
@@ -83,6 +78,8 @@ const emit = defineEmits<{
   sourceIcons: []
   reuseTranslation: []
 }>()
+const editorTools = useEditorToolsStore()
+const { maskEditing, maskBrushSize, maskBrushMode, exclusionEditing } = storeToRefs(editorTools)
 
 /** 訳文の選択範囲とカーソルを操作する入力欄。 */
 const translationInput = ref<HTMLTextAreaElement | null>(null)
@@ -314,11 +311,6 @@ function applySelectionStyle(
       textSelection.value.end,
     )
   })
-}
-
-/** 手動マスク用のブラシサイズを親へ通知する。 */
-function updateBrushSize(event: Event) {
-  emit('updateMaskBrushSize', Number((event.target as HTMLInputElement).value))
 }
 
 /** チェック状態を設定値へ変換して親へ通知する。 */
@@ -687,13 +679,7 @@ function resetSelectedInlineAssetStyle() {
           <label>
             ブラシ
             <select
-              :value="maskBrushMode"
-              @change="
-                $emit(
-                  'updateMaskBrushMode',
-                  ($event.target as HTMLSelectElement).value as 'paint' | 'erase',
-                )
-              "
+              v-model="maskBrushMode"
             >
               <option value="paint">補修範囲を追加</option>
               <option value="erase">消しゴム</option>
@@ -702,11 +688,10 @@ function resetSelectedInlineAssetStyle() {
           <label>
             ブラシサイズ
             <input
+              v-model.number="maskBrushSize"
               type="range"
               min="4"
               max="80"
-              :value="maskBrushSize"
-              @input="updateBrushSize"
             >
           </label>
           <button type="button" @click="$emit('clearMask', region.id)">
