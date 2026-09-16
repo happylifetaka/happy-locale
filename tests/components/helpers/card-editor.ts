@@ -183,6 +183,7 @@ export async function mountEditor(pinia = createPinia(), realInspector = false) 
         CardList: { name: 'CardList', props: ['activeCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal', 'pendingDeletionIds'], template: '<div />' },
         AssetInsertPicker: true,
         RegionInspector: realInspector ? false : { name: 'RegionInspector', props: ['region', 'ocrCandidate', 'ocrConfidence', 'ocrCorrectionCandidate', 'ocrCorrectionChanges', 'ocrRunning', 'ocrProgress', 'ocrStatus', 'ocrLayout'], template: '<div />' },
+        TranslationReuseDialog: { name: 'TranslationReuseDialog', props: ['region', 'candidates'], template: '<div />' },
         TranslationPreviewDialog: { name: 'TranslationPreviewDialog', props: ['originalText', 'currentTranslation', 'proposedTranslation'], template: '<div />' },
         TranslationRequestDialog: { name: 'TranslationRequestDialog', props: ['originalText', 'endpoint'], template: '<div />' },
         TranslationReviewDialog: { name: 'TranslationReviewDialog', props: ['cards', 'initialImport', 'error', 'appliedRows', 'loadImage'], template: '<div />' },
