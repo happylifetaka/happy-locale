@@ -165,11 +165,11 @@ export function seedProject(ids = ['one', 'two', 'three']) {
   return project
 }
 
-export async function mountEditor() {
+export async function mountEditor(pinia = createPinia()) {
   wrapper = shallowMount(CardEditor, {
     attachTo: document.body,
     global: {
-      plugins: [createPinia()],
+      plugins: [pinia],
       stubs: {
         ...Object.fromEntries(childNames.map(name => [name, true])),
         EditorConfirmDialog: false,
@@ -177,7 +177,7 @@ export async function mountEditor() {
         DiagnosticsDialog: false,
         EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus'], template: '<div />' },
         AssetEditor: { name: 'AssetEditor', props: ['creationDraft', 'creationRunning'], template: '<div />' },
-        CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId'], methods: { backgroundColorForBounds: () => '#ffffff', exportPng: canvasIO.exportPng, exportJpeg: canvasIO.exportJpeg }, template: '<div />' },
+        CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId', 'maskEditing', 'exclusionEditing', 'maskBrushSize', 'maskBrushMode', 'selectedExclusionId'], methods: { backgroundColorForBounds: () => '#ffffff', exportPng: canvasIO.exportPng, exportJpeg: canvasIO.exportJpeg }, template: '<div />' },
         CardList: { name: 'CardList', props: ['activeCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal', 'pendingDeletionIds'], template: '<div />' },
         RegionInspector: { name: 'RegionInspector', props: ['region', 'ocrCandidate', 'ocrConfidence', 'ocrCorrectionCandidate', 'ocrCorrectionChanges', 'ocrRunning', 'ocrProgress', 'ocrStatus', 'ocrLayout'], template: '<div />' },
         TranslationPreviewDialog: { name: 'TranslationPreviewDialog', props: ['originalText', 'currentTranslation', 'proposedTranslation'], template: '<div />' },
@@ -211,7 +211,7 @@ export const { downloadBlob, downloadText } = downloadIO
 
 export const ocrIO = ocrMocks
 
-export async function mountSavedEditor(withRegions = true) {
+export async function mountSavedEditor(withRegions = true, pinia = createPinia()) {
 // 画像のload/decodeだけを代替し、プロジェクトを開く処理とストア同期は実装を通す。
   vi.stubGlobal('Image', class {
     naturalWidth = 100
@@ -230,7 +230,7 @@ export async function mountSavedEditor(withRegions = true) {
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:card')
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   vi.mocked(createCardThumbnailBlob).mockResolvedValue(null)
-  const context = await mountEditor()
+  const context = await mountEditor(pinia)
   const region: TextRegion = JSON.parse(JSON.stringify(context.inspector.props('region')))
   const project = seedProject(['one', 'two', 'three'])
   project.cards.forEach((card, index) => {
