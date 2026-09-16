@@ -2,7 +2,6 @@
 import type {
   PdfAnalysis,
   PdfBackgroundMode,
-  PdfProgress,
   PdfProtectedArea,
   PdfTextColorMode,
 } from '~/services/pdf'
@@ -39,6 +38,7 @@ import PdfPreviewCanvas from './PdfPreviewCanvas.vue'
 import { usePdfEntryEditing } from './usePdfEntryEditing'
 import { usePdfOCR } from './usePdfOCR'
 import { usePdfPreview } from './usePdfPreview'
+import { usePdfProcessing } from './usePdfProcessing'
 
 /** 元PDFを選ぶための入力要素。 */
 const pdfInput = ref<HTMLInputElement | null>(null)
@@ -56,14 +56,14 @@ const sourceFile = shallowRef<File | null>(null)
 const analysis = shallowRef<PdfAnalysis | null>(null)
 /** 文字項目IDと編集済みの訳文の対応表。 */
 const translations = shallowRef(new Map<string, string>())
-/** PDFの解析・復元・書き出し等の処理中か。 */
-const processing = ref(false)
-/** 実行中のPDF処理を画面で説明するラベル。 */
-const processingLabel = ref('')
-/** PDF処理の現在ページと総ページ数。 */
-const pdfProgress = ref<PdfProgress | null>(null)
-/** 現在のPDF処理を中止するためのコントローラー。 */
-const processingController = shallowRef<AbortController | null>(null)
+/** 解析・復元・書き出しの排他状態と中止要求は専用composableが所有する。 */
+const {
+  processing,
+  label: processingLabel,
+  progress: pdfProgress,
+  begin: beginPdfProcessing,
+  cancel: cancelProcessing,
+} = usePdfProcessing()
 /** 操作結果や失敗理由を画面へ通知するメッセージ。 */
 const message = ref('')
 /** 原文を隠す背景の生成方式。 */
@@ -217,10 +217,6 @@ const { leaveConfirmationOpen, confirmLeave, resolveLeave } = useUnsavedChanges(
 // 画面終了時に非同期処理を無効化し、確認待ち・画像・フォント等を解放する。
 onBeforeUnmount(() => {
   disposed = true
-  processingController.value?.abort()
-  processing.value = false
-  processingLabel.value = ''
-  pdfProgress.value = null
   largePdfWarning.value?.resolve(false)
   if (pdfFontFace.value)
     document.fonts.delete(pdfFontFace.value)
@@ -309,7 +305,7 @@ function removeProtectedArea(pageNumber: number, index: number) {
 
 /** 実行中のPDF処理へ中止を要求する。 */
 function cancelPdfProcessing() {
-  processingController.value?.abort()
+  cancelProcessing()
   message.value = 'PDF処理をキャンセルしています…'
 }
 
@@ -324,21 +320,18 @@ async function importPdf(file: File) {
     return
   if (!await confirmLeave() || disposed || processing.value)
     return
-  processing.value = true
-  processingLabel.value = 'PDFの文字情報を解析しています'
-  pdfProgress.value = null
-  const controller = new AbortController()
-  processingController.value = controller
+  const operation = beginPdfProcessing('PDFの文字情報を解析しています')
+  if (!operation)
+    return
   try {
     const result = await analyzePdf(file, ({ current, total }) => {
-      if (disposed || controller.signal.aborted)
+      if (!operation.reportProgress({ current, total }))
         return
-      pdfProgress.value = { current, total }
       message.value = `PDFの文字情報を解析しています（${current}/${total}）`
-    }, controller.signal, confirmLargePdfPageCount)
+    }, operation.signal, confirmLargePdfPageCount)
     if (disposed)
       return
-    controller.signal.throwIfAborted()
+    operation.signal.throwIfAborted()
     sourceFile.value = file
     analysis.value = result
     translations.value = new Map()
@@ -360,12 +353,7 @@ async function importPdf(file: File) {
       : pdfProcessingErrorMessage(error, 'PDFを解析できませんでした。')
   }
   finally {
-    if (!disposed) {
-      processing.value = false
-      processingLabel.value = ''
-      pdfProgress.value = null
-      processingController.value = null
-    }
+    operation.finish()
   }
 }
 
@@ -378,11 +366,9 @@ async function restorePdfProject(
     return
   if (!await confirmLeave() || disposed || processing.value)
     return
-  processing.value = true
-  processingLabel.value = '元PDFを照合しています'
-  pdfProgress.value = null
-  const controller = new AbortController()
-  processingController.value = controller
+  const operation = beginPdfProcessing('元PDFを照合しています')
+  if (!operation)
+    return
   try {
     if (!await confirmLargePdfPageCount(project.analysis.pageCount)) {
       if (disposed)
@@ -392,12 +378,12 @@ async function restorePdfProject(
     }
     if (disposed)
       return
-    controller.signal.throwIfAborted()
+    operation.signal.throwIfAborted()
     assertFileSize(file, FILE_LIMITS.pdfBytes, 'PDF')
     const fingerprint = await fingerprintPdfFile(file)
     if (disposed)
       return
-    controller.signal.throwIfAborted()
+    operation.signal.throwIfAborted()
     assertPdfProjectSource(project, fingerprint)
     sourceFile.value = file
     analysis.value = project.analysis
@@ -420,12 +406,7 @@ async function restorePdfProject(
       : pdfProcessingErrorMessage(error, 'PDF作業を復元できませんでした。')
   }
   finally {
-    if (!disposed) {
-      processing.value = false
-      processingLabel.value = ''
-      pdfProgress.value = null
-      processingController.value = null
-    }
+    operation.finish()
   }
 }
 
@@ -594,26 +575,23 @@ async function exportPdf() {
     message.value = 'translation列を入力したPDF翻訳CSVを先に読み込んでください。'
     return
   }
-  processing.value = true
-  processingLabel.value = '翻訳PDFを書き出しています'
-  pdfProgress.value = null
-  const controller = new AbortController()
-  processingController.value = controller
+  const operation = beginPdfProcessing('翻訳PDFを書き出しています')
+  if (!operation)
+    return
   try {
     const embeddedFontBytes = pdfFontBlob.value
       ? await pdfFontBlob.value.arrayBuffer()
       : undefined
     if (disposed)
       return
-    controller.signal.throwIfAborted()
+    operation.signal.throwIfAborted()
     const blob = await createTranslatedPdf(
       sourceFile.value,
       analysis.value,
       translations.value,
       ({ current, total }) => {
-        if (disposed || controller.signal.aborted)
+        if (!operation.reportProgress({ current, total }))
           return
-        pdfProgress.value = { current, total }
         message.value = `PDFの文字を差し替えています（${current}/${total}）`
       },
       {
@@ -623,11 +601,11 @@ async function exportPdf() {
         excludedEntryIds: excludedEntryIds.value,
         embeddedFontBytes,
       },
-      controller.signal,
+      operation.signal,
     )
     if (disposed)
       return
-    controller.signal.throwIfAborted()
+    operation.signal.throwIfAborted()
     const name = sourceFile.value.name.replace(/\.pdf$/iu, '') || 'document'
     downloadBlob(blob, `${name}-ja.pdf`)
     const exported = translationCount.value - protectedTranslationCount.value
@@ -641,12 +619,7 @@ async function exportPdf() {
       : pdfProcessingErrorMessage(error, 'PDFを書き出せませんでした。')
   }
   finally {
-    if (!disposed) {
-      processing.value = false
-      processingLabel.value = ''
-      pdfProgress.value = null
-      processingController.value = null
-    }
+    operation.finish()
   }
 }
 </script>
