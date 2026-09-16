@@ -3,7 +3,7 @@ import type { useCardEditor } from '~/composables/useCardEditor'
 import type { OCRCorrectionChange } from '~/services/ocr/correction-types'
 import type { OCRLayout, OCRProvider } from '~/services/ocr/types'
 import type { ImageAsset, OCRDictionaryEntry } from '~/types/editor'
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { prepareRegionForOCR } from '~/services/ocr/image'
 import { LocalOCRCorrector } from '~/services/ocr/local-corrector'
 import { regionTextLayout } from '~/utils/region-text-layout'
@@ -45,6 +45,15 @@ export function useEditorOCR({
   logDiagnostic,
 }: EditorOCROptions) {
   const ocrCorrector = new LocalOCRCorrector()
+  /** エディター終了後に、待機中のOCRや補正から状態・通知を更新しないためのフラグ。 */
+  let disposed = false
+  onBeforeUnmount(() => {
+    disposed = true
+    clearOCRCandidate()
+    ocrRunning.value = false
+    ocrProgress.value = null
+    ocrStatus.value = ''
+  })
   /** 領域未選択時に使用するOCRの読み取りモード。 */
   const defaultOCRLayout = ref<OCRLayout>('text-block')
   /** 選択領域のOCRモード。未選択時は共通の初期値を使用する。 */
@@ -115,13 +124,13 @@ export function useEditorOCR({
   /** 現在のOCR候補へ辞書とローカル補正を適用し直す。 */
   async function refreshOCRCorrection() {
     clearOCRCorrection()
-    if (!ocrCandidate.value)
+    if (disposed || !ocrCandidate.value)
       return
     const correction = await ocrCorrector.correct(
       ocrCandidate.value,
       ocrDictionary.value,
     )
-    if (correction.changes.length === 0)
+    if (disposed || correction.changes.length === 0)
       return
     ocrCorrectionCandidate.value = correction.correctedText
     ocrCorrectionChanges.value = correction.changes
@@ -179,7 +188,7 @@ export function useEditorOCR({
   async function recognizeSelectedRegion() {
     const region = editor.selectedRegion.value
     const source = image.value
-    if (!region || !source || ocrRunning.value)
+    if (disposed || !region || !source || ocrRunning.value)
       return
     const iconProblems = sourceIconProblems(region, assets.value)
     if (iconProblems.length) {
@@ -206,14 +215,20 @@ export function useEditorOCR({
         exclusions: [...region.exclusionAreas, ...(region.sourceIcons ?? [])],
         scale: 3,
       })
+      if (disposed)
+        return
       const result = await ocrProvider.recognize(blob, {
         language: 'eng',
         layout: ocrLayout.value,
         onProgress: (progress) => {
+          if (disposed)
+            return
           ocrProgress.value = progress.progress
           ocrStatus.value = progress.status
         },
       })
+      if (disposed)
+        return
       if (editor.selectedRegionId.value !== targetRegionId || currentImageId.value !== targetCardId
         || JSON.stringify(editor.selectedRegion.value) !== targetSignature || assets.value !== assetSnapshot) {
         setMessage('認識中に対象が変更されたため、OCR候補を破棄しました。')
@@ -229,6 +244,8 @@ export function useEditorOCR({
           recognizedText,
           ocrDictionary.value,
         )
+        if (disposed)
+          return
         if (correction.changes.length > 0) {
           ocrCorrectionCandidate.value = correction.correctedText
           ocrCorrectionChanges.value = correction.changes
@@ -252,14 +269,18 @@ export function useEditorOCR({
       })
     }
     catch (error) {
+      if (disposed)
+        return
       cardPreviewMode.value = 'edited'
       logDiagnostic('選択領域のOCRに失敗しました', error, 'error')
       setMessage(error instanceof Error ? error.message : 'OCRに失敗しました。診断ログを確認してください。')
     }
     finally {
-      ocrRunning.value = false
-      ocrProgress.value = null
-      ocrStatus.value = ''
+      if (!disposed) {
+        ocrRunning.value = false
+        ocrProgress.value = null
+        ocrStatus.value = ''
+      }
     }
   }
 

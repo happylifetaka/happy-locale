@@ -164,3 +164,43 @@ describe('card editor selected region OCR', () => {
     expect(ocrIO.dispose).toHaveBeenCalledOnce()
   })
 })
+
+it.each([
+  ['prepare', 'resolve'],
+  ['prepare', 'reject'],
+  ['recognize', 'resolve'],
+  ['recognize', 'reject'],
+] as const)('ignores %s completing with %s after closing and reopening the editor', async (stage, outcome) => {
+  const preparation = deferred<Blob>()
+  const recognition = deferred<OCRResult>()
+  if (stage === 'prepare')
+    ocrIO.prepareRegionForOCR.mockReturnValueOnce(preparation.promise)
+  else ocrIO.recognize.mockReturnValueOnce(recognition.promise)
+  const previous = await setupOCR()
+  previous.inspector.vm.$emit('recognize-text')
+  await flushPromises()
+  unmountEditor()
+  const current = await setupOCR()
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const warningCount = vi.mocked(console.warn).mock.calls.length
+  const recognizeCount = ocrIO.recognize.mock.calls.length
+  const timers = vi.getTimerCount()
+  if (stage === 'prepare') {
+    if (outcome === 'resolve')
+      preparation.resolve(new Blob(['prepared']))
+    else preparation.reject(new Error('late preparation error'))
+  }
+  else if (outcome === 'resolve') {
+    recognition.resolve(recognized)
+  }
+  else {
+    recognition.reject(new Error('late recognition error'))
+  }
+  await flushPromises()
+  expect(ocrIO.recognize).toHaveBeenCalledTimes(recognizeCount)
+  expect(console.warn).toHaveBeenCalledTimes(warningCount)
+  expect(errors).not.toHaveBeenCalled()
+  expect(vi.getTimerCount()).toBe(timers)
+  expect(current.inspector.props('ocrCandidate')).toBe('')
+  expect(current.inspector.props('ocrRunning')).toBe(false)
+})
