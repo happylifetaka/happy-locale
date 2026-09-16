@@ -4,7 +4,7 @@ import { flushPromises } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { useProjectStore } from '~/stores/project'
-import { deferred, mountEditor, mountSavedEditor, saveFolderProject } from './helpers/card-editor'
+import { deferred, editorRuntime, mountEditor, mountSavedEditor, saveFolderProject, seedProject } from './helpers/card-editor'
 
 it('blocks undo during saving and restores keyboard undo after saving', async () => {
   const { canvas, inspector, toolbar } = await mountSavedEditor()
@@ -134,8 +134,22 @@ it('remembers the last detail tab when a region is selected again', async () => 
   await wrapper.get('#inspector-tab-region').trigger('click')
   canvas.vm.$emit('select-region', null)
   await nextTick()
+  expect(wrapper.get('#inspector-tab-list').attributes('aria-selected')).toBe('true')
   await wrapper.get('#inspector-tab-list').trigger('click')
   canvas.vm.$emit('select-region', 'region-0')
   await nextTick()
   expect(wrapper.get('#inspector-tab-region').attributes('aria-selected')).toBe('true')
+})
+
+it('enables OCR and print tabs only when their image and project prerequisites are present', async () => {
+  const { wrapper } = await mountEditor()
+  expect(wrapper.get('#inspector-tab-ocr').attributes('disabled')).toBeDefined()
+  expect(wrapper.get('#inspector-tab-print').attributes('disabled')).toBeDefined()
+  editorRuntime().cardImage.value = document.createElement('img')
+  await nextTick()
+  expect(wrapper.get('#inspector-tab-ocr').attributes('disabled')).toBeUndefined()
+  expect(wrapper.get('#inspector-tab-print').attributes('disabled')).toBeDefined()
+  seedProject()
+  await nextTick()
+  expect(wrapper.get('#inspector-tab-print').attributes('disabled')).toBeUndefined()
 })
