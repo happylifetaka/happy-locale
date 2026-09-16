@@ -43,6 +43,10 @@ const discardDialog = ref<HTMLDialogElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 /** 開閉や初期フォーカスを制御するダイアログ要素。 */
 const dialog = ref<HTMLElement | null>(null)
+/** 一覧のスクロール領域と、行内で拡大している原画像。 */
+const reviewBody = ref<HTMLElement | null>(null)
+const expandedKey = ref<string | null>(null)
+let imageTrigger: HTMLButtonElement | null = null
 /** 翻訳行のキーと訳文入力欄の対応表。挿入時のカーソル操作に使う。 */
 const inputs = new Map<string, HTMLTextAreaElement>()
 /** 原画像の確認表示に使うカードIDごとの一時URL。 */
@@ -77,10 +81,60 @@ const filtered = computed(() => rows.value.filter(row => pinnedKeys.value.has(ro
 ))
 /** 現在のページへ表示する最大20件の確認行。 */
 const visible = computed(() => filtered.value.slice(page.value * 20, page.value * 20 + 20))
+const allFilteredSelected = computed(() => filtered.value.length > 0 && filtered.value.every(row => row.selected))
+const someFilteredSelected = computed(() => filtered.value.some(row => row.selected) && !allFilteredSelected.value)
+
+/** 絞り込み結果をまとめて選択・解除する。ページをまたぐ既存の選択範囲を維持する。 */
+function selectFiltered(event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  filtered.value.forEach(row => row.selected = checked)
+}
+
+/** 同じ行で拡大し、原文・訳文を残せる範囲だけスクロールする。 */
+async function toggleImage(row: TranslationReviewRow, event: MouseEvent) {
+  const trigger = event.currentTarget as HTMLButtonElement
+  if (expandedKey.value === row.key) {
+    closeImage()
+    return
+  }
+  const article = trigger.closest<HTMLElement>('.review-row')!
+  const previousTop = article.getBoundingClientRect().top
+  imageTrigger = trigger
+  expandedKey.value = row.key
+  await nextTick()
+  const body = reviewBody.value
+  const panel = article.querySelector<HTMLElement>('.review-expanded-image')
+  if (!body || !panel)
+    return
+  body.scrollTop += article.getBoundingClientRect().top - previousTop
+  const headBottom = body.querySelector('.review-column-head')!.getBoundingClientRect().bottom
+  const availableAbove = Math.max(0, article.getBoundingClientRect().top - headBottom - 8)
+  const overflowBelow = Math.max(0, panel.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom + 8)
+  body.scrollTop += Math.min(availableAbove, overflowBelow)
+  trigger.focus({ preventScroll: true })
+}
+
+/** 拡大を閉じてもスクロール位置を移動せず元の画像へフォーカスを戻す。 */
+function closeImage() {
+  expandedKey.value = null
+  imageTrigger?.focus({ preventScroll: true })
+}
+
+/** Escapeは拡大画像を先に閉じ、もう一度押すと確認画面を閉じる。 */
+function escapeReview() {
+  if (expandedKey.value)
+    closeImage()
+  else close()
+}
 // 検索・表示条件を変えたら先頭ページへ戻り、編集中の行固定を解除する。
 watch([filter, cardFilter, query], () => {
   page.value = 0
   pinnedKeys.value.clear()
+})
+watch([page, cardFilter, filter, query], () => {
+  expandedKey.value = null
+  if (reviewBody.value)
+    reviewBody.value.scrollTop = 0
 })
 // 絞り込みでページが減った場合に現在ページを有効範囲へ戻す。
 watch(() => filtered.value.length, () => {
@@ -232,21 +286,40 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="confirmation-backdrop review-backdrop">
-    <section ref="dialog" class="translation-review" role="dialog" aria-modal="true" aria-labelledby="review-title" tabindex="-1" @keydown="trapFocus" @keydown.esc.stop.prevent="close">
+    <section ref="dialog" class="translation-review" role="dialog" aria-modal="true" aria-labelledby="review-title" tabindex="-1" @keydown="trapFocus" @keydown.esc.stop.prevent="escapeReview">
       <header class="review-header">
-        <div>
+        <div class="review-heading">
           <h2 id="review-title">
             翻訳をまとめて確認
-          </h2><p>{{ cards.length }}枚・{{ rows.length }}領域 <span>未翻訳 {{ untranslatedCount }} / 要確認 {{ problemCount }} / 変更 {{ changes.length }}</span></p>
+          </h2>
+          <p>{{ cards.length }}枚・{{ rows.length }}領域 <span>未翻訳 {{ untranslatedCount }} / 要確認 {{ problemCount }} / 変更 {{ changes.length }}</span></p>
         </div>
-        <button type="button" :disabled="busy" @click="close">
-          閉じる
-        </button>
+        <div class="review-tools">
+          <select v-model="cardFilter" aria-label="カード">
+            <option value="">
+              すべてのカード
+            </option><option v-for="card in cards" :key="card.id" :value="card.id">
+              {{ card.imageName }}
+            </option>
+          </select>
+          <select v-model="filter" aria-label="表示">
+            <option value="all">
+              すべて
+            </option><option value="empty">
+              未翻訳
+            </option><option value="issues">
+              要確認
+            </option><option value="changed">
+              変更あり
+            </option>
+          </select>
+          <input v-model="query" class="review-search" aria-label="原文・訳文・カード名を検索" placeholder="原文・訳文・カード名を検索">
+          <button type="button" :disabled="busy" @click="close">
+            閉じる
+          </button>
+        </div>
       </header>
-      <div class="review-tools">
-        <label>カード<select v-model="cardFilter"><option value="">すべてのカード</option><option v-for="card in cards" :key="card.id" :value="card.id">{{ card.imageName }}</option></select></label>
-        <label>表示<select v-model="filter"><option value="all">すべて</option><option value="empty">未翻訳</option><option value="issues">要確認</option><option value="changed">変更あり</option></select></label>
-        <label class="review-search">検索<input v-model="query" placeholder="原文・訳文・カード名"></label>
+      <div class="review-selection">
         <input ref="fileInput" type="file" accept=".csv,text/csv" hidden @change="importFile">
         <button type="button" :disabled="busy" @click="fileInput?.click()">
           CSVを読み込む
@@ -254,52 +327,72 @@ onBeforeUnmount(() => {
         <button v-if="translate" type="button" :disabled="busy" @click="fillCandidates">
           {{ busy ? '取得しています…' : selected.length ? '選択した未翻訳を取得' : '表示中の未翻訳を取得' }}
         </button>
+        <button type="button" :disabled="busy || !selected.length" @click="rows.forEach(row => row.selected = false)">
+          すべて解除
+        </button>
+        <span>訳文は反映するまで保存されません。</span>
       </div>
       <p v-if="message || error" class="review-message" role="status">
         {{ error || message }}
       </p>
-      <div class="review-selection">
-        <button type="button" :disabled="busy" @click="filtered.forEach(row => row.selected = true)">
-          表示中をすべて選択
-        </button><button type="button" @click="rows.forEach(row => row.selected = false)">
-          すべて解除
-        </button><span>訳文は反映するまで保存されません。アセットの順序変更は不一致に含めません。</span>
-      </div>
-      <div class="review-body">
+      <div ref="reviewBody" class="review-body">
+        <div class="review-column-head review-columns">
+          <input type="checkbox" :checked="allFilteredSelected" :indeterminate="someFilteredSelected" :disabled="busy || !filtered.length" aria-label="絞り込み結果をすべて選択" @change="selectFiltered">
+          <span>原画像 <small>クリックで拡大</small></span>
+          <span>カード・原文</span>
+          <span class="review-translation-heading">日本語訳</span>
+        </div>
         <p v-if="!visible.length" class="review-empty">
           該当する領域はありません。
         </p>
-        <article v-for="row in visible" :key="row.key" class="review-row" :class="{ 'has-issues': warnings.get(row.key)?.length }">
-          <header><label><input v-model="row.selected" type="checkbox" :disabled="busy">{{ row.cardName }} <strong>{{ row.region.displayName || row.region.regionId }}</strong></label><span>{{ changed(row) ? '変更あり' : row.region.translationStatus === 'reviewed' ? '確認済み' : row.translation.trim() ? '下書き' : '未翻訳' }}</span></header>
-          <div class="review-columns">
-            <div class="review-source-image">
-              <span class="review-label">原画像</span><RegionSourcePreview v-if="imageUrls.get(row.cardId)" :src="imageUrls.get(row.cardId)!" :region="row.region" :image-width="cards.find(card => card.id === row.cardId)!.imageWidth" :image-height="cards.find(card => card.id === row.cardId)!.imageHeight" /><p v-else>
-                {{ imageErrors.has(row.cardId) ? '画像を読み込めませんでした' : '画像を読み込み中…' }}
-              </p><button type="button" :disabled="changes.length > 0 || busy" @click="emit('locate', row.cardId, row.region.id)">
+        <article v-for="row in visible" :key="row.key" class="review-row review-columns" :class="{ 'has-issues': warnings.get(row.key)?.length }">
+          <input v-model="row.selected" class="review-row-check" type="checkbox" :disabled="busy" :aria-label="`${row.cardName} ${row.region.displayName || row.region.regionId}を選択`">
+          <div class="review-source-image">
+            <button v-if="imageUrls.get(row.cardId)" type="button" class="review-image-trigger" :aria-label="`${row.cardName} ${row.region.displayName || row.region.regionId}の原画像を拡大`" :aria-expanded="expandedKey === row.key" :aria-controls="`review-image-${row.key}`" @click="toggleImage(row, $event)">
+              <RegionSourcePreview :src="imageUrls.get(row.cardId)!" :region="row.region" :image-width="cards.find(card => card.id === row.cardId)!.imageWidth" :image-height="cards.find(card => card.id === row.cardId)!.imageHeight" :preview-height="64" />
+            </button>
+            <p v-else>
+              {{ imageErrors.has(row.cardId) ? '画像を読み込めませんでした' : '画像を読み込み中…' }}
+            </p>
+          </div>
+          <div class="review-source-text">
+            <div class="review-row-meta">
+              {{ row.cardName }} · <strong>{{ row.region.displayName || row.region.regionId }}</strong>
+            </div>
+            <p class="review-original">
+              <AssetTextPreview :text="row.region.originalText || '原文なし'" :assets="assets" :asset-images="assetImages" />
+            </p>
+            <span class="review-row-status">{{ changed(row) ? '変更あり' : row.region.translationStatus === 'reviewed' ? '確認済み' : row.translation.trim() ? '下書き' : '未翻訳' }}</span>
+          </div>
+          <div class="review-translation">
+            <label class="review-sr-only" :for="`review-${row.key}`">日本語訳</label>
+            <textarea :id="`review-${row.key}`" :ref="el => { if (el) inputs.set(row.key, el as HTMLTextAreaElement); else inputs.delete(row.key) }" :value="row.translation" :rows="row.region.ocrLayout === 'single-line' ? 1 : 3" :disabled="busy" @input="update(row, ($event.target as HTMLTextAreaElement).value)" />
+            <div class="review-row-actions">
+              <button type="button" :disabled="changes.length > 0 || busy" @click="emit('locate', row.cardId, row.region.id)">
                 カード上で確認
               </button>
-            </div>
-            <div>
-              <span class="review-label">原文</span><p class="review-original">
-                <AssetTextPreview :text="row.region.originalText || '原文なし'" :assets="assets" :asset-images="assetImages" />
-              </p>
-            </div>
-            <div class="review-translation">
-              <div class="review-field-heading">
-                <label :for="`review-${row.key}`">日本語訳</label><AssetInsertPicker v-if="!busy" :assets="assets" :asset-images="assetImages" target-label="日本語訳" @insert="insertAsset(row, $event)" />
-              </div><textarea :id="`review-${row.key}`" :ref="el => { if (el) inputs.set(row.key, el as HTMLTextAreaElement); else inputs.delete(row.key) }" :value="row.translation" :rows="row.region.ocrLayout === 'single-line' ? 2 : 4" :disabled="busy" @input="update(row, ($event.target as HTMLTextAreaElement).value)" /><button type="button" :disabled="busy" @click="reuse(row)">
+              <button type="button" :disabled="busy" @click="reuse(row)">
                 同じ原文の訳を再利用
               </button>
-              <p v-if="row.translation.includes('[icon:')" class="review-original">
-                <AssetTextPreview :text="row.translation" :assets="assets" :asset-images="assetImages" />
-              </p>
-              <ul v-if="warnings.get(row.key)?.length" class="review-warnings" role="status">
-                <li v-for="warning in warnings.get(row.key)" :key="warning">
-                  {{ warning }}
-                </li>
-              </ul>
+              <AssetInsertPicker v-if="!busy" :assets="assets" :asset-images="assetImages" target-label="日本語訳" @insert="insertAsset(row, $event)" />
             </div>
+            <p v-if="row.translation.includes('[icon:')" class="review-original">
+              <AssetTextPreview :text="row.translation" :assets="assets" :asset-images="assetImages" />
+            </p>
+            <ul v-if="warnings.get(row.key)?.length" class="review-warnings" role="status">
+              <li v-for="warning in warnings.get(row.key)" :key="warning">
+                {{ warning }}
+              </li>
+            </ul>
           </div>
+          <section v-if="expandedKey === row.key && imageUrls.get(row.cardId)" :id="`review-image-${row.key}`" class="review-expanded-image" :aria-label="`${row.region.displayName || row.region.regionId}の拡大した原画像`">
+            <header>
+              <span>{{ row.cardName }} · {{ row.region.displayName || row.region.regionId }}</span><button type="button" @click="closeImage">
+                拡大を閉じる
+              </button>
+            </header>
+            <RegionSourcePreview :src="imageUrls.get(row.cardId)!" :region="row.region" :image-width="cards.find(card => card.id === row.cardId)!.imageWidth" :image-height="cards.find(card => card.id === row.cardId)!.imageHeight" :preview-height="Math.max(64, Math.min(240, row.region.height / Math.max(1, row.region.width) * 800))" />
+          </section>
         </article>
       </div>
       <footer class="review-footer">
@@ -342,39 +435,69 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.review-backdrop { padding: 1rem; }
+.review-backdrop { padding: 0.75rem; }
 .review-discard-dialog { margin: auto; border: 0; }
 .review-discard-dialog::backdrop { background: #0008; }
 .review-discard-dialog .confirmation-actions { flex-wrap: wrap; }
-.translation-review { width: min(1440px, 98vw); height: 94dvh; display: flex; flex-direction: column; background: #f5f7fa; border-radius: 0.75rem; overflow: hidden; color: #263247; }
-.review-header, .review-tools, .review-selection, .review-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 0.65rem; padding: 0.85rem 1.2rem; background: white; border-bottom: 1px solid #d5dbe3; }
-.review-header, .review-footer { justify-content: space-between; }
-.review-header h2 { margin: 0; font-size: 1.2rem; }
-.review-header p { margin: 0.4rem 0 0; font-size: 0.8rem; }
-.review-header p span { margin-left: 1rem; color: #607089; }
-.review-tools label { display: grid; gap: 0.25rem; font-size: 0.75rem; }
-.review-tools input, .review-tools select, textarea { padding: 0.5rem; border: 1px solid #cbd2dc; border-radius: 0.35rem; font: inherit; background: white; color: inherit; }
-.review-search { flex: 1; min-width: 10rem; }
-.review-selection { font-size: 0.75rem; }
+.translation-review { width: min(1440px, 98vw); height: 96dvh; display: flex; flex-direction: column; background: white; border-radius: 0.75rem; overflow: hidden; color: #263247; }
+.review-header, .review-selection, .review-footer { flex-shrink: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding: 0.6rem 1rem; background: white; border-bottom: 1px solid #d5dbe3; }
+.review-header { justify-content: space-between; }
+.review-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 0.75rem; }
+.review-header h2 { margin: 0; font-size: 1.05rem; }
+.review-header p { margin: 0; font-size: 0.75rem; }
+.review-header p span { margin-left: 0.5rem; color: #607089; }
+.review-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-left: auto; max-width: 100%; }
+.review-tools input, .review-tools select, textarea { min-width: 0; padding: 0.35rem 0.5rem; border: 1px solid #cbd2dc; border-radius: 0.35rem; font: inherit; background: white; color: inherit; }
+.review-tools input, .review-tools select { max-width: 100%; font-size: 0.8rem; }
+.review-tools select:first-child { max-width: 12rem; }
+.review-search { width: 13rem; }
+.review-header button, .review-selection button, .review-footer button { padding: 0.4rem 0.65rem; font-size: 0.8rem; }
+.review-selection { font-size: 0.75rem; padding-top: 0.35rem; padding-bottom: 0.35rem; }
 .review-selection span { color: #607089; }
-.review-message { margin: 0; padding: 0.6rem 1.2rem; background: #edf3ff; font-size: 0.85rem; }
-.review-body { flex: 1; min-height: 0; overflow: auto; padding: 1rem; }
-.review-row { background: white; border: 1px solid #d5dbe3; border-radius: 0.6rem; margin-bottom: 0.85rem; }
-.review-row.has-issues { border-left: 3px solid #d6a344; }
-.review-row > header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; padding: 0.7rem 1rem; border-bottom: 1px solid #edf0f5; font-size: 0.8rem; }
-.review-row > header label { display: flex; align-items: center; gap: 0.6rem; }
-.review-row > header span { color: #607089; }
-.review-columns { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 1.4fr); gap: 1.2rem; padding: 1rem; }
-.review-columns > div { min-width: 0; }
-.review-label, .review-field-heading { font-size: 0.8rem; font-weight: 600; color: #49566a; }
-.review-field-heading { display: flex; justify-content: space-between; align-items: center; }
-
-.review-original { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.9rem; line-height: 1.7; margin: 0.5rem 0; }
-textarea { display: block; width: 100%; resize: vertical; line-height: 1.6; margin-bottom: 0.4rem; }
-.review-warnings li { white-space: pre-line; }
-.review-warnings { padding-left: 1.2rem; margin: 0.6rem 0 0; font-size: 0.78rem; color: #885600; }
-.review-footer { border-top: 1px solid #d5dbe3; border-bottom: 0; }
-.review-footer > div { display: flex; align-items: center; gap: 0.6rem; }
+.review-message { flex-shrink: 0; margin: 0; padding: 0.4rem 1rem; background: #edf3ff; font-size: 0.8rem; }
+.review-body { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; overflow-anchor: none; }
+.review-columns { display: grid; grid-template-columns: 20px 140px minmax(0, 1fr) minmax(0, 1.2fr); gap: 0.65rem; padding: 0.6rem 1rem; }
+.review-columns > * { min-width: 0; }
+.review-column-head { position: sticky; top: 0; z-index: 2; align-items: center; background: #f5f7fa; box-shadow: 0 1px 0 #d5dbe3; font-size: 0.75rem; padding-top: 0.4rem; padding-bottom: 0.4rem; }
+.review-column-head small { display: block; font-size: 0.7rem; color: #607089; }
+.review-row { border-bottom: 1px solid #d5dbe3; align-items: start; }
+.review-row.has-issues { box-shadow: inset 3px 0 #d6a344; }
+.review-row-check { margin-top: 0.35rem; }
+.review-row-meta, .review-row-status { font-size: 0.75rem; color: #607089; overflow-wrap: anywhere; }
+.review-row-meta strong { color: #49566a; }
+.review-source-image p { font-size: 0.75rem; }
+.review-image-trigger { display: block; width: 100%; padding: 0; border: 1px solid #d5dbe3; border-radius: 0.3rem; overflow: hidden; }
+.review-image-trigger[aria-expanded='true'] { border-color: #245cc7; }
+.review-image-trigger :deep(.region-source-preview) { margin: 0; }
+.review-original { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.9rem; line-height: 1.6; margin: 0.25rem 0; }
+textarea { display: block; width: 100%; box-sizing: border-box; min-height: 2.35rem; resize: vertical; line-height: 1.6; font-size: 0.9rem; }
+.review-row-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+.review-row-actions > button, .review-row-actions :deep(summary) { padding: 0.15rem 0.4rem; min-height: 26px; font-size: 0.75rem; line-height: 1.5; }
+.review-row-actions :deep(summary) { border: 1px solid #cbd2dc; }
+.review-row-actions :deep(.asset-insert-panel) { top: auto; bottom: calc(100% + 0.25rem); }
+.review-warnings li { white-space: pre-line; overflow-wrap: anywhere; }
+.review-warnings { padding-left: 1.2rem; margin: 0.4rem 0 0; font-size: 0.78rem; color: #885600; }
+.review-expanded-image { grid-column: 2 / -1; padding: 0.65rem 0.85rem; background: #f5f7fa; border: 1px solid #d5dbe3; border-radius: 0.4rem; }
+.review-expanded-image header { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+.review-expanded-image header span { overflow-wrap: anywhere; }
+.review-expanded-image button { flex-shrink: 0; padding: 0.3rem 0.5rem; font-size: 0.75rem; }
+.review-expanded-image :deep(.region-source-preview) { max-width: 800px; margin: 0.5rem auto 0; }
+.review-footer { justify-content: space-between; border-top: 1px solid #d5dbe3; border-bottom: 0; font-size: 0.8rem; }
+.review-footer > div { display: flex; align-items: center; gap: 0.5rem; }
 .review-empty { text-align: center; color: #607089; padding: 2rem; }
-@media (max-width: 850px) { .review-columns { grid-template-columns: 1fr; } .translation-review { height: 98dvh; } .review-backdrop { padding: 0.25rem; } }
+.review-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 700px) {
+  .review-columns { grid-template-columns: 20px 90px minmax(0, 1fr); gap: 0.5rem; padding-left: 0.65rem; padding-right: 0.65rem; }
+  .review-translation { grid-column: 3; }
+  .review-translation-heading { display: none; }
+  .review-header, .review-selection, .review-footer { padding-left: 0.65rem; padding-right: 0.65rem; }
+  .review-tools { width: 100%; }
+  .review-search { flex: 1; min-width: 8rem; }
+  .translation-review { height: 98dvh; }
+  .review-backdrop { padding: 0.25rem; }
+}
+@media (pointer: coarse) {
+  .translation-review button, .review-row-actions :deep(summary), .review-tools select { min-height: 44px; }
+  textarea, .review-tools input { font-size: 1rem; }
+}
 </style>
