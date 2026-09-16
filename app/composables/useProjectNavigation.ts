@@ -16,19 +16,15 @@ interface ProjectNavigationOptions {
   currentImageId: Ref<string>
   loadingCardId: Ref<string | null>
   pendingCardDeletionIds: Ref<Set<string>>
-  view: {
-    maskEditing: Ref<boolean>
-    exclusionEditing: Ref<boolean>
-    selectedExclusionId: Ref<string | null>
-    currentView: Ref<'card' | 'assets' | 'print'>
-  }
+  currentView: Ref<'card' | 'assets' | 'print'>
+  clearOCRCandidate: () => void
+  resetCardSelection: () => void
   isActive: () => boolean
   loadImage: (file: File) => Promise<RuntimeLoadedImage | null>
   applyLoadedImage: (loaded: RuntimeLoadedImage) => void
   detectAndApplyCardDpi: (cardId: string, file: File) => Promise<void>
   cacheCardThumbnail: ReturnType<typeof useCardThumbnails>['cacheCardThumbnail']
   persistCardThumbnail: ReturnType<typeof useCardThumbnails>['persistCardThumbnail']
-  clearOCRCandidate: () => void
   showBatchOCRCandidates: (cardId: string) => boolean
   switchInspectorTab: (tab: 'text') => void
   setMessage: (message: string) => void
@@ -46,14 +42,15 @@ export function useProjectNavigation({
   currentImageId,
   loadingCardId,
   pendingCardDeletionIds,
-  view: { maskEditing, exclusionEditing, selectedExclusionId, currentView },
+  currentView,
+  resetCardSelection,
+  clearOCRCandidate,
   isActive,
   loadImage,
   applyLoadedImage,
   detectAndApplyCardDpi,
   cacheCardThumbnail,
   persistCardThumbnail,
-  clearOCRCandidate,
   showBatchOCRCandidates,
   switchInspectorTab,
   setMessage,
@@ -124,9 +121,7 @@ export function useProjectNavigation({
         cardId,
       ))
       currentImageId.value = cardId
-      maskEditing.value = false
-      exclusionEditing.value = false
-      selectedExclusionId.value = null
+      resetCardSelection()
       clearOCRCandidate()
       applyLoadedImage(loaded)
       await detectAndApplyCardDpi(cardId, file)

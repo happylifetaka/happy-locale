@@ -3,7 +3,7 @@ import type { useCardEditor } from '~/composables/useCardEditor'
 import type { OCRCorrectionChange } from '~/services/ocr/correction-types'
 import type { OCRLayout, OCRProvider } from '~/services/ocr/types'
 import type { ImageAsset, OCRDictionaryEntry } from '~/types/editor'
-import { computed, ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { prepareRegionForOCR } from '~/services/ocr/image'
 import { LocalOCRCorrector } from '~/services/ocr/local-corrector'
 import { regionTextLayout } from '~/utils/region-text-layout'
@@ -77,6 +77,9 @@ export function useEditorOCR({
     ocrCandidateSource.value = null
     clearOCRCorrection()
   }
+
+  // 選択変更による候補の破棄は、候補を所有する機能が担当する。
+  watch(editor.selectedRegionId, clearOCRCandidate)
 
   /** ローカル補正の候補と変更箇所を解除する。 */
   function clearOCRCorrection() {

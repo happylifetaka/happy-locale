@@ -7,7 +7,6 @@ import type {
 } from '~/services/ocr/types'
 import type {
   LayoutTemplate,
-  RegionDraft,
   SourceIcon,
   TextRegion,
 } from '~/types/editor'
@@ -22,16 +21,14 @@ import { useEditorImageLoading } from '~/composables/useEditorImageLoading'
 import { useEditorOCR } from '~/composables/useEditorOCR'
 import { useEditorPrintSettings } from '~/composables/useEditorPrintSettings'
 import { useEditorTranslation } from '~/composables/useEditorTranslation'
-import { useInspectorTabs } from '~/composables/useInspectorTabs'
-import { usePreviewDeferral } from '~/composables/usePreviewDeferral'
 import { useProjectCards } from '~/composables/useProjectCards'
 import { useProjectNavigation } from '~/composables/useProjectNavigation'
 import { useProjectPersistence } from '~/composables/useProjectPersistence'
 import { useProjectSession } from '~/composables/useProjectSession'
 import { useRegionCandidates } from '~/composables/useRegionCandidates'
-import { useRegionEditing } from '~/composables/useRegionEditing'
 import { useTranslationReuse } from '~/composables/useTranslationReuse'
 import { useTranslationReview } from '~/composables/useTranslationReview'
+import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
@@ -41,7 +38,6 @@ import {
   supportsFolderProjects,
 } from '~/services/project/folder'
 import { resolveSampleCandidates } from '~/services/project/sample'
-import { useEditorToolsStore } from '~/stores/editor-tools'
 import { useProjectStore } from '~/stores/project'
 import { readImageDpi } from '~/utils/image-dpi'
 import { historyShortcut } from '~/utils/keyboard'
@@ -56,12 +52,6 @@ import RegionCandidatePanel from './RegionCandidatePanel.vue'
 const props = defineProps<{
   openSampleOnMount?: boolean
 }>()
-
-interface CanvasApi {
-  exportPng: () => Promise<Blob | null>
-  exportJpeg: () => Promise<Blob | null>
-  backgroundColorForBounds: (bounds: RegionDraft) => string
-}
 
 /** JSONに保存できるカード・共有設定を管理するストア。 */
 const projectStore = useProjectStore()
@@ -141,32 +131,36 @@ const currentView = ref<'card' | 'assets' | 'print'>('card')
 const layoutTemplateMode = ref<'capture' | 'apply' | null>(null)
 /** 原文アイコン指定を開いた時点のカードと領域の情報。 */
 const sourceIconsRequest = shallowRef<{ cardId: string, region: TextRegion } | null>(null)
-/** 子Canvasの画像書き出し等を呼び出す公開API。 */
-const canvasApi = ref<CanvasApi | null>(null)
 /** 操作結果や失敗理由を画面へ通知するメッセージ。 */
 const message = ref('')
-/** 自動検出した消去マスクを重ねて表示するか。 */
-const autoMaskPreview = ref(false)
-/** タブの利用条件、記憶と領域選択時の遷移。 */
-const { inspectorTab, activeInspectorDetailTab, canOpenInspectorTab, switchInspectorTab, selectRegionForEditing } = useInspectorTabs({
+/** 単一・全体・一括OCRで共有する実行状態。 */
+const ocrRunning = ref(false)
+/** カード画面の表示状態・選択・領域操作は同一の窓口を使う。 */
+const workspace = useCardWorkspace({
   editor,
-  hasImage: computed(() => Boolean(image.value)),
-  hasProject: computed(() => Boolean(folderDocument.value)),
-})
-/** 入力中の描画遅延と、編集対象を変更した際の待機解除。 */
-const { previewDeferred, deferPreview, flushPreview } = usePreviewDeferral([
-  editor.selectedRegionId,
-  currentView,
-  inspectorTab,
   image,
-])
-/** 編集ツールの一時状態。寿命はこのエディターの表示期間とする。 */
-const editorTools = useEditorToolsStore()
-const { maskEditing, exclusionEditing } = storeToRefs(editorTools)
-/** 現在選択している保護領域のID。 */
-const selectedExclusionId = ref<string | null>(null)
-/** 領域の追加・削除・分割と内部マスク・保護領域の更新。 */
+  hasProject: computed(() => Boolean(folderDocument.value)),
+  currentImageId,
+  currentView,
+  projectBusy,
+  ocrRunning,
+  assetEditing,
+  setMessage,
+})
 const {
+  canvasApi,
+  autoMaskPreview,
+  inspectorTab,
+  activeInspectorDetailTab,
+  canOpenInspectorTab,
+  switchInspectorTab,
+  selectRegionForEditing,
+  previewDeferred,
+  deferPreview,
+  flushPreview,
+  maskEditing,
+  exclusionEditing,
+  selectedExclusionId,
   regionPendingDeletionConfirmation,
   regionSplitRequest,
   requestRegionSplit,
@@ -181,12 +175,11 @@ const {
   addExclusion,
   updateExclusion,
   removeExclusion,
-} = useRegionEditing({ editor, currentImageId, projectBusy, selectedExclusionId, exclusionEditing, switchInspectorTab, setMessage })
-
-/** カード編集画面の表示倍率。100が等倍。 */
-const cardZoom = ref(50)
-/** 編集結果と元画像のどちらを表示するか。 */
-const cardPreviewMode = ref<'edited' | 'original'>('edited')
+  cardZoom,
+  cardPreviewMode,
+  toggleMaskEditing,
+  toggleExclusionEditing,
+} = workspace
 /** アセット編集画面の表示倍率。100が等倍。 */
 const assetZoom = ref(100)
 /** ブラウザがフォルダへの読み書きに対応しているか。 */
@@ -199,8 +192,6 @@ const diagnosticsOpen = ref(false)
 const ocrProvider: OCRProvider = new TesseractOCRProvider(
   useRuntimeConfig().app.baseURL,
 )
-/** OCR処理を実行しているか。 */
-const ocrRunning = ref(false)
 /** OCRエンジンから通知された進捗値。 */
 const ocrProgress = ref<number | null>(null)
 /** OCRエンジンが現在実行している処理の説明。 */
@@ -360,18 +351,6 @@ const {
   setMessage,
   logDiagnostic,
 })
-// OCR開始時は結果を確認するOCRタブへ移動する。
-watch(ocrRunning, (running) => {
-  if (running)
-    switchInspectorTab('ocr')
-})
-
-// マスク編集開始時は領域設定のタブへ移動する。
-watch(maskEditing, (editing) => {
-  if (editing)
-    switchInspectorTab('region')
-})
-
 /** 下書きまたは保存済み文書から構成したカード一覧。 */
 const projectCards = computed(() => {
   const documentValue = folderDocument.value
@@ -572,43 +551,9 @@ onMounted(() => {
     void openProject(true)
 })
 
-// 手動補修以外の背景方式に変わったらマスク描画を終了する。
-watch(
-  () => editor.selectedRegion.value?.backgroundMode,
-  (mode) => {
-    if (mode !== 'manual')
-      maskEditing.value = false
-  },
-)
-
-// 別の領域を選んだら保護領域の選択と編集モードを解除する。
-watch(
-  () => editor.selectedRegionId.value,
-  () => {
-    selectedExclusionId.value = null
-    exclusionEditing.value = false
-    clearOCRCandidate()
-  },
-)
-
-// 保護領域が削除されたら無効になった選択IDを解除する。
-watch(
-  () => editor.selectedRegion.value?.exclusionAreas,
-  (areas) => {
-    if (
-      selectedExclusionId.value
-      && !areas?.some(area => area.id === selectedExclusionId.value)
-    ) {
-      selectedExclusionId.value = null
-    }
-  },
-  { deep: true },
-)
-
 // 画面終了時にタイマー・イベント・画像・フォント・OCRのリソースを解放する。
 onBeforeUnmount(() => {
   editorDisposed = true
-  editorTools.$reset()
   window.removeEventListener('keydown', handleEditorKeydown)
   projectRuntime.dispose()
   projectStore.clearProject()
@@ -855,14 +800,15 @@ const { selectProjectCard: navigateToCard, selectProjectRegion: navigateToRegion
   currentImageId,
   loadingCardId,
   pendingCardDeletionIds,
-  view: { maskEditing, exclusionEditing, selectedExclusionId, currentView },
+  currentView,
+  resetCardSelection: workspace.resetCardSelection,
+  clearOCRCandidate,
   isActive: () => !editorDisposed,
   loadImage,
   applyLoadedImage,
   detectAndApplyCardDpi,
   cacheCardThumbnail,
   persistCardThumbnail,
-  clearOCRCandidate,
   showBatchOCRCandidates,
   switchInspectorTab,
   setMessage,
@@ -1040,7 +986,7 @@ async function openProject(sample = false) {
 /** カード編集とアセット編集を切り替える。 */
 function switchView(view: 'card' | 'assets') {
   currentView.value = view
-  editorTools.stopEditing()
+  workspace.stopEditing()
   assetEditing.value = false
   assetRecropId.value = null
 }
@@ -1050,21 +996,7 @@ function openPrintLayout() {
   if (!folderDocument.value || !projectDirectory.value)
     return
   currentView.value = 'print'
-  editorTools.stopEditing()
-}
-
-/** 原文消去用マスクの描画モードを切り替える。 */
-function toggleMaskEditing() {
-  editorTools.toggleMaskEditing()
-  if (maskEditing.value)
-    assetEditing.value = false
-}
-
-/** 保護領域の作成・調整モードを切り替える。 */
-function toggleExclusionEditing() {
-  editorTools.toggleExclusionEditing()
-  if (exclusionEditing.value)
-    assetEditing.value = false
+  workspace.stopEditing()
 }
 </script>
 
