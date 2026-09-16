@@ -217,6 +217,8 @@ onBeforeUnmount(() => {
   disposed = true
   processingController.value?.abort()
   largePdfWarning.value?.resolve(false)
+  ocrRunning.value = false
+  ocrStatus.value = ''
   void ocrProvider.dispose?.().catch(() => undefined)
   if (pdfFontFace.value)
     document.fonts.delete(pdfFontFace.value)
@@ -280,8 +282,9 @@ async function addOcrArea(area: PdfProtectedArea) {
   const current = analysis.value
   const page = previewPage.value
   const image = previewImage.value
-  if (!current || !page || !image || ocrRunning.value)
+  if (disposed || !current || !page || !image || ocrRunning.value)
     return
+  const isCurrent = () => !disposed && analysis.value === current && previewPageNumber.value === page.pageNumber
   ocrRunning.value = true
   ocrProgress.value = 0
   ocrStatus.value = 'OCRを初期化しています…'
@@ -293,15 +296,19 @@ async function addOcrArea(area: PdfProtectedArea) {
       width: area.width * rasterScale,
       height: area.height * rasterScale,
     }, { scale: 2, padding: 8 })
+    if (!isCurrent())
+      return
     const result = await ocrProvider.recognize(blob, {
       language: 'eng',
       layout: 'text-block',
       onProgress: (progress) => {
+        if (!isCurrent())
+          return
         ocrProgress.value = progress.progress
         ocrStatus.value = progress.status
       },
     })
-    if (analysis.value !== current || previewPageNumber.value !== page.pageNumber)
+    if (!isCurrent())
       return
     const added = addPdfOcrEntry(current, page.pageNumber, area, result.text)
     analysis.value = added.analysis
@@ -310,14 +317,18 @@ async function addOcrArea(area: PdfProtectedArea) {
     message.value = `${added.entry.id} をOCR結果としてCSV対象へ追加しました。`
   }
   catch (error) {
+    if (!isCurrent())
+      return
     message.value = pdfProcessingErrorMessage(
       error,
       '選択範囲をOCRできませんでした。',
     )
   }
   finally {
-    ocrRunning.value = false
-    ocrStatus.value = ''
+    if (!disposed) {
+      ocrRunning.value = false
+      ocrStatus.value = ''
+    }
   }
 }
 

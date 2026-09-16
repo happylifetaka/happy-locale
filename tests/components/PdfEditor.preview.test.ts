@@ -4,18 +4,28 @@ import { flushPromises, shallowMount } from '@vue/test-utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import PdfEditor from '~/features/pdf/PdfEditor.vue'
+import * as pdfService from '~/services/pdf'
 import { serializePdfTranslationCsv } from '~/services/pdf'
 
 const io = vi.hoisted(() => ({
   analyzePdf: vi.fn<typeof import('~/services/pdf').analyzePdf>(),
   renderPdfPagePreview: vi.fn<typeof import('~/services/pdf').renderPdfPagePreview>(),
 }))
+const ocr = vi.hoisted(() => ({
+  prepareRegionForOCR: vi.fn<typeof import('~/services/ocr/image').prepareRegionForOCR>(),
+  recognize: vi.fn<import('~/services/ocr/types').OCRProvider['recognize']>(),
+  dispose: vi.fn<() => Promise<void>>(),
+}))
+vi.mock('~/services/ocr/image', () => ({ prepareRegionForOCR: ocr.prepareRegionForOCR }))
 vi.mock('~/services/pdf', async importOriginal => ({
   ...await importOriginal<typeof import('~/services/pdf')>(),
   ...io,
 }))
 vi.mock('~/services/ocr/tesseract', () => ({
-  TesseractOCRProvider: class { dispose = async () => {} },
+  TesseractOCRProvider: class {
+    recognize = ocr.recognize
+    dispose = ocr.dispose
+  },
 }))
 let wrapper: ReturnType<typeof shallowMount<typeof PdfEditor>> | undefined
 
@@ -30,6 +40,7 @@ beforeEach(() => {
     useUnsavedChanges: () => ({ leaveConfirmationOpen: ref(false), confirmLeave: async () => true, resolveLeave: () => {} }),
   })) vi.stubGlobal(name, value)
   vi.stubGlobal('Image', class {
+    naturalWidth = 1200
     onload: (() => void) | null = null
     onerror: (() => void) | null = null
     source = ''
@@ -44,6 +55,9 @@ beforeEach(() => {
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview')
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   io.renderPdfPagePreview.mockResolvedValue(new Blob(['page']))
+  ocr.prepareRegionForOCR.mockResolvedValue(new Blob(['ocr']))
+  ocr.recognize.mockResolvedValue({ text: 'Recognized text', confidence: 90, blocks: [] })
+  ocr.dispose.mockResolvedValue(undefined)
   const analysis: PdfAnalysis = {
     fileName: 'rules.pdf',
     sourceFingerprint: 'a'.repeat(64),
@@ -161,4 +175,65 @@ it('keeps selection and exclusion consistent through split, reorder and merge', 
   expect(wrapper!.get('textarea').element.value).toContain('Second line')
   await clickButton('CSV対象へ戻す')
   expect(canvas.props('excludedEntryIds').size).toBe(0)
+})
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+it('adds OCR results to the current page and selects the new entry', async () => {
+  await openPdf()
+  await clickButton('範囲を選んでOCR')
+  const canvas = wrapper!.getComponent({ name: 'PdfPreviewCanvas' })
+  canvas.vm.$emit('add-ocr-area', { x: 10, y: 20, width: 80, height: 30 })
+  await flushPromises()
+  expect(ocr.prepareRegionForOCR).toHaveBeenCalledWith(expect.anything(), { x: 20, y: 40, width: 160, height: 60 }, { scale: 2, padding: 8 })
+  expect(canvas.props('entries')).toHaveLength(2)
+  const added = canvas.props('entries').find((entry: { original: string }) => entry.original === 'Recognized text')
+  expect(added).toBeDefined()
+  expect(canvas.props('selectedEntryId')).toBe(added.id)
+  expect(canvas.props('ocrEditing')).toBe(false)
+  expect(wrapper!.get('textarea').element.value).toBe('Recognized text')
+})
+
+it.each([
+  ['prepare', 'resolve'],
+  ['prepare', 'reject'],
+  ['recognize', 'resolve'],
+  ['recognize', 'reject'],
+] as const)('ignores OCR %s completion with %s after unmount', async (stage, completion) => {
+  await openPdf()
+  const preparation = deferred<Blob>()
+  const recognition = deferred<import('~/services/ocr/types').OCRResult>()
+  if (stage === 'prepare')
+    ocr.prepareRegionForOCR.mockReturnValueOnce(preparation.promise)
+  else
+    ocr.recognize.mockReturnValueOnce(recognition.promise)
+  const addEntry = vi.spyOn(pdfService, 'addPdfOcrEntry')
+  const formatError = vi.spyOn(pdfService, 'pdfProcessingErrorMessage')
+  wrapper!.getComponent({ name: 'PdfPreviewCanvas' }).vm.$emit('add-ocr-area', { x: 10, y: 20, width: 80, height: 30 })
+  await flushPromises()
+  wrapper!.unmount()
+  wrapper = undefined
+  expect(ocr.dispose).toHaveBeenCalledOnce()
+  if (stage === 'prepare') {
+    if (completion === 'resolve')
+      preparation.resolve(new Blob(['ocr']))
+    else preparation.reject(new Error('late preprocessing failure'))
+  }
+  else {
+    if (completion === 'resolve')
+      recognition.resolve({ text: 'Late result', confidence: 90, blocks: [] })
+    else recognition.reject(new Error('late recognition failure'))
+  }
+  await flushPromises()
+  expect(ocr.recognize).toHaveBeenCalledTimes(stage === 'prepare' ? 0 : 1)
+  expect(addEntry).not.toHaveBeenCalled()
+  expect(formatError).not.toHaveBeenCalled()
 })
