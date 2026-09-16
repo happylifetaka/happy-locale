@@ -1,0 +1,247 @@
+{
+  "startedAt": "2026-09-16T22:15:37.442Z",
+  "cases": [
+    {
+      "id": "sequence",
+      "source": "Draw 2 cards, then keep 1.",
+      "check": "2枚引いてから1枚残す順序"
+    },
+    {
+      "id": "condition",
+      "source": "If your reserve is empty, gain 1 point.",
+      "check": "予備が空の場合だけ得る条件"
+    },
+    {
+      "id": "negation",
+      "source": "Do not discard this card.",
+      "check": "捨ててはいけないという否定"
+    },
+    {
+      "id": "optional",
+      "source": "You may stop on an occupied space.",
+      "check": "止まることが任意である"
+    },
+    {
+      "id": "limit",
+      "source": "Move up to 3 spaces.",
+      "check": "必ず3マスではなく最大3マス"
+    },
+    {
+      "id": "target",
+      "source": "Move one marker from this card to your reserve.",
+      "check": "移動元・移動先・1個という数量"
+    },
+    {
+      "id": "icon",
+      "source": "When you enter this place, gain 2 [icon:sun].",
+      "check": "入ったときにsunを2個得る"
+    },
+    {
+      "id": "cost",
+      "source": "Spend 2 [icon:drop] to move up to 3 spaces.",
+      "check": "dropを2個消費して最大3マス移動"
+    },
+    {
+      "id": "repeat",
+      "source": "Spend 1 [icon:sun] to gain 2 [icon:sun].",
+      "check": "sunの消費1個と獲得2個を混同しない"
+    },
+    {
+      "id": "multiple",
+      "source": "Spend 1 [icon:drop] to gain 2 [icon:sun].",
+      "check": "消費dropと獲得sunを混同しない"
+    },
+    {
+      "id": "japanese-name",
+      "source": "Gain 1 [icon:太陽].",
+      "check": "日本語のアセット名を保持する"
+    }
+  ],
+  "environment": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "translator": true,
+    "availability": "downloadable"
+  },
+  "result": {
+    "initializationMs": 4280,
+    "results": [
+      {
+        "id": "sequence",
+        "mode": "raw",
+        "input": "Draw 2 cards, then keep 1.",
+        "rawOutput": "カードを2枚引いてから1枚残します。",
+        "restored": "カードを2枚引いてから1枚残します。",
+        "elapsedMs": 18,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "condition",
+        "mode": "raw",
+        "input": "If your reserve is empty, gain 1 point.",
+        "rawOutput": "リザーブが空の場合は、1 ポイントを獲得します。",
+        "restored": "リザーブが空の場合は、1 ポイントを獲得します。",
+        "elapsedMs": 6,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "negation",
+        "mode": "raw",
+        "input": "Do not discard this card.",
+        "rawOutput": "このカードを破棄しないでください。",
+        "restored": "このカードを破棄しないでください。",
+        "elapsedMs": 4,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "optional",
+        "mode": "raw",
+        "input": "You may stop on an occupied space.",
+        "rawOutput": "占有スペースで立ち寄ることができます。",
+        "restored": "占有スペースで立ち寄ることができます。",
+        "elapsedMs": 4,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "limit",
+        "mode": "raw",
+        "input": "Move up to 3 spaces.",
+        "rawOutput": "最大 3 つのスペースに移動します。",
+        "restored": "最大 3 つのスペースに移動します。",
+        "elapsedMs": 4,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "target",
+        "mode": "raw",
+        "input": "Move one marker from this card to your reserve.",
+        "rawOutput": "このカードからあなたの予備にマーカーを 1 つ移動します。",
+        "restored": "このカードからあなたの予備にマーカーを 1 つ移動します。",
+        "elapsedMs": 5,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "icon",
+        "mode": "raw",
+        "input": "When you enter this place, gain 2 [icon:sun].",
+        "rawOutput": "この場所に入ると、2 [icon:sun] を獲得します。",
+        "restored": "この場所に入ると、2 [icon:sun] を獲得します。",
+        "elapsedMs": 6,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "icon",
+        "mode": "placeholder",
+        "input": "When you enter this place, gain 2 ZXQICON1QXZ.",
+        "rawOutput": "この場所に入ると、2 ZXQICON1QXZ を獲得します。",
+        "restored": "この場所に入ると、2 [icon:sun] を獲得します。",
+        "elapsedMs": 7,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "cost",
+        "mode": "raw",
+        "input": "Spend 2 [icon:drop] to move up to 3 spaces.",
+        "rawOutput": "[アイコン:ドロップ] を 2 つ使用して、最大 3 つのスペースに移動します。",
+        "restored": "[アイコン:ドロップ] を 2 つ使用して、最大 3 つのスペースに移動します。",
+        "elapsedMs": 7,
+        "placeholdersIntact": true,
+        "tagsIntact": false,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "cost",
+        "mode": "placeholder",
+        "input": "Spend 2 ZXQICON1QXZ to move up to 3 spaces.",
+        "rawOutput": "2 zxqicon1qxz を使用して、最大 3 つのスペースに移動します。",
+        "restored": "2 zxqicon1qxz を使用して、最大 3 つのスペースに移動します。",
+        "elapsedMs": 8,
+        "placeholdersIntact": false,
+        "tagsIntact": false,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "repeat",
+        "mode": "raw",
+        "input": "Spend 1 [icon:sun] to gain 2 [icon:sun].",
+        "rawOutput": "1 [icon:sun] を 2 [icon:sun] にします。",
+        "restored": "1 [icon:sun] を 2 [icon:sun] にします。",
+        "elapsedMs": 7,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "repeat",
+        "mode": "placeholder",
+        "input": "Spend 1 ZXQICON1QXZ to gain 2 ZXQICON2QXZ.",
+        "rawOutput": "1 ZXQICON1QXZ を 2 ZXQICON2QXZ にするために使用します。",
+        "restored": "1 [icon:sun] を 2 [icon:sun] にするために使用します。",
+        "elapsedMs": 9,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "multiple",
+        "mode": "raw",
+        "input": "Spend 1 [icon:drop] to gain 2 [icon:sun].",
+        "rawOutput": "1 [icon:drop] を 2 獲得する [icon:sun]。",
+        "restored": "1 [icon:drop] を 2 獲得する [icon:sun]。",
+        "elapsedMs": 8,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "multiple",
+        "mode": "placeholder",
+        "input": "Spend 1 ZXQICON1QXZ to gain 2 ZXQICON2QXZ.",
+        "rawOutput": "1 ZXQICON1QXZ を 2 ZXQICON2QXZ にするために使用します。",
+        "restored": "1 [icon:drop] を 2 [icon:sun] にするために使用します。",
+        "elapsedMs": 9,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "japanese-name",
+        "mode": "raw",
+        "input": "Gain 1 [icon:太陽].",
+        "rawOutput": "ゲイン 1 [アイコン:大体]。",
+        "restored": "ゲイン 1 [アイコン:大体]。",
+        "elapsedMs": 4,
+        "placeholdersIntact": true,
+        "tagsIntact": false,
+        "semanticReview": "pending"
+      },
+      {
+        "id": "japanese-name",
+        "mode": "placeholder",
+        "input": "Gain 1 ZXQICON1QXZ.",
+        "rawOutput": "1 ZXQICON1QXZ を獲得します。",
+        "restored": "1 [icon:太陽] を獲得します。",
+        "elapsedMs": 5,
+        "placeholdersIntact": true,
+        "tagsIntact": true,
+        "semanticReview": "pending"
+      }
+    ]
+  }
+}

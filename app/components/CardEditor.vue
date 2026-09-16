@@ -276,6 +276,9 @@ const glossaryOpen = ref(false)
 /** 翻訳要求と候補の状態。確定した変更だけを編集履歴に反映する。 */
 const {
   translationRunning,
+  browserProgress,
+  cancelBrowserTranslation,
+  browserTranslate,
   translationRequest,
   translationPreview,
   sampleTranslate,
@@ -927,7 +930,7 @@ provideCardOCR({
   candidates: candidateEditing,
 })
 provideCardTranslation({
-  enabled: computed(() => isDemo.value || (translationEndpointEnabled && translationSettings.value.provider === 'local')),
+  enabled: computed(() => isDemo.value || translationSettings.value.provider === 'browser' || (translationEndpointEnabled && translationSettings.value.provider === 'local')),
   running: translationRunning,
   glossary,
   reusableCount: computed(() => reusableTranslations.value.length),
@@ -969,6 +972,12 @@ provideCardTranslation({
       @update="updateGlossaryEntry"
       @remove="removeGlossaryEntry"
     />
+    <div v-if="browserProgress" class="notice" role="status">
+      {{ browserProgress }}
+      <button type="button" @click="cancelBrowserTranslation">
+        翻訳を中止
+      </button>
+    </div>
     <TranslationSettingsDialog
       :endpoint-enabled="translationEndpointEnabled"
       :open="translationSettingsOpen"
@@ -989,7 +998,8 @@ provideCardTranslation({
       :initial-import="translationReview.initialImport"
       :auto-translate="translationReview.autoTranslate"
       :load-image="loadReviewImage"
-      :translate="isDemo ? sampleTranslate : undefined"
+      :translate="isDemo ? sampleTranslate : translationSettings.provider === 'browser' ? browserTranslate : undefined"
+      :browser-translation="!isDemo && translationSettings.provider === 'browser'"
       :error="translationReviewError"
       :applied-rows="translationReviewApplied"
       @apply="applyTranslationReview"
@@ -1108,7 +1118,7 @@ provideCardTranslation({
           デモ：左側の「まとめて領域検出」→「選択した候補を追加」→ 左側の「まとめて翻訳」→PDF(A4)作成で翻訳からPDF作成の流れを体験できます。<br>
           デモでは領域・原文・翻訳・アセットはデモ用データを使います。実際はOCR認識、アセット登録、翻訳をする必要があります。<br>
         </p>
-        <div v-if="isDemo && editor.project.value.regions.length" class="batch-translation-actions">
+        <div v-if="(isDemo || translationSettings.provider === 'browser') && editor.project.value.regions.length" class="batch-translation-actions">
           <button
             type="button"
             :disabled="translationRunning || !batchTranslationRegions.length"

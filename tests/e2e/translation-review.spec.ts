@@ -8,7 +8,7 @@ test('reviews a dense list without losing the current row when expanding images'
     await page.getByRole('button', { name: '選択した候補を追加', exact: true }).click()
   await page.getByRole('button', { name: 'まとめて翻訳', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '翻訳をまとめて確認', exact: true })
-  await expect(dialog.getByRole('status').first()).toHaveText('20件の取得が完了しました。候補を確認して反映してください。')
+  await expect(dialog.getByRole('status').first()).toHaveText(/^20件の候補を取得（既存訳\d+件）、失敗0件。候補を確認して反映してください。$/u)
   const rows = dialog.locator('.review-row')
   const body = dialog.locator('.review-body')
   await expect(rows).toHaveCount(20)

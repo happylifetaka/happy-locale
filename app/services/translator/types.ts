@@ -1,4 +1,4 @@
-export type TranslationProviderKind = 'manual' | 'local'
+export type TranslationProviderKind = 'manual' | 'local' | 'browser'
 
 export interface TranslationProvider {
   translate: (

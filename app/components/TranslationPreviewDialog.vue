@@ -1,5 +1,7 @@
 <script setup lang="ts">
-defineProps<{
+import { translationNumberDifferences } from '~/utils/translation-number-differences'
+
+const props = defineProps<{
   originalText: string
   currentTranslation: string
   proposedTranslation: string
@@ -9,6 +11,8 @@ defineEmits<{
   apply: []
   cancel: []
 }>()
+
+const numberWarnings = computed(() => translationNumberDifferences(props.originalText, props.proposedTranslation))
 </script>
 
 <template>
@@ -40,6 +44,11 @@ defineEmits<{
           <textarea :value="proposedTranslation" rows="6" readonly />
         </label>
       </div>
+      <ul v-if="numberWarnings.length" role="status">
+        <li v-for="warning in numberWarnings" :key="warning">
+          {{ warning }}
+        </li>
+      </ul>
       <div class="confirmation-actions">
         <button type="button" autofocus @click="$emit('cancel')">
           破棄

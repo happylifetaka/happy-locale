@@ -1,7 +1,9 @@
 import type { Ref } from 'vue'
 import type { useCardEditor } from '~/composables/useCardEditor'
+import type { BrowserTranslationOptions } from '~/services/translator/browser'
 import type { TranslationSettings } from '~/services/translator/types'
-import { ref, shallowRef } from 'vue'
+import { onBeforeUnmount, ref, shallowRef } from 'vue'
+import { browserTranslationError, BrowserTranslationProvider } from '~/services/translator/browser'
 import { LocalTranslationProvider, translationErrorMessage } from '~/services/translator/local'
 import { SampleTranslationProvider } from '~/services/translator/sample'
 import { statusForTranslation } from '~/utils/translation-status'
@@ -28,6 +30,22 @@ export function useEditorTranslation({
 }: EditorTranslationOptions) {
   /** 翻訳候補の取得処理中か。 */
   const translationRunning = ref(false)
+  const browserProgress = ref('')
+  let browserController: AbortController | null = null
+  function cancelBrowserTranslation() {
+    browserController?.abort()
+  }
+  onBeforeUnmount(cancelBrowserTranslation)
+  async function browserTranslate(text: string, options: BrowserTranslationOptions = {}) {
+    try {
+      return await new BrowserTranslationProvider().translate(text, 'en', 'ja', options)
+    }
+    catch (error) {
+      if (options.signal?.aborted)
+        throw error
+      throw new Error(browserTranslationError(error))
+    }
+  }
   /** 送信確認に表示する原文・接続先・対象領域。 */
   const translationRequest = shallowRef<{
     cardId: string
@@ -56,27 +74,36 @@ export function useEditorTranslation({
     if (
       !region
       || (!isDemo.value
+        && translationSettings.value.provider !== 'browser'
         && (!translationEndpointEnabled || translationSettings.value.provider !== 'local'))
       || translationRunning.value
     ) {
       return
     }
-    if (isDemo.value) {
+    if (isDemo.value || translationSettings.value.provider === 'browser') {
       const cardId = currentImageId.value
       const originalText = region.originalText
       const currentTranslation = region.translatedText
       translationRunning.value = true
       try {
-        const proposedTranslation = await sampleTranslate(originalText)
-        if (cardId !== currentImageId.value)
+        browserController = new AbortController()
+        const proposedTranslation = isDemo.value
+          ? await sampleTranslate(originalText)
+          : await browserTranslate(originalText, { signal: browserController.signal, onProgress: message => browserProgress.value = message })
+        const current = editor.project.value.regions.find(item => item.id === region.id)
+        if (cardId !== currentImageId.value || !current || current.originalText !== originalText || current.translatedText !== currentTranslation) {
+          setMessage('対象が変更されたため、翻訳候補を破棄しました。')
           return
+        }
         translationPreview.value = { cardId, regionId: region.id, originalText, currentTranslation, proposedTranslation }
       }
       catch (error) {
-        setMessage(error instanceof Error ? error.message : 'サンプル翻訳に失敗しました。')
+        setMessage(browserTranslationError(error))
       }
       finally {
         translationRunning.value = false
+        browserController = null
+        browserProgress.value = ''
       }
       return
     }
@@ -158,6 +185,9 @@ export function useEditorTranslation({
 
   return {
     translationRunning,
+    browserProgress,
+    cancelBrowserTranslation,
+    browserTranslate,
     translationRequest,
     translationPreview,
     sampleTranslate,
