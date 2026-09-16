@@ -14,15 +14,15 @@
 
 カード編集では、コンポーザブルの強みを既に活かせている。
 
-- [useCardEditor](../app/composables/useCardEditor.ts) は選択領域、編集操作、カード別のUndo／Redoをまとめている。
-- [usePreviewDeferral](../app/composables/usePreviewDeferral.ts) は描画の延期、対象変更の監視、タイマー解除を担当する。
-- [useUnsavedChanges](../app/composables/useUnsavedChanges.ts) はカードとPDFの両画面で離脱確認を共通化している。
-- [usePrintPreviews](../app/composables/usePrintPreviews.ts) は描画処理を外から受け取り、状態と画像URLの寿命を管理する。
+- [useCardEditor](../../app/composables/useCardEditor.ts) は選択領域、編集操作、カード別のUndo／Redoをまとめている。
+- [usePreviewDeferral](../../app/composables/usePreviewDeferral.ts) は描画の延期、対象変更の監視、タイマー解除を担当する。
+- [useUnsavedChanges](../../app/composables/useUnsavedChanges.ts) はカードとPDFの両画面で離脱確認を共通化している。
+- [usePrintPreviews](../../app/composables/usePrintPreviews.ts) は描画処理を外から受け取り、状態と画像URLの寿命を管理する。
 - `tests/composables/` に履歴、資源管理、離脱確認などのテストがある。
 
-一方、[PdfEditor.vue](../app/features/pdf/PdfEditor.vue) はプレビュー、OCR、領域編集、読み込み、書き出しを一つのscriptに持つ。
-[CardEditor.vue](../app/components/CardEditor.vue) にも、多数の処理中フラグと機能間の接続が残っている。
-[useProjectCards](../app/composables/useProjectCards.ts) など、親から多数のRefやコールバックを受け取る箇所は、状態の所有範囲を再検討できる。
+一方、[PdfEditor.vue](../../app/features/pdf/PdfEditor.vue) はプレビュー、OCR、領域編集、読み込み、書き出しを一つのscriptに持つ。
+[CardEditor.vue](../../app/components/CardEditor.vue) にも、多数の処理中フラグと機能間の接続が残っている。
+[useProjectCards](../../app/composables/useProjectCards.ts) など、親から多数のRefやコールバックを受け取る箇所は、状態の所有範囲を再検討できる。
 
 これはコードを読んだ設計上の評価であり、本提案の作成時にはテストを実行していない。
 
@@ -197,11 +197,11 @@ OCR・印刷などの下位ディレクトリは、関連ファイルの数と�
 
 ## 関連資料
 
-- [アーキテクチャの考え方](./architecture-guide.md)
+- [アーキテクチャの考え方](../architecture-guide.md)
 - [CardEditor.vue分割計画](./CARD_EDITOR_REFACTORING_PLAN.md)
 - [CardEditor.vue追加改善計画](./CARD_EDITOR_REFACTORING_PHASE2_PLAN.md)
 - [CardEditingWorkspace分割・状態と操作の所有整理計画](./CARD_EDITOR_WORKSPACE_PLAN.md)
-- [PDF翻訳ロードマップ](./PDF_TRANSLATION_ROADMAP.md)
+- [PDF翻訳ロードマップ](../PDF_TRANSLATION_ROADMAP.md)
 
 ## 実装記録: 2026-09-16（PDFプレビュー）
 

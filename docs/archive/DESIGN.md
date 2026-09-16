@@ -1,10 +1,12 @@
 # HappyLocale Design Doc: Piniaによるプロジェクト状態管理の提案
 
 最終更新: 2026-09-03
-ステータス: 段階移行中（projectStoreとRuntime Cacheを採用）
+記録時点のステータス: 段階移行中（projectStoreとRuntime Cacheを採用）
+
+アーカイブ: 2026-09-16。採用した設計の背景として保存し、現在の実装説明は[アーキテクチャ](../architecture.md)へ引き継ぎます。
 
 > [!NOTE]
-> Piniaと`projectStore`、Runtime Cacheの`useProjectRuntime`は採用済みです。表示中カードの編集状態は`useCardEditor`がカード別Undo履歴を維持し、変更のたびにStore actionへ同期します。現在の構成は[`docs/architecture.md`](architecture.md)を参照してください。
+> Piniaと`projectStore`、Runtime Cacheの`useProjectRuntime`は採用済みです。表示中カードの編集状態は`useCardEditor`がカード別Undo履歴を維持し、変更のたびにStore actionへ同期します。現在の構成は[`docs/architecture.md`](../architecture.md)を参照してください。
 
 ## 概要
 

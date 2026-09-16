@@ -153,7 +153,7 @@ ESLintは`@antfu/eslint-config`を使用し、Prettierは使用していませ�
 
 - [利用ガイド](docs/user-guide.md)
 - [現在のアーキテクチャ](docs/architecture.md)
-- [Pinia移行提案](docs/DESIGN.md)
+- [Pinia移行の設計記録（アーカイブ）](docs/archive/DESIGN.md)
 - [開発引き継ぎ](docs/DEVELOPMENT.md)
 - [手動回帰確認](docs/MANUAL_TESTS.md)
 - [機能ロードマップ](docs/ROADMAP.md)

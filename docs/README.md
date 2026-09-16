@@ -16,13 +16,14 @@
 - [開発情報・引き継ぎ](DEVELOPMENT.md)
 - [手動回帰確認](MANUAL_TESTS.md)
 - [機能ロードマップ](ROADMAP.md)
-- [CardEditor.vue分割計画](CARD_EDITOR_REFACTORING_PLAN.md)
-- [コンポーザブル活用の改善案](COMPOSABLE_IMPROVEMENT_PLAN.md)
 - [PDF翻訳ロードマップ](PDF_TRANSLATION_ROADMAP.md)
-- [Pinia移行の設計記録](DESIGN.md)
 
 ## 公開・運用する
 
 - [静的サイトのビルドと配置](deployment.md)
+
+## 過去の計画・設計記録
+
+- [完了済み計画・設計提案のアーカイブ](archive/README.md)
 
 設計提案・検証記録には記載時点の状態が含まれます。現在の動作はコードと利用ガイドもあわせて確認してください。
