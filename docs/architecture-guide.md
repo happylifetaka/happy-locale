@@ -1,29 +1,38 @@
 # HappyLocaleのアーキテクチャと実装の考え方
 
+最終更新: 2026-09-17
+
 このプロジェクトの設計で一番大切なのは、**「保存するデータ」「操作中の状態」「画像などのブラウザ資源」を分けて、安全に編集できるようにすること**です。VueのComposableとPiniaを使い、その周囲に保存・OCR・描画処理を配置しています。
 
 ## 全体の構成
 
 ```mermaid
 flowchart TD
-    UI["Vueコンポーネント<br/>入力・表示"] --> Editor["useCardEditor<br/>編集操作・カード別履歴"]
+    Root["CardEditor<br/>各機能の生成・接続"] --> UI["CardEditingWorkspace<br/>Canvas・Inspector"]
+    Root --> Operations["操作別composable<br/>保存・読込・カード操作・OCR・翻訳"]
+    UI --> Workspace["useCardWorkspace<br/>画面状態・領域操作"]
+    Workspace --> Editor["useCardEditor<br/>編集操作・カード別履歴"]
     Editor --> Store["projectStore / Pinia<br/>保存対象のデータ"]
-    Store --> Save["保存サービス<br/>検証・JSON・ファイル操作"]
+    Operations --> Store
+    Operations --> Save["保存サービス<br/>検証・JSON・ファイル操作"]
+    Store -. 保存対象データ .-> Save
     Save --> Disk["ユーザーのローカルフォルダ"]
     Editor --> Canvas["Canvas描画"]
     Runtime["useProjectRuntime<br/>画像・Blob・フォント"] --> Canvas
 ```
 
-`CardEditor.vue`がこれらをつなぐ調整役です。PDF編集の実装は`app/features/pdf/PdfEditor.vue`を中心に、カード編集とは別の状態・保存形式を持ちます。
+`CardEditor.vue`がこれらをつなぐ調整役です。PDF編集の実装は`app/features/pdf/PdfEditor.vue`を中心に、カード編集とは別の状態・保存形式を持ちます。ただし、現在の`/pdf`は準備中の案内ページで、PDF編集UIは公開していません。カード編集のA4面付けPDF出力は利用できます。
 
 カードのCanvas・領域Inspector・確認ダイアログの接続は`app/features/cards/`へまとめています。
 `useCardWorkspace`が画面状態を所有し、親で一度だけ生成した編集・資源・OCR・翻訳のAPIを用途別に共有します。
-保存・読込・追加・切替・一括書き出しの状態は各操作が所有し、`useProjectActivity`は排他判定に必要な状態だけを読み取ります。
-画像・フォントの解放とカード別履歴の所有者は、従来のruntimeとeditorのままです。
+保存・読込・追加・切替の状態は各操作が所有し、`useProjectActivity`は登録された状態を読み取って排他判定します。一括画像出力の状態は`useCardImageExport`が別途所有します。
+画像・フォントの解放は`useProjectRuntime`、カード別履歴は`useCardEditor`が担当します。カード用OCR Providerは`CardEditor`が生成・破棄し、OCRの各操作で共有します。
+
+子への共有は`cardEditingContext.ts`の編集・描画資源・OCR・翻訳に分けたprovide/injectを使います。資源解放や保存のAPIは共有せず、子が必要な操作に絞ります。Piniaの`editor-tools` Storeには編集モードとブラシ設定だけを置き、保存データや履歴とは分けています。
 
 PDF専用のプレビュー・項目編集・OCR・処理中状態は、`app/features/pdf/`のcomposableと隣接単体テストで確認できます。
 文書の採用と画面間の調整はPdfEditor、解析・変換・入出力の実処理は既存サービスに残します。
-複数機能が使う部品・サービス・型は共通配置を維持し、機能をまたぐ接続テストとE2Eは`tests/`に置きます。
+複数機能が使う部品・サービス・型は共通配置を維持し、機能をまたぐ接続テストとE2Eは`tests/`に置きます。カードの操作別composableは引き続き`app/composables/`にあり、機能内への配置整理は段階的です。
 
 | 担当 | 主な実装 | 責務 |
 |---|---|---|
@@ -118,6 +127,8 @@ Tesseract固有の処理をこの境界の内側へ置くことで、将来別�
 
 画像やフォントは基本的にブラウザとローカルフォルダで扱います。OCR・翻訳結果は候補として提示し、人が確認してから反映します。重い画像処理ライブラリも、効果を確認してから導入する方針です。
 
-現在の課題は、`CardEditor.vue`に調整処理が多く集まっていることと、部品同士をつないだテストがまだ少ないことです。今後分割するなら、保存・読み込みなど責務が明確な処理から切り出し、主要操作のテストと一緒に進めるのが、このプロジェクトの考え方に合っています。
+保存・読み込み・カード切替などの操作分離と、カードWorkspace・PDFの配置整理は実施済みです。`tests/components/`には部品同士をつないだ統合テスト、`tests/e2e/`にはサンプルを使ったブラウザ操作のテストがあります。
+
+今後は、残る機能間の調整や機能専用コードの配置を、変更の必要性に応じて見直します。実フォルダの権限・保存などの手動確認、大規模プロジェクトの性能計測、PDF再公開時の接続確認は引き続き課題です。
 
 詳しい現状は[アーキテクチャ文書](architecture.md)、状態分離の背景は[アーカイブの設計記録](archive/DESIGN.md)にまとまっています。

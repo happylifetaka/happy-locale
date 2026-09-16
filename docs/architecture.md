@@ -1,6 +1,6 @@
 # HappyLocale アーキテクチャ
 
-最終更新: 2026-08-31
+最終更新: 2026-09-17
 
 この文書は現在の実装を説明します。Pinia移行時の設計背景は[アーカイブの設計記録](archive/DESIGN.md)、今後の機能計画は[ロードマップ](ROADMAP.md)を参照してください。
 
@@ -32,6 +32,14 @@ CardEditor
   ├─ projectStore             project.json互換の正規データ
   ├─ useCardEditor            カード単位の編集状態と操作
   ├─ useHistory               JSON互換スナップショット履歴
+  ├─ useProjectRuntime        画像・フォント・フォルダ等の寿命管理
+  ├─ 操作別composable         保存・読込・カード操作・OCR・翻訳
+  └─ features/cards
+       ├─ useCardWorkspace    画面状態と領域操作
+       ├─ useProjectActivity  保存・読込・追加・切替の排他判定
+       └─ CardEditingWorkspace → Canvas・Inspector・確認ダイアログ
+
+操作別composableと描画UI
   ├─ services/project         project.jsonとフォルダI/O
   ├─ services/ocr             OCR Providerと前処理
   ├─ services/translator      翻訳Provider
@@ -39,9 +47,17 @@ CardEditor
   └─ utils/canvas             背景・文字・アセット描画
 ```
 
-カード編集とPDF翻訳は状態・保存形式・画面を分離し、作業選択ホームから移動します。ホームでは共通ナビゲーションを表示し、編集画面では縦の作業領域を確保するため、各ツールバー左端の`WorkspaceSwitcher`へホーム・カード・PDF間の移動を集約します。カード編集のツールバーは作業切替、編集モード、保存、履歴を主要操作とし、低頻度のプロジェクト変更、CSV、用語集、翻訳設定をツールメニューへ集約します。右パネルは一覧・領域・OCR・翻訳・印刷範囲の排他的な5タブです。A4面付けは右パネルへ押し込まず、カード一覧からメイン作業領域へ開きます。`CardEditor.vue`は現在、プロジェクト全体の調整役として多くの状態と副作用を保持しています。機能は成立していますが、今後変更が集中する場合の分割候補です。
+カード編集とPDF翻訳は状態・保存形式・画面を分離し、作業選択ホームから移動します。ホームでは共通ナビゲーションを表示し、編集画面では縦の作業領域を確保するため、各ツールバー左端の`WorkspaceSwitcher`へホーム・カード・PDF間の移動を集約します。カード編集のツールバーは作業切替、編集モード、保存、履歴を主要操作とし、低頻度のプロジェクト変更、CSV、用語集、翻訳設定をツールメニューへ集約します。右パネルは一覧・領域・OCR・翻訳・印刷範囲の排他的な5タブです。A4面付けは右パネルへ押し込まず、カード一覧からメイン作業領域へ開きます。`CardEditor.vue`は、Store・編集・ランタイムと操作別composableを生成して接続する調整役です。保存は`useProjectPersistence`、読込は`useProjectSession`、カード操作は`useProjectCards`、切替は`useProjectNavigation`へ分離しています。OCR・翻訳・アセット・フォント・画像出力も操作別composableが担当します。
 
 PDF編集はversion付きの専用サイドカーJSONへ解析結果、翻訳、除外ID、保護領域、描画設定を保存します。version 2でページ回転角とviewport変換行列を追加し、version 1は無回転の変換行列を補って移行します。元PDFのバイト列は保存せず、解析時に計算したSHA-256指紋を保持します。復元時に利用者が再選択した元PDFの指紋が一致した場合だけ状態を読み込みます。
+
+## 機能内の配置と接続
+
+カード編集専用の接続は`app/features/cards/`へ配置しています。`useCardWorkspace`は表示倍率・プレビューモード・Inspectorタブ・領域操作をまとめ、`CardEditingWorkspace`がCanvas・Inspector・領域の確認ダイアログを接続します。印刷・アセット画面への切替ではWorkspaceを破棄せず、選択と表示倍率を保持します。
+
+`cardEditingContext.ts`は編集・描画資源・OCR・翻訳の用途別に型付きのprovide/injectを定義します。親で作った同じインスタンスを共有し、保存・資源解放などのAPIは子へ公開しません。原文アイコン確認の`useSourceIcons`はWorkspaceで生成し、その配下だけへ共有します。
+
+PDF専用UIとcomposable、その単体テストは`app/features/pdf/`へまとめています。複数機能が使う部品・サービス・型は共通配置に残し、親画面との接続テストとE2Eは`tests/`へ置きます。既存のカード操作別composableは`app/composables/`にあり、すべての機能をコロケーション済みという意味ではありません。
 
 ## 状態の境界
 
@@ -66,6 +82,10 @@ PDF編集はversion付きの専用サイドカーJSONへ解析結果、翻訳、
 
 選択中のカード・領域、表示倍率、現在のツール、プレビュー状態、削除予定ID、未保存アセットBlobなどは実行中だけ保持します。削除予定カードは保存が成功するまで永続配列と画像ファイルを残します。
 
+`useCardWorkspace`は画面内の状態を管理し、Piniaの`editor-tools` StoreはCanvasとInspectorで共有する編集モード・ブラシ設定だけを保持します。このStoreは永続化せず、Workspaceの所有スコープ終了時にリセットします。
+
+保存・読込・追加・切替の実行状態は各composableが所有し、`useProjectActivity`が登録された参照から`busy`を導出します。一括画像出力の状態は`useCardImageExport`が別途所有します。OCRも共通の実行状態を単一領域・候補検出・一括処理で共有し、二重実行を防ぎます。
+
 ### ランタイムリソース
 
 カード編集のブラウザ固有リソースは`useProjectRuntime`が所有し、永続プロジェクト状態やUI状態から分離します。
@@ -74,11 +94,14 @@ PDF編集はversion付きの専用サイドカーJSONへ解析結果、翻訳、
 - カードサムネイル: 表示範囲付近だけ読み込むBlobとObject URL
 - アセット: `ImageBitmap`またはCanvas
 - 未保存アセット: Blob
-- フォント: `FontFace`とIndexedDB上のBlob
+- フォント: 読み込み済みの`FontFace`
 - プロジェクトフォルダ: `FileSystemDirectoryHandle`
-- OCR: 再利用するTesseract Worker
 
-カード一覧は`IntersectionObserver`で表示範囲の前後300pxを監視し、サムネイルを最大2件並列で読み込みます。キャッシュがなければ元画像を縮小して保存し、破損または規定寸法を超えるキャッシュも再生成します。Object URLは置換・プロジェクト変更・画面破棄時にrevokeし、`ImageBitmap`は不要になった時点でcloseします。登録した`FontFace`は削除時や画面破棄時に`document.fonts`から外し、OCR Workerも破棄します。
+フォントBlobのIndexedDBへの保存・復元は`useEditorFonts`と`app/services/fonts/`が担当します。
+
+カード一覧は`IntersectionObserver`で表示範囲の前後300pxを監視し、サムネイルを最大2件並列で読み込みます。キャッシュがなければ元画像を縮小して保存し、破損または規定寸法を超えるキャッシュも再生成します。Object URLは置換・プロジェクト変更・画面破棄時にrevokeし、`ImageBitmap`は不要になった時点でcloseします。登録した`FontFace`は削除時や画面破棄時に`document.fonts`から外します。
+
+カード用OCR Providerは`CardEditor`が生成・破棄し、単一領域・候補検出・一括OCRで同じWorkerを再利用します。Workerは`useProjectRuntime`の管理対象ではありません。
 
 ## Canvas描画
 
@@ -148,6 +171,10 @@ Provider境界は実装の差し替えを可能にしますが、他のOCRエン
 
 出現箇所ごとのアセット設定は、アセット名と同名トークン内の出現順を使ってテキスト編集後の位置へ追従します。対象トークンを削除した場合は対応設定も削除します。同名トークンの順番を入れ替えた場合は、利用者による確認が必要です。
 
+## 翻訳レビュー
+
+`useTranslationReview`がカード横断の確認画面、CSV取込・出力、反映操作を接続します。`TranslationReviewDialog`で訳文を編集し、`app/utils/translation-review.ts`が行モデル・確認事項・反映前の原文と訳文の照合を扱います。選択した変更だけを下書きとして反映し、一部反映では未選択の編集を保持します。自動候補取得はサンプル翻訳に対応し、通常のTranslation Endpointは個別の送信確認を使用します。
+
 ## CSV照合
 
 プロジェクト全体の翻訳CSVは`card_id + region_id`を照合キーにします。カード名、表示名、原文は確認情報で、反映するのは訳文だけです。
@@ -174,6 +201,15 @@ PDF用CSVは`pdf_name + text_id`を照合に使い、PDF名不一致、重複、
 
 ## PDF処理
 
+`/pdf`は現在「準備中」の案内のみを表示し、以下は保持している編集実装の説明です。カードのA4面付けPDF出力は引き続き利用できます。
+
+`app/features/pdf/PdfEditor.vue`が文書の採用と画面間の調整を担当し、次のcomposableへ状態と寿命管理を分離しています。解析・変換・入出力の実処理は`app/services/pdf.ts`と`app/services/pdf-project.ts`にあります。
+
+- `usePdfPreview`: ページ画像とObject URLの所有・解放、古い描画結果の不採用
+- `usePdfEntryEditing`: 項目の選択・原文修正・順序変更・結合・分割
+- `usePdfOCR`: OCR Workerと実行状態、文書・ページ変更後や破棄後の結果の不採用
+- `usePdfProcessing`: 解析・復元・書き出しの実行状態、進捗、AbortController。中止要求後も処理完了までは次の開始を拒否
+
 PDF.jsでテキストレイヤーを解析し、pdf-libで元PDFへ背景パッチと訳文を追加します。利用者がTTF / OTFを選んだ場合は`@pdf-lib/fontkit`で使用文字のサブセットを埋め込み、検索・選択可能なPDFテキストとして描画します。フォント未選択時はCanvas描画した画像文字へフォールバックします。ページ全体を画像化しないため、対象外のテキスト、図形、画像、ページ寸法を維持できます。解析時のviewport変換行列とページ回転角を保持し、表示座標とPDF描画座標を相互変換することで、90度単位の回転、CropBoxの原点・寸法、MediaBoxとの差を反映します。解析と書き出しはページ単位で進捗を通知し、`AbortSignal`によってページ処理の境界で中断できます。PDF.jsのページオブジェクトと背景画像は成功・失敗・キャンセルのいずれでもページごとに解放し、後から追加したOCR項目もページ番号で安定ソートして同じページを繰り返し描画しません。元PDFのArrayBufferもpdf-lib用とPDF.js用に必要な分だけ読み、明示的な複製を避けます。ページ数にはハード制限を設けませんが、100ページを超える場合はPDF.jsが文書情報を取得した直後かつ各ページの解析前に続行確認を挟みます。pdf-libは出力文書全体をメモリへ読み込むため、処理可能な規模はPDFの容量、画像量、文字項目数、ブラウザのメモリに左右されます。捕捉可能な`RangeError`やメモリ確保エラーは共通メッセージへ変換しますが、ブラウザプロセス自体の強制終了は捕捉できません。プレビューでは抽出原文と同一ページ内のCSV出力順を修正し、連続項目の外接矩形への結合と、改行単位で縦方向に等分する分割ができます。結合・分割では先頭項目のIDを維持し、新規項目に衝突しない派生IDを付けます。CSV対象外にした文字行はCSV出力とPDF差し替えの両方から除外します。
 
 一方、元文字の描画命令は削除せず視覚的に覆います。フォント未選択時の訳文は画像なので検索できません。PDF用フォント本体もサイドカーJSONへ保存しないため、再開後は再選択が必要です。任意角度の文字回転、縦書き、複雑な背景、フォーム、注釈などは制約として残っています。
@@ -196,14 +232,17 @@ Vitestでは次を中心に検証しています。
 - フォント入力とTranslation Endpointクライアント
 - Undo／Redo
 
-File System Access API、Canvasのポインター操作、ブラウザフォント、画像書き出しは[`MANUAL_TESTS.md`](MANUAL_TESTS.md)で補います。現在、Vueコンポーネントの統合テストとE2Eテストはなく、主要フローの回帰保証を強める余地があります。
+Vueコンポーネントの統合テストは`tests/components/`で、保存・読込・カード切替・OCR・翻訳・Workspaceとの接続などを検証します。機能内のテストは`app/features/cards/`と`app/features/pdf/`にも隣接配置しています。
+
+Playwrightの`tests/e2e/card-editor.spec.ts`は、サンプル上のCanvas操作、Undo、訳文の描画反映、Inspectorのキーボード操作、画面往復、原文アイコン確認などをブラウザで検証します。実フォルダの権限・入出力、ブラウザフォントや印刷結果などは[`MANUAL_TESTS.md`](MANUAL_TESTS.md)で補います。自動テストが実ブラウザの全機能を網羅しているわけではありません。
 
 ## 現在認識している設計上の課題
 
-- `CardEditor.vue`へプロジェクト調整とブラウザ副作用が集中している
-- Runtime Cacheが独立した抽象として分離されていない
+- `CardEditor.vue`には機能間の接続とプロジェクト全体の調整が残る。追加分割は変更頻度と責務の境界を見て判断する
+- OCR・翻訳・印刷など、カードWorkspaceとPDF以外の機能専用実装の配置整理には余地がある
 - 不正なプロジェクトを利用者が確認しながら復旧するUIがない
 - 大規模プロジェクトのメモリ・性能上限を計測していない
-- Vueコンポーネント統合テストとE2Eテストがない
+- 実フォルダの権限・保存やブラウザフォントなど、手動確認に依存する範囲が残る
+- PDF編集は公開停止中で、再公開にはルートへの接続と主要操作の確認が必要
 
 これらは既存仕様を守れる小さな単位で改善し、大規模な状態管理移行は必要性を確認してから判断します。
