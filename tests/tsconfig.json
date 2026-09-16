@@ -5,6 +5,7 @@
   },
   "include": [
     "../.nuxt/nuxt.d.ts",
-    "./**/*.ts"
+    "./**/*.ts",
+    "../app/features/**/*.test.ts"
   ]
 }

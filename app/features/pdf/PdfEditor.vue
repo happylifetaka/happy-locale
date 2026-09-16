@@ -42,6 +42,9 @@ import {
   FILE_LIMITS,
 } from '~/utils/file-limits'
 
+import PdfPreviewCanvas from './PdfPreviewCanvas.vue'
+import { usePdfPreview } from './usePdfPreview'
+
 /** 元PDFを選ぶための入力要素。 */
 const pdfInput = ref<HTMLInputElement | null>(null)
 /** 翻訳CSVを選ぶための入力要素。 */
@@ -80,14 +83,14 @@ const pdfFontFace = shallowRef<FontFace | null>(null)
 const pdfFontFamily = ref('sans-serif')
 /** 選択したPDFフォントの表示名。 */
 const pdfFontName = ref('')
-/** プレビュー中のPDFページ番号。1から始まる。 */
-const previewPageNumber = ref(1)
-/** 描画済みPDFページの表示用画像。 */
-const previewImage = shallowRef<HTMLImageElement | null>(null)
-/** PDFページ画像に割り当てた解放対象の一時URL。 */
-const previewUrl = ref<string | null>(null)
-/** PDFページのプレビューを生成・読み込み中か。 */
-const previewLoading = ref(false)
+/** プレビューの状態と画像資源は専用composableが所有する。 */
+const {
+  pageNumber: previewPageNumber,
+  image: previewImage,
+  loading: previewLoading,
+  error: previewError,
+  load: loadPreviewImage,
+} = usePdfPreview(sourceFile, renderPdfPagePreview)
 /** PDFプレビューの表示倍率。100が等倍。 */
 const previewZoom = ref(100)
 /** PDF内で選択している文字項目のID。 */
@@ -133,8 +136,6 @@ const projectSignature = computed(() => analysis.value
   : null)
 /** 画面終了後の非同期結果を反映しないための終了フラグ。 */
 let disposed = false
-/** 最新のPDFプレビュー要求を識別する連番。 */
-let previewRequest = 0
 
 /** 文字ページ・画像ページなどの解析結果の要約。 */
 const summary = computed(() => {
@@ -230,11 +231,8 @@ watch(selectedEntry, (entry) => {
 // 画面終了時に非同期処理を無効化し、確認待ち・画像・フォント等を解放する。
 onBeforeUnmount(() => {
   disposed = true
-  previewRequest += 1
   processingController.value?.abort()
   largePdfWarning.value?.resolve(false)
-  if (previewUrl.value)
-    URL.revokeObjectURL(previewUrl.value)
   void ocrProvider.dispose?.().catch(() => undefined)
   if (pdfFontFace.value)
     document.fonts.delete(pdfFontFace.value)
@@ -259,50 +257,25 @@ function resolveLargePdfWarning(confirmed: boolean) {
   warning.resolve(confirmed)
 }
 
-/** 連続したページ変更では最新要求だけを採用し、不要になった画像URLを解放する。 */
+/** 採用したページに合わせて、画面の選択と編集モードを更新する。 */
 async function loadPreview(pageNumber: number) {
-  if (!sourceFile.value || !analysis.value)
+  if (!analysis.value)
     return
-  previewLoading.value = true
-  const request = ++previewRequest
-  let nextUrl: string | null = null
-  try {
-    const blob = await renderPdfPagePreview(sourceFile.value, pageNumber)
-    if (disposed || request !== previewRequest)
-      return
-    const url = URL.createObjectURL(blob)
-    nextUrl = url
-    const image = new Image()
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve()
-      image.onerror = () => reject(new Error('PDFプレビュー画像を読み込めませんでした。'))
-      image.src = url
-    })
-    if (disposed || request !== previewRequest)
-      return
-    if (previewUrl.value)
-      URL.revokeObjectURL(previewUrl.value)
-    previewUrl.value = url
-    nextUrl = null
-    previewImage.value = image
-    previewPageNumber.value = pageNumber
+  if (await loadPreviewImage(pageNumber)) {
     selectedEntryId.value = previewEntries.value[0]?.id ?? null
     protectionEditing.value = false
     ocrEditing.value = false
   }
-  catch (error) {
+}
+
+watch(previewError, (error) => {
+  if (error) {
     message.value = pdfProcessingErrorMessage(
       error,
       'PDFプレビューを作成できませんでした。',
     )
   }
-  finally {
-    if (nextUrl)
-      URL.revokeObjectURL(nextUrl)
-    if (request === previewRequest)
-      previewLoading.value = false
-  }
-}
+})
 
 /** 選んだPDFページのプレビュー読み込みを開始する。 */
 function selectPreviewPage(event: Event) {
@@ -528,7 +501,6 @@ async function importPdf(file: File) {
     translations.value = new Map()
     excludedEntryIds.value = new Set()
     protectedAreas.value = new Map()
-    previewPageNumber.value = 1
     selectedEntryId.value = null
     originalDraft.value = ''
     lastSavedSignature.value = projectSignature.value
@@ -582,7 +554,6 @@ async function restorePdfProject(
     backgroundMode.value = project.backgroundMode
     textColorMode.value = project.textColorMode
     clearPdfFont()
-    previewPageNumber.value = 1
     selectedEntryId.value = null
     originalDraft.value = ''
     lastSavedSignature.value = projectSignature.value

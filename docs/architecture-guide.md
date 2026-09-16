@@ -14,7 +14,7 @@ flowchart TD
     Runtime["useProjectRuntime<br/>画像・Blob・フォント"] --> Canvas
 ```
 
-`CardEditor.vue`がこれらをつなぐ調整役です。PDF編集は`PdfEditor.vue`を中心に、カード編集とは別の状態・保存形式を持ちます。
+`CardEditor.vue`がこれらをつなぐ調整役です。PDF編集の実装は`app/features/pdf/PdfEditor.vue`を中心に、カード編集とは別の状態・保存形式を持ちます。
 
 | 担当 | 主な実装 | 責務 |
 |---|---|---|

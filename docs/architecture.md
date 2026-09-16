@@ -23,7 +23,7 @@ HappyLocaleは、カード画像やルールPDFを手元で編集するlocal-fir
 pages
   ├─ /        → 作業選択ホーム
   ├─ /cards   → CardEditor
-  └─ /pdf     → PdfEditor
+  └─ /pdf     → 公開停止中の案内ページ（PDF編集実装は app/features/pdf/ に保持）
 
 AppNavigation
   └─ ホーム、カード編集、PDF翻訳の共通移動
