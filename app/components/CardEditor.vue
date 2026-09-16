@@ -7,19 +7,18 @@ import type {
   OCRProvider,
 } from '~/services/ocr/types'
 import type {
-  GlossaryEntry,
   LayoutTemplate,
   RegionDraft,
   SourceIcon,
   TextRegion,
 } from '~/types/editor'
-import type { ReusableTranslation } from '~/utils/translation-reuse'
 import { storeToRefs } from 'pinia'
 import { useBatchOCR } from '~/composables/useBatchOCR'
 import { useCardImageExport } from '~/composables/useCardImageExport'
 import { useCardThumbnails } from '~/composables/useCardThumbnails'
 import { useEditorAssets } from '~/composables/useEditorAssets'
 import { useEditorFonts } from '~/composables/useEditorFonts'
+import { useEditorGlossary } from '~/composables/useEditorGlossary'
 import { useEditorImageLoading } from '~/composables/useEditorImageLoading'
 import { useEditorOCR } from '~/composables/useEditorOCR'
 import { useEditorPrintSettings } from '~/composables/useEditorPrintSettings'
@@ -31,6 +30,7 @@ import { useProjectPersistence } from '~/composables/useProjectPersistence'
 import { useProjectSession } from '~/composables/useProjectSession'
 import { useRegionCandidates } from '~/composables/useRegionCandidates'
 import { useRegionEditing } from '~/composables/useRegionEditing'
+import { useTranslationReuse } from '~/composables/useTranslationReuse'
 import { useTranslationReview } from '~/composables/useTranslationReview'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
@@ -43,14 +43,11 @@ import {
 import { resolveSampleCandidates } from '~/services/project/sample'
 import { useEditorToolsStore } from '~/stores/editor-tools'
 import { useProjectStore } from '~/stores/project'
-import { glossaryKey } from '~/utils/glossary'
 import { readImageDpi } from '~/utils/image-dpi'
 import { historyShortcut } from '~/utils/keyboard'
 import { fitsImage } from '~/utils/layout-template'
 import { savedProjectSignature } from '~/utils/project-save'
 import { sourceIconProblems } from '~/utils/source-icons'
-import { findReusableTranslations } from '~/utils/translation-reuse'
-import { statusForTranslation } from '~/utils/translation-status'
 import DiagnosticsDialog from './DiagnosticsDialog.vue'
 import EditorConfirmDialog from './EditorConfirmDialog.vue'
 import EditorInspectorPanel from './EditorInspectorPanel.vue'
@@ -536,34 +533,9 @@ const {
   setMessage,
   logDiagnostic,
 })
-/** 選択領域と同じ原文を持つ用語集・他領域の既存訳。 */
-const reusableTranslations = computed(() => {
-  const region = editor.selectedRegion.value
-  return region ? findReusableTranslations(region, currentImageId.value, projectCards.value.map(card => card.id === currentImageId.value ? { ...card, regions: editor.project.value.regions } : card), glossary.value) : []
-})
-/** 既存訳の再利用を確認する対象領域と候補一覧。 */
-const reuseRequest = shallowRef<{ cardId: string, region: TextRegion, candidates: ReusableTranslation[] } | null>(null)
-/** 選択領域に使える既存訳を再利用の確認画面へ渡す。 */
-function requestTranslationReuse() {
-  const region = editor.selectedRegion.value
-  if (!region || !reusableTranslations.value.length)
-    return
-  reuseRequest.value = { cardId: currentImageId.value, region: JSON.parse(JSON.stringify(region)), candidates: reusableTranslations.value }
-}
-/** 確認した既存訳を対象領域へ反映する。 */
-function applyReusedTranslation(translation: string) {
-  const request = reuseRequest.value
-  if (!request)
-    return
-  const region = editor.project.value.regions.find(item => item.id === request.region.id)
-  reuseRequest.value = null
-  if (request.cardId !== currentImageId.value || !region || JSON.stringify(region) !== JSON.stringify(request.region)) {
-    setMessage('対象が変更されたため、既存訳を反映しませんでした。候補を開き直してください。')
-    return
-  }
-  editor.updateRegion(region.id, { translatedText: translation, translationStatus: statusForTranslation(translation) })
-  setMessage('既存訳を下書きとして反映しました。')
-}
+/** 用語集の編集と、既存訳候補の確認・適用。 */
+const { addGlossaryEntry, updateGlossaryEntry, removeGlossaryEntry } = useEditorGlossary({ projectStore, setMessage })
+const { reusableTranslations, reuseRequest, requestTranslationReuse, applyReusedTranslation } = useTranslationReuse({ editor, currentImageId, projectCards, glossary, setMessage })
 /** 保存済み文書または下書きで現在有効なカードID。 */
 const activeCardId = computed(
   () => folderDocument.value?.activeCardId ?? currentImageId.value,
@@ -1105,51 +1077,6 @@ const { openProject: openProjectSession } = useProjectSession({
 // マウント時のサンプル読込からも使う操作の入口。
 async function openProject(sample = false) {
   await openProjectSession(sample)
-}
-
-/** 用語集へ原語・訳語・補足を追加する。 */
-function addGlossaryEntry(source: string, translation: string, note: string) {
-  const normalizedSource = source.trim()
-  const normalizedTranslation = translation.trim()
-  if (!normalizedSource || !normalizedTranslation)
-    return
-  if (glossary.value.some(entry => glossaryKey(entry.source) === glossaryKey(normalizedSource))) {
-    setMessage(`用語「${normalizedSource}」は既に登録されています。`)
-    return
-  }
-  projectStore.setGlossary([...glossary.value, {
-    id: crypto.randomUUID(),
-    source: normalizedSource,
-    translation: normalizedTranslation,
-    note: note.trim(),
-  }])
-}
-
-/** 指定した用語集項目の内容を変更する。 */
-function updateGlossaryEntry(
-  id: string,
-  patch: Pick<GlossaryEntry, 'source' | 'translation' | 'note'>,
-) {
-  const source = patch.source.trim()
-  const translation = patch.translation.trim()
-  if (!source || !translation) {
-    setMessage('用語の原文と訳語は空にできません。')
-    return
-  }
-  if (glossary.value.some(entry =>
-    entry.id !== id && glossaryKey(entry.source) === glossaryKey(source),
-  )) {
-    setMessage(`用語「${source}」は既に登録されています。`)
-    return
-  }
-  projectStore.setGlossary(glossary.value.map(entry => entry.id === id
-    ? { ...entry, source, translation, note: patch.note.trim() }
-    : entry))
-}
-
-/** 指定した用語集項目を取り除く。 */
-function removeGlossaryEntry(id: string) {
-  projectStore.setGlossary(glossary.value.filter(entry => entry.id !== id))
 }
 
 /** カード編集とアセット編集を切り替える。 */
