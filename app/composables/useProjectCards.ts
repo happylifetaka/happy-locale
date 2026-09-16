@@ -2,9 +2,10 @@ import type { Ref } from 'vue'
 import type { useCardEditor } from '~/composables/useCardEditor'
 import type { useCardThumbnails } from '~/composables/useCardThumbnails'
 import type { RuntimeLoadedImage, useProjectRuntime } from '~/composables/useProjectRuntime'
+import type { ProjectActivity } from '~/features/cards/useProjectActivity'
 import type { useProjectStore } from '~/stores/project'
 import type { FolderProjectCard } from '~/types/editor'
-import { shallowRef } from 'vue'
+import { readonly, ref, shallowRef } from 'vue'
 import { moveProjectCard, renameProjectCard } from '~/services/project/cards'
 import { addFolderProjectCards, listImageFiles, pickImageDirectory } from '~/services/project/folder'
 import { createCardThumbnailBlob } from '~/utils/card-thumbnail'
@@ -14,9 +15,8 @@ interface ProjectCardsOptions {
   projectStore: Pick<ReturnType<typeof useProjectStore>, 'document' | 'replaceProject' | 'acceptSavedProject'>
   projectRuntime: Pick<ReturnType<typeof useProjectRuntime>, 'directory' | 'pendingAssetWrites' | 'acknowledgeAssetWrites'>
   currentImageId: Ref<string>
-  loadingCardId: Ref<string | null>
-  addingCards: Ref<boolean>
-  projectBusy: Ref<boolean>
+  loadingCardId: Readonly<Ref<string | null>>
+  activity: ProjectActivity
   ocrRunning: Ref<boolean>
   isDemo: Ref<boolean>
   pendingCardDeletionIds: Ref<Set<string>>
@@ -36,8 +36,7 @@ export function useProjectCards({
   projectRuntime,
   currentImageId,
   loadingCardId,
-  addingCards,
-  projectBusy,
+  activity,
   ocrRunning,
   isDemo,
   pendingCardDeletionIds,
@@ -49,6 +48,11 @@ export function useProjectCards({
   setMessage,
   logDiagnostic,
 }: ProjectCardsOptions) {
+  /** カード追加中か。画像準備から保存までを覆い、finallyで解除する。 */
+  const addingCards = ref(false)
+  const { busy: projectBusy } = activity
+  activity.track(addingCards)
+
   const { directory: projectDirectory, pendingAssetWrites } = projectRuntime
   /** 削除確認を待っているカード。 */
   const cardPendingDeletionConfirmation = shallowRef<FolderProjectCard | null>(
@@ -302,6 +306,7 @@ export function useProjectCards({
   }
 
   return {
+    addingCards: readonly(addingCards),
     cardPendingDeletionConfirmation,
     renameCard,
     moveCard,

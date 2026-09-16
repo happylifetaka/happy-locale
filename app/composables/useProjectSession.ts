@@ -1,7 +1,9 @@
 import type { Ref } from 'vue'
 import type { useCardThumbnails } from '~/composables/useCardThumbnails'
 import type { RuntimeLoadedImage } from '~/composables/useProjectRuntime'
+import type { ProjectActivity } from '~/features/cards/useProjectActivity'
 import type { FontReference } from '~/types/editor'
+import { readonly, ref } from 'vue'
 import { folderProjectExists, openFolderProject, pickProjectDirectory } from '~/services/project/folder'
 import { loadProjectAssetImages } from '~/services/project/resources'
 import { createSampleProjectCopy } from '~/services/project/sample'
@@ -9,9 +11,8 @@ import { createSampleProjectCopy } from '~/services/project/sample'
 export type OpenedFolderProject = Awaited<ReturnType<typeof openFolderProject>>
 
 interface ProjectSessionOptions {
-  projectBusy: Ref<boolean>
+  activity: ProjectActivity
   ocrRunning: Ref<boolean>
-  openingProject: Ref<boolean>
   isActive: () => boolean
   confirmLeave: () => Promise<boolean>
   baseURL: string
@@ -29,9 +30,8 @@ interface ProjectSessionOptions {
 
 /** 文書と画像を準備してから編集状態へ引き渡し、途中終了時は未採用の画像を解放する。 */
 export function useProjectSession({
-  projectBusy,
+  activity,
   ocrRunning,
-  openingProject,
   isActive,
   confirmLeave,
   baseURL,
@@ -46,6 +46,11 @@ export function useProjectSession({
   setMessage,
   logDiagnostic,
 }: ProjectSessionOptions) {
+  /** 文書読み込み中か。資源の後片付けを終えてfinallyで解除する。 */
+  const openingProject = ref(false)
+  const { busy: projectBusy } = activity
+  activity.track(openingProject)
+
   /** 文書・カード画像・アセット画像の読み込みを終えてから編集画面を差し替える。 */
   async function openProject(sample = false) {
     if (!isActive() || projectBusy.value || ocrRunning.value) {
@@ -144,5 +149,5 @@ export function useProjectSession({
     }
   }
 
-  return { openProject }
+  return { openingProject: readonly(openingProject), openProject }
 }

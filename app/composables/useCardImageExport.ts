@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
 import type { useCardEditor } from '~/composables/useCardEditor'
 import type { FolderProjectCard } from '~/types/editor'
-import { nextTick, onBeforeUnmount } from 'vue'
+import { nextTick, onBeforeUnmount, readonly, ref } from 'vue'
 import { downloadBlob } from '~/utils/download'
 
 interface CardImageExportOptions {
@@ -10,9 +10,8 @@ interface CardImageExportOptions {
   currentImageId: Ref<string>
   projectCards: Ref<FolderProjectCard[]>
   pendingCardDeletionIds: Ref<Set<string>>
-  exportingCards: Ref<boolean>
-  addingCards: Ref<boolean>
-  loadingCardId: Ref<string | null>
+  addingCards: Readonly<Ref<boolean>>
+  loadingCardId: Readonly<Ref<string | null>>
   selectProjectCard: (cardId: string) => Promise<void>
   setMessage: (message: string) => void
   logDiagnostic: (message: string, details?: unknown, level?: 'info' | 'error') => void
@@ -25,13 +24,14 @@ export function useCardImageExport({
   currentImageId,
   projectCards,
   pendingCardDeletionIds,
-  exportingCards,
   addingCards,
   loadingCardId,
   selectProjectCard,
   setMessage,
   logDiagnostic,
 }: CardImageExportOptions) {
+  /** 一括書き出し中か。カード切替を伴うためprojectBusyの集約には含めない。 */
+  const exportingCards = ref(false)
   let exportDisposed = false
   onBeforeUnmount(() => {
     exportDisposed = true
@@ -117,5 +117,5 @@ export function useCardImageExport({
       setMessage(`${exported}枚のカードを${format.toUpperCase()}で書き出しました。`)
   }
 
-  return { exportCardImage, exportAllCardImages }
+  return { exportingCards: readonly(exportingCards), exportCardImage, exportAllCardImages }
 }

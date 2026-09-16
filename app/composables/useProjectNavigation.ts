@@ -2,7 +2,9 @@ import type { Ref } from 'vue'
 import type { useCardEditor } from '~/composables/useCardEditor'
 import type { useCardThumbnails } from '~/composables/useCardThumbnails'
 import type { RuntimeLoadedImage } from '~/composables/useProjectRuntime'
+import type { ProjectActivity } from '~/features/cards/useProjectActivity'
 import type { useProjectStore } from '~/stores/project'
+import { computed, readonly, ref } from 'vue'
 import { activateProjectCard } from '~/services/project/cards'
 import { loadFolderProjectCardImage } from '~/services/project/folder'
 
@@ -10,11 +12,10 @@ interface ProjectNavigationOptions {
   editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'selectedRegionId' | 'switchSavedProject'>
   projectStore: Pick<ReturnType<typeof useProjectStore>, 'document' | 'activeCard' | 'replaceProject'>
   projectDirectory: Ref<FileSystemDirectoryHandle | null>
-  projectBusy: Ref<boolean>
+  activity: ProjectActivity
   translationRunning: Ref<boolean>
   ocrRunning: Ref<boolean>
   currentImageId: Ref<string>
-  loadingCardId: Ref<string | null>
   pendingCardDeletionIds: Ref<Set<string>>
   currentView: Ref<'card' | 'assets' | 'print'>
   clearOCRCandidate: () => void
@@ -36,11 +37,10 @@ export function useProjectNavigation({
   editor,
   projectStore,
   projectDirectory,
-  projectBusy,
+  activity,
   translationRunning,
   ocrRunning,
   currentImageId,
-  loadingCardId,
   pendingCardDeletionIds,
   currentView,
   resetCardSelection,
@@ -56,6 +56,11 @@ export function useProjectNavigation({
   setMessage,
   logDiagnostic,
 }: ProjectNavigationOptions) {
+  /** 読み込み中の切替先カードID。成功・失敗・終了後はfinallyでnullへ戻す。 */
+  const loadingCardId = ref<string | null>(null)
+  const { busy: projectBusy } = activity
+  activity.track(computed(() => Boolean(loadingCardId.value)))
+
   /** 対象画像を読めてからカードと履歴を切り替え、そのカードの一括OCR候補も復元する。 */
   async function selectProjectCard(cardId: string) {
     if (!isActive() || projectBusy.value)
@@ -169,5 +174,5 @@ export function useProjectNavigation({
     currentView.value = 'card'
   }
 
-  return { selectProjectCard, selectProjectRegion }
+  return { loadingCardId: readonly(loadingCardId), selectProjectCard, selectProjectRegion }
 }

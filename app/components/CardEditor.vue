@@ -30,6 +30,7 @@ import { useTranslationReview } from '~/composables/useTranslationReview'
 import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTranslation } from '~/features/cards/cardEditingContext'
 import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
 import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
+import { useProjectActivity } from '~/features/cards/useProjectActivity'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
@@ -87,8 +88,6 @@ const assetSourceImageId = ref<string>(crypto.randomUUID())
 const lastSavedProjectSignature = ref<string | null>(null)
 /** 現在編集中のカード画像を識別するID。 */
 const currentImageId = ref<string>(crypto.randomUUID())
-/** 切り替え先として読み込み中のカードID。処理終了後はnull。 */
-const loadingCardId = ref<string | null>(null)
 let editorDisposed = false
 /** 画像の検証・デコード・未採用資源の解放。 */
 const { loadImage } = useEditorImageLoading({
@@ -96,16 +95,9 @@ const { loadImage } = useEditorImageLoading({
   setMessage,
   logDiagnostic,
 })
-/** カード画像の追加処理中か。 */
-const addingCards = ref(false)
-/** プロジェクトの保存処理中か。 */
-const savingProject = ref(false)
-/** プロジェクトフォルダの読み込み処理中か。 */
-const openingProject = ref(false)
-/** 保存・読込・カード追加・切り替えのいずれかが実行中か。 */
-const projectBusy = computed(() => savingProject.value || openingProject.value || addingCards.value || Boolean(loadingCardId.value))
-/** 複数カードの画像書き出し処理中か。 */
-const exportingCards = ref(false)
+/** 各機能が所有する保存・読込・追加・切替状態をエディター単位で集約する。 */
+const activity = useProjectActivity()
+const projectBusy = activity.busy
 /** サムネイルの要求・再生成・保存。URLの所有はruntimeに残す。 */
 const {
   setCardThumbnail,
@@ -203,14 +195,13 @@ const {
   logDiagnostic,
 })
 /** 保存開始時のスナップショットと保存成功後の状態反映。 */
-const { saveProject } = useProjectPersistence({
+const { savingProject, saveProject } = useProjectPersistence({
   editor,
   projectStore,
   projectRuntime,
   isDemo,
-  projectBusy,
+  activity,
   ocrRunning,
-  savingProject,
   currentImageId,
   pendingCardDeletionIds,
   lastSavedProjectSignature,
@@ -319,8 +310,34 @@ const projectCards = computed(() => {
   }
   return documentValue.cards
 })
+/** カード画像・編集履歴の切替と、切替後の領域への移動。 */
+const { loadingCardId, selectProjectCard: navigateToCard, selectProjectRegion: navigateToRegion } = useProjectNavigation({
+  editor,
+  projectStore,
+  projectDirectory,
+  activity,
+  translationRunning,
+  ocrRunning,
+  currentImageId,
+  pendingCardDeletionIds,
+  currentView,
+  resetCardSelection: workspace.resetCardSelection,
+  clearOCRCandidate,
+  isActive: () => !editorDisposed,
+  loadImage,
+  applyLoadedImage,
+  detectAndApplyCardDpi,
+  cacheCardThumbnail,
+  persistCardThumbnail,
+  showBatchOCRCandidates,
+  switchInspectorTab,
+  setMessage,
+  logDiagnostic,
+})
+
 /** カード一覧の改名・並べ替え・追加・削除予定。 */
 const {
+  addingCards,
   cardPendingDeletionConfirmation,
   renameCard,
   moveCard,
@@ -336,8 +353,7 @@ const {
   projectRuntime,
   currentImageId,
   loadingCardId,
-  addingCards,
-  projectBusy,
+  activity,
   ocrRunning,
   isDemo,
   pendingCardDeletionIds,
@@ -350,13 +366,12 @@ const {
   logDiagnostic,
 })
 /** 単体・一括の画像書き出しと元カードへの復帰。 */
-const { exportCardImage, exportAllCardImages } = useCardImageExport({
+const { exportingCards, exportCardImage, exportAllCardImages } = useCardImageExport({
   editor,
   canvasApi,
   currentImageId,
   projectCards,
   pendingCardDeletionIds,
-  exportingCards,
   addingCards,
   loadingCardId,
   selectProjectCard,
@@ -711,32 +726,6 @@ const { leaveConfirmationOpen, confirmLeave, resolveLeave } = useUnsavedChanges(
   () => projectBusy.value,
 )
 
-/** カード画像・編集履歴の切替と、切替後の領域への移動。 */
-const { selectProjectCard: navigateToCard, selectProjectRegion: navigateToRegion } = useProjectNavigation({
-  editor,
-  projectStore,
-  projectDirectory,
-  projectBusy,
-  translationRunning,
-  ocrRunning,
-  currentImageId,
-  loadingCardId,
-  pendingCardDeletionIds,
-  currentView,
-  resetCardSelection: workspace.resetCardSelection,
-  clearOCRCandidate,
-  isActive: () => !editorDisposed,
-  loadImage,
-  applyLoadedImage,
-  detectAndApplyCardDpi,
-  cacheCardThumbnail,
-  persistCardThumbnail,
-  showBatchOCRCandidates,
-  switchInspectorTab,
-  setMessage,
-  logDiagnostic,
-})
-
 // 他機能の初期化時にも渡せるよう、切替操作の入口を関数宣言として保つ。
 async function selectProjectCard(cardId: string) {
   await navigateToCard(cardId)
@@ -881,10 +870,9 @@ async function finishOpeningProject() {
 }
 
 /** フォルダ選択と文書・画像の準備、未採用リソースの解放。 */
-const { openProject: openProjectSession } = useProjectSession({
-  projectBusy,
+const { openingProject, openProject: openProjectSession } = useProjectSession({
+  activity,
   ocrRunning,
-  openingProject,
   isActive: () => !editorDisposed,
   confirmLeave,
   baseURL: useRuntimeConfig().app.baseURL,

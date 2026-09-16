@@ -2,9 +2,10 @@ import type { Ref } from 'vue'
 import type { useCardEditor } from '~/composables/useCardEditor'
 import type { useCardThumbnails } from '~/composables/useCardThumbnails'
 import type { useProjectRuntime } from '~/composables/useProjectRuntime'
+import type { ProjectActivity } from '~/features/cards/useProjectActivity'
 import type { useProjectStore } from '~/stores/project'
 import type { FolderProjectDocument } from '~/types/editor'
-import { nextTick } from 'vue'
+import { nextTick, readonly, ref } from 'vue'
 import { finalizeProjectCardDeletions } from '~/services/project/cards'
 import { createFolderProject, saveFolderProject } from '~/services/project/folder'
 import { savedProjectSignature } from '~/utils/project-save'
@@ -14,9 +15,8 @@ interface ProjectPersistenceOptions {
   projectStore: Pick<ReturnType<typeof useProjectStore>, 'document' | 'activeCard' | 'assets' | 'fonts' | 'ocrDictionary' | 'glossary' | 'acceptSavedProject'>
   projectRuntime: Pick<ReturnType<typeof useProjectRuntime>, 'directory' | 'cardImage' | 'cardSourceFile' | 'pendingAssetWrites' | 'pendingCardThumbnailBlobs' | 'acknowledgeAssetWrites' | 'clearPendingCardThumbnails'>
   isDemo: Ref<boolean>
-  projectBusy: Ref<boolean>
+  activity: ProjectActivity
   ocrRunning: Ref<boolean>
-  savingProject: Ref<boolean>
   currentImageId: Ref<string>
   pendingCardDeletionIds: Ref<Set<string>>
   lastSavedProjectSignature: Ref<string | null>
@@ -33,9 +33,8 @@ export function useProjectPersistence({
   projectStore,
   projectRuntime,
   isDemo,
-  projectBusy,
+  activity,
   ocrRunning,
-  savingProject,
   currentImageId,
   pendingCardDeletionIds,
   lastSavedProjectSignature,
@@ -45,6 +44,11 @@ export function useProjectPersistence({
   setMessage,
   logDiagnostic,
 }: ProjectPersistenceOptions) {
+  /** 保存処理中か。途中のreturnや失敗でもfinallyで解除する。 */
+  const savingProject = ref(false)
+  const { busy: projectBusy } = activity
+  activity.track(savingProject)
+
   const {
     directory: projectDirectory,
     cardImage: image,
@@ -155,5 +159,5 @@ export function useProjectPersistence({
     }
   }
 
-  return { saveProject }
+  return { savingProject: readonly(savingProject), saveProject }
 }

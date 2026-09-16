@@ -182,7 +182,7 @@ export async function mountEditor(pinia = createPinia(), realInspector = false) 
         EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus'], template: '<div />' },
         AssetEditor: { name: 'AssetEditor', props: ['creationDraft', 'creationRunning'], template: '<div />' },
         CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId', 'selectedExclusionId'], methods: { backgroundColorForBounds: () => '#ffffff', exportPng: canvasIO.exportPng, exportJpeg: canvasIO.exportJpeg }, template: '<div />' },
-        CardList: { name: 'CardList', props: ['activeCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal', 'pendingDeletionIds'], template: '<div />' },
+        CardList: { name: 'CardList', props: ['activeCardId', 'loadingCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal', 'pendingDeletionIds'], template: '<div />' },
         AssetInsertPicker: true,
         RegionInspector: realInspector ? false : { name: 'RegionInspector', props: ['region', 'ocrCandidate', 'ocrConfidence', 'ocrCorrectionCandidate', 'ocrCorrectionChanges', 'ocrRunning', 'ocrProgress', 'ocrStatus', 'ocrLayout'], template: '<div />' },
         TranslationReuseDialog: { name: 'TranslationReuseDialog', props: ['region', 'candidates'], template: '<div />' },
