@@ -53,30 +53,30 @@ const props = defineProps<{
   reusableTranslationCount: number
 }>()
 const emit = defineEmits<{
-  update: [id: string, patch: Partial<TextRegion>]
-  deferPreview: [composing: boolean]
-  flushPreview: []
-  updateAutoMaskPreview: [enabled: boolean]
-  toggleMaskEditing: []
-  clearMask: [id: string]
-  toggleExclusionEditing: []
-  selectExclusion: [id: string]
-  removeExclusion: [regionId: string, exclusionId: string]
-  recognizeText: []
-  updateOcrCandidate: [text: string]
-  updateOcrCorrectionCandidate: [text: string]
-  applyOcrCandidate: []
-  discardOcrCandidate: []
-  applyOcrCorrection: []
-  discardOcrCorrection: []
-  addOcrDictionaryEntry: [source: string, replacement: string]
-  removeOcrDictionaryEntry: [id: string]
-  updateOcrLayout: [layout: OCRLayout]
-  updateOcrFillEnabled: [enabled: boolean]
-  translate: []
-  split: []
-  sourceIcons: []
-  reuseTranslation: []
+  'update': [id: string, patch: Partial<TextRegion>]
+  'deferPreview': [composing: boolean]
+  'flushPreview': []
+  'update:autoMaskPreview': [enabled: boolean]
+  'toggleMaskEditing': []
+  'clearMask': [id: string]
+  'toggleExclusionEditing': []
+  'selectExclusion': [id: string]
+  'removeExclusion': [regionId: string, exclusionId: string]
+  'recognizeText': []
+  'updateOcrCandidate': [text: string]
+  'update:ocrCorrectionCandidate': [text: string]
+  'applyOcrCandidate': []
+  'discardOcrCandidate': []
+  'applyOcrCorrection': []
+  'discardOcrCorrection': []
+  'addOcrDictionaryEntry': [source: string, replacement: string]
+  'removeOcrDictionaryEntry': [id: string]
+  'update:ocrLayout': [layout: OCRLayout]
+  'updateOcrFillEnabled': [enabled: boolean]
+  'translate': []
+  'split': []
+  'sourceIcons': []
+  'reuseTranslation': []
 }>()
 const editorTools = useEditorToolsStore()
 const { maskEditing, maskBrushSize, maskBrushMode, exclusionEditing } = storeToRefs(editorTools)
@@ -472,7 +472,7 @@ function resetSelectedInlineAssetStyle() {
             :disabled="ocrRunning"
             @change="
               $emit(
-                'updateOcrLayout',
+                'update:ocrLayout',
                 ($event.target as HTMLSelectElement).value as OCRLayout,
               )
             "
@@ -531,7 +531,7 @@ function resetSelectedInlineAssetStyle() {
                 :value="ocrCorrectionCandidate"
                 @input="
                   $emit(
-                    'updateOcrCorrectionCandidate',
+                    'update:ocrCorrectionCandidate',
                     ($event.target as HTMLTextAreaElement).value,
                   )
                 "
@@ -659,7 +659,7 @@ function resetSelectedInlineAssetStyle() {
               :checked="autoMaskPreview"
               @change="
                 $emit(
-                  'updateAutoMaskPreview',
+                  'update:autoMaskPreview',
                   ($event.target as HTMLInputElement).checked,
                 )
               "

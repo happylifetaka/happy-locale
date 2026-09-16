@@ -16,17 +16,17 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  toggleSelecting: []
-  image: [file: File]
-  add: [bounds: RegionDraft]
-  updateDraft: [patch: Partial<AssetCreationDraft>]
-  confirmDraft: []
-  cancelDraft: []
-  rename: [id: string, name: string]
-  update: [id: string, patch: Partial<ImageAsset>]
-  recrop: [id: string]
-  remove: [id: string]
-  updateZoom: [value: number]
+  'toggleSelecting': []
+  'image': [file: File]
+  'add': [bounds: RegionDraft]
+  'updateDraft': [patch: Partial<AssetCreationDraft>]
+  'confirmDraft': []
+  'cancelDraft': []
+  'rename': [id: string, name: string]
+  'update': [id: string, patch: Partial<ImageAsset>]
+  'recrop': [id: string]
+  'remove': [id: string]
+  'update:zoom': [value: number]
 }>()
 
 /** 入力された表示名の変更を親へ通知する。 */
@@ -48,7 +48,7 @@ function update(id: string, patch: Partial<ImageAsset>) {
       :selecting="selecting"
       @image="$emit('image', $event)"
       @select="$emit('add', $event)"
-      @update-zoom="$emit('updateZoom', $event)"
+      @update-zoom="$emit('update:zoom', $event)"
     />
     <aside class="side-panel asset-editor-panel">
       <h2>アセット編集</h2>

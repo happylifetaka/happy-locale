@@ -45,20 +45,20 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  addRegion: [bounds: RegionDraft, backgroundColor: string]
-  updateRegionBounds: [regionId: string, bounds: RegionDraft]
-  selectRegion: [id: string | null]
-  addMaskStroke: [regionId: string, stroke: MaskStroke]
-  addExclusion: [regionId: string, bounds: RegionDraft]
-  updateExclusion: [regionId: string, exclusionId: string, bounds: RegionDraft]
-  selectExclusion: [id: string | null]
-  updatePreviewMode: [mode: 'edited' | 'original']
-  updateZoom: [value: number]
-  selectRegionCandidate: [id: string | null]
-  updateRegionCandidateBounds: [id: string, bounds: RegionDraft]
-  updatePrintArea: [bounds: RegionDraft]
-  image: [file: File]
-  diagnostic: [message: string]
+  'addRegion': [bounds: RegionDraft, backgroundColor: string]
+  'updateRegionBounds': [regionId: string, bounds: RegionDraft]
+  'selectRegion': [id: string | null]
+  'addMaskStroke': [regionId: string, stroke: MaskStroke]
+  'addExclusion': [regionId: string, bounds: RegionDraft]
+  'updateExclusion': [regionId: string, exclusionId: string, bounds: RegionDraft]
+  'selectExclusion': [id: string | null]
+  'update:previewMode': [mode: 'edited' | 'original']
+  'update:zoom': [value: number]
+  'selectRegionCandidate': [id: string | null]
+  'updateRegionCandidateBounds': [id: string, bounds: RegionDraft]
+  'updatePrintArea': [bounds: RegionDraft]
+  'image': [file: File]
+  'diagnostic': [message: string]
 }>()
 
 const editorTools = useEditorToolsStore()
@@ -1371,19 +1371,19 @@ defineExpose({
         <button
           type="button"
           :class="{ selected: previewMode === 'edited' }"
-          @click="$emit('updatePreviewMode', 'edited')"
+          @click="$emit('update:previewMode', 'edited')"
         >
           編集結果
         </button>
         <button
           type="button"
           :class="{ selected: previewMode === 'original' }"
-          @click="$emit('updatePreviewMode', 'original')"
+          @click="$emit('update:previewMode', 'original')"
         >
           元画像
         </button>
       </div>
-      <ZoomControls :zoom="zoom" @update-zoom="$emit('updateZoom', $event)" />
+      <ZoomControls :zoom="zoom" @update-zoom="$emit('update:zoom', $event)" />
     </div>
     <canvas
       v-show="image"

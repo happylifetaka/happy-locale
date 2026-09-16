@@ -1657,6 +1657,8 @@ function removeExclusion(regionId: string, exclusionId: string) {
       />
       <CardCanvas
         ref="canvasApi"
+        v-model:zoom="cardZoom"
+        v-model:preview-mode="cardPreviewMode"
         :image="image"
         :project-selected="Boolean(projectDirectory)"
         :project="editor.project.value"
@@ -1664,8 +1666,6 @@ function removeExclusion(regionId: string, exclusionId: string) {
         :selected-region-id="editor.selectedRegionId.value"
         :auto-mask-preview="autoMaskPreview"
         :selected-exclusion-id="selectedExclusionId"
-        :zoom="cardZoom"
-        :preview-mode="cardPreviewMode"
         :assets="assets"
         :asset-images="assetImages"
         :font-families="fontFamilies"
@@ -1682,8 +1682,6 @@ function removeExclusion(regionId: string, exclusionId: string) {
         @update-exclusion="updateExclusion"
         @select-exclusion="selectedExclusionId = $event"
         @select-region="selectRegionForEditing"
-        @update-preview-mode="cardPreviewMode = $event"
-        @update-zoom="cardZoom = $event"
         @select-region-candidate="selectRegionCandidate"
         @update-region-candidate-bounds="updateCandidateBounds"
         @update-print-area="updatePrintArea"
@@ -1761,9 +1759,11 @@ function removeExclusion(regionId: string, exclusionId: string) {
         />
         <RegionInspector
           v-show="inspectorTab === 'region' || inspectorTab === 'ocr' || inspectorTab === 'text'"
+          v-model:auto-mask-preview="autoMaskPreview"
+          v-model:ocr-layout="ocrLayout"
+          v-model:ocr-correction-candidate="ocrCorrectionCandidate"
           :region="editor.selectedRegion.value"
           :active-tab="activeInspectorDetailTab"
-          :auto-mask-preview="autoMaskPreview"
           :selected-exclusion-id="selectedExclusionId"
           :fonts="fonts"
           :loaded-font-ids="loadedFontIds"
@@ -1774,9 +1774,7 @@ function removeExclusion(regionId: string, exclusionId: string) {
           :ocr-status="ocrStatus"
           :ocr-candidate="ocrCandidate"
           :ocr-confidence="ocrConfidence"
-          :ocr-layout="ocrLayout"
           :ocr-fill-enabled="cardPreviewMode === 'edited'"
-          :ocr-correction-candidate="ocrCorrectionCandidate"
           :ocr-correction-changes="ocrCorrectionChanges"
           :ocr-dictionary="ocrDictionary"
           :translation-enabled="
@@ -1790,7 +1788,6 @@ function removeExclusion(regionId: string, exclusionId: string) {
           @update="editor.updateRegion"
           @defer-preview="deferPreview"
           @flush-preview="flushPreview"
-          @update-auto-mask-preview="autoMaskPreview = $event"
           @toggle-mask-editing="toggleMaskEditing"
           @clear-mask="editor.updateRegion($event, { manualMaskStrokes: [] })"
           @toggle-exclusion-editing="toggleExclusionEditing"
@@ -1798,14 +1795,12 @@ function removeExclusion(regionId: string, exclusionId: string) {
           @remove-exclusion="removeExclusion"
           @recognize-text="recognizeSelectedRegion"
           @update-ocr-candidate="updateOCRCandidate"
-          @update-ocr-correction-candidate="ocrCorrectionCandidate = $event"
           @apply-ocr-candidate="applyOCRCandidate"
           @discard-ocr-candidate="finishOCRCandidate"
           @apply-ocr-correction="applyOCRCorrection"
           @discard-ocr-correction="discardOCRCorrection"
           @add-ocr-dictionary-entry="addOCRDictionaryEntry"
           @remove-ocr-dictionary-entry="removeOCRDictionaryEntry"
-          @update-ocr-layout="ocrLayout = $event"
           @update-ocr-fill-enabled="
             cardPreviewMode = $event ? 'edited' : 'original'
           "
@@ -1839,10 +1834,10 @@ function removeExclusion(regionId: string, exclusionId: string) {
     </div>
     <AssetEditor
       v-show="currentView === 'assets'"
+      v-model:zoom="assetZoom"
       :image="assetSourceImage"
       :assets="assets"
       :asset-images="assetImages"
-      :zoom="assetZoom"
       :selecting="assetEditing"
       :creation-draft="assetCreationDraft"
       :creation-running="assetCreationRunning"
@@ -1856,7 +1851,6 @@ function removeExclusion(regionId: string, exclusionId: string) {
       @update="updateAsset"
       @recrop="startAssetRecrop"
       @remove="removeAsset"
-      @update-zoom="assetZoom = $event"
     />
     <PrintLayoutWorkspace
       v-if="currentView === 'print' && folderDocument && projectDirectory"
