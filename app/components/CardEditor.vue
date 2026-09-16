@@ -43,6 +43,7 @@ import {
   supportsFolderProjects,
 } from '~/services/project/folder'
 import { resolveSampleCandidates } from '~/services/project/sample'
+import { useEditorToolsStore } from '~/stores/editor-tools'
 import { useProjectStore } from '~/stores/project'
 import {
   assertFileSize,
@@ -174,14 +175,9 @@ const activeInspectorDetailTab = computed<InspectorDetailTab>(() =>
     ? inspectorTab.value
     : lastInspectorDetailTab.value,
 )
-/** 原文消去用の手動マスクを描いているか。 */
-const maskEditing = ref(false)
-/** 手動マスクのブラシ直径。元画像の画素単位。 */
-const maskBrushSize = ref(28)
-/** 手動マスクを追加するか消すかの操作モード。 */
-const maskBrushMode = ref<'paint' | 'erase'>('paint')
-/** 背景補修から保護する領域を編集しているか。 */
-const exclusionEditing = ref(false)
+/** 編集ツールの一時状態。寿命はこのエディターの表示期間とする。 */
+const editorTools = useEditorToolsStore()
+const { maskEditing, maskBrushSize, maskBrushMode, exclusionEditing } = storeToRefs(editorTools)
 /** 現在選択している保護領域のID。 */
 const selectedExclusionId = ref<string | null>(null)
 /** カード編集画面の表示倍率。100が等倍。 */
@@ -660,6 +656,7 @@ watch(
 // 画面終了時にタイマー・イベント・画像・フォント・OCRのリソースを解放する。
 onBeforeUnmount(() => {
   editorDisposed = true
+  editorTools.$reset()
   window.removeEventListener('keydown', handleEditorKeydown)
   projectRuntime.dispose()
   projectStore.clearProject()
@@ -1245,8 +1242,7 @@ function removeGlossaryEntry(id: string) {
 /** カード編集とアセット編集を切り替える。 */
 function switchView(view: 'card' | 'assets') {
   currentView.value = view
-  maskEditing.value = false
-  exclusionEditing.value = false
+  editorTools.stopEditing()
   assetEditing.value = false
   assetRecropId.value = null
 }
@@ -1256,8 +1252,7 @@ function openPrintLayout() {
   if (!folderDocument.value || !projectDirectory.value)
     return
   currentView.value = 'print'
-  maskEditing.value = false
-  exclusionEditing.value = false
+  editorTools.stopEditing()
 }
 
 /** 列数・余白・間隔などの用紙設定を文書へ反映する。 */
@@ -1404,20 +1399,16 @@ function addMaskStroke(regionId: string, stroke: MaskStroke) {
 
 /** 原文消去用マスクの描画モードを切り替える。 */
 function toggleMaskEditing() {
-  maskEditing.value = !maskEditing.value
-  if (maskEditing.value) {
-    exclusionEditing.value = false
+  editorTools.toggleMaskEditing()
+  if (maskEditing.value)
     assetEditing.value = false
-  }
 }
 
 /** 保護領域の作成・調整モードを切り替える。 */
 function toggleExclusionEditing() {
-  exclusionEditing.value = !exclusionEditing.value
-  if (exclusionEditing.value) {
-    maskEditing.value = false
+  editorTools.toggleExclusionEditing()
+  if (exclusionEditing.value)
     assetEditing.value = false
-  }
 }
 
 /** 原文領域の内部へ保護矩形を追加する。 */
