@@ -4,7 +4,7 @@
 
 - [プロジェクト概要・セットアップ](../README.md)
 - [利用ガイド](user-guide.md)
-- [翻訳の一括確認](translation-review-prototype.md)
+- [翻訳の一括確認](user-guide.md#翻訳の一括確認)
 - [サンプルカード](../samples/cards/README.md)
 
 ## 開発に参加する
