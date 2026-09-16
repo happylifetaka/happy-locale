@@ -6,6 +6,7 @@ defineProps<{
   region: TextRegion
   imageWidth: number
   imageHeight: number
+  previewHeight?: number
 }>()
 const clipId = useId()
 </script>
@@ -15,7 +16,7 @@ const clipId = useId()
   <svg
     class="region-source-preview"
     :viewBox="`${region.x} ${region.y} ${region.width} ${region.height}`"
-    :style="{ height: `${Math.max(48, Math.min(140, region.height / Math.max(1, region.width) * 300))}px` }"
+    :style="{ height: `${previewHeight ?? Math.max(48, Math.min(140, region.height / Math.max(1, region.width) * 300))}px` }"
     role="img"
     :aria-label="`${region.displayName || region.regionId}の原画像`"
   >
