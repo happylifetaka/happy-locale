@@ -2,7 +2,7 @@ import type { Ref } from 'vue'
 import type { useCardEditor } from '~/composables/useCardEditor'
 import type { ExclusionArea, MaskStroke, RegionDraft, TextRegion } from '~/types/editor'
 import type { SplitAxis, SplitText } from '~/utils/split-region'
-import { shallowRef } from 'vue'
+import { computed, shallowRef } from 'vue'
 import { transformRegionContents } from '~/utils/regions'
 
 interface RegionEditingOptions {
@@ -17,8 +17,10 @@ interface RegionEditingOptions {
 
 /** 領域操作と確認中の状態を管理し、文書とUndo/Redoの更新はeditorへ委ねる。 */
 export function useRegionEditing({ editor, currentImageId, projectBusy, selectedExclusionId, exclusionEditing, switchInspectorTab, setMessage }: RegionEditingOptions) {
-  /** 削除確認を待っている翻訳領域。 */
-  const regionPendingDeletionConfirmation = shallowRef<TextRegion | null>(null)
+  /** 削除確認を開いた時点のカードと領域。現在の編集状態とは独立した控えを保持する。 */
+  const regionDeletionRequest = shallowRef<{ cardId: string, region: TextRegion } | null>(null)
+  /** ダイアログに表示する削除対象。取消・確定は専用操作から行う。 */
+  const regionPendingDeletionConfirmation = computed(() => regionDeletionRequest.value?.region ?? null)
 
   /** 分割確認を開いた時点のカードと領域の情報。 */
   const regionSplitRequest = shallowRef<{ cardId: string, region: TextRegion } | null>(null)
@@ -65,22 +67,31 @@ export function useRegionEditing({ editor, currentImageId, projectBusy, selected
 
   /** 領域削除の確認を開く。 */
   function requestRegionDeletion(id: string) {
-    regionPendingDeletionConfirmation.value
-      = editor.project.value.regions.find(region => region.id === id) ?? null
+    const region = editor.project.value.regions.find(region => region.id === id)
+    if (!region || projectBusy.value)
+      return
+    regionDeletionRequest.value = { cardId: currentImageId.value, region: JSON.parse(JSON.stringify(region)) as TextRegion }
   }
 
   /** 領域削除の確認を閉じる。 */
   function cancelRegionDeletion() {
-    regionPendingDeletionConfirmation.value = null
+    regionDeletionRequest.value = null
   }
 
   /** 確認した翻訳領域を削除する。 */
   function confirmRegionDeletion() {
-    const region = regionPendingDeletionConfirmation.value
-    if (!region)
+    const request = regionDeletionRequest.value
+    if (!request)
       return
+    const { region } = request
+    const current = editor.project.value.regions.find(item => item.id === region.id)
+    if (request.cardId !== currentImageId.value || JSON.stringify(current) !== JSON.stringify(region)) {
+      regionDeletionRequest.value = null
+      setMessage('領域が変更されたため削除を中止しました。現在の内容でやり直してください。')
+      return
+    }
     editor.removeRegion(region.id)
-    regionPendingDeletionConfirmation.value = null
+    regionDeletionRequest.value = null
     setMessage(`「${region.displayName.trim() || region.regionId}」を削除しました。`)
   }
 

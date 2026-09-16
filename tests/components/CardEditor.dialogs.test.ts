@@ -59,6 +59,32 @@ it('confirms region deletion and restores it with undo', async () => {
   expect(canvas.props('project').regions).toHaveLength(1)
 })
 
+it.each(['card', 'region'] as const)('rejects stale deletion after the %s changes', async (change) => {
+  const { wrapper, canvas, inspector, toolbar } = await mountSavedEditor()
+  canvas.vm.$emit('select-region', 'region-0')
+  await nextTick()
+  wrapper.getComponent({ name: 'RegionList' }).vm.$emit('remove', 'region-0')
+  await nextTick()
+  if (change === 'card') {
+    // 別カードに同じIDの領域があっても、古い確認で削除しない。
+    useProjectStore().document!.cards[1]!.regions[0]!.id = 'region-0'
+    wrapper.getComponent({ name: 'CardList' }).vm.$emit('select', 'two')
+    await flushPromises()
+    canvas.vm.$emit('select-region', 'region-0')
+    await nextTick()
+  }
+  inspector.vm.$emit('update', 'region-0', { translatedText: 'Changed after confirmation' })
+  await nextTick()
+  const before = JSON.stringify(canvas.props('project'))
+  await wrapper.get('[aria-labelledby="region-delete-title"] .confirmation-danger').trigger('click')
+  expect(JSON.stringify(canvas.props('project'))).toBe(before)
+  expect(wrapper.find('[aria-labelledby="region-delete-title"]').exists()).toBe(false)
+  expect(wrapper.text()).toContain('領域が変更されたため削除を中止しました。')
+  toolbar.vm.$emit('undo')
+  await nextTick()
+  expect(canvas.props('project').regions[0].translatedText).toBe(change === 'card' ? 'Before 1' : 'Before 0')
+})
+
 it('blocks undo while a confirmation is open and restores normal undo after closing it', async () => {
   const { wrapper, canvas } = await mountEditor()
   wrapper.findComponent({ name: 'RegionList' }).vm.$emit('remove', canvas.props('project').regions[0].id)
@@ -74,6 +100,20 @@ it('blocks undo while a confirmation is open and restores normal undo after clos
   await nextTick()
   expect(canvas.props('project').regions).toEqual([])
   expect(undo.defaultPrevented).toBe(true)
+})
+
+it('rejects deletion on another card even when its region snapshot is identical', async () => {
+  const { wrapper, canvas } = await mountSavedEditor()
+  useProjectStore().document!.cards[1]!.regions = JSON.parse(JSON.stringify(canvas.props('project').regions))
+  wrapper.getComponent({ name: 'RegionList' }).vm.$emit('remove', 'region-0')
+  await nextTick()
+  wrapper.getComponent({ name: 'CardList' }).vm.$emit('select', 'two')
+  await flushPromises()
+  expect(canvas.props('project').imageName).toBe('two.png')
+  const before = JSON.stringify(canvas.props('project'))
+  await wrapper.get('[aria-labelledby="region-delete-title"] .confirmation-danger').trigger('click')
+  expect(JSON.stringify(canvas.props('project'))).toBe(before)
+  expect(wrapper.find('[aria-labelledby="region-delete-title"]').exists()).toBe(false)
 })
 
 it('shows diagnostic details, clears the log, and closes on escape', async () => {
