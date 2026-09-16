@@ -1,5 +1,6 @@
 import type { InjectionKey, Ref } from 'vue'
 import type { useCardWorkspace } from './useCardWorkspace'
+import type { useSourceIcons } from './useSourceIcons'
 import type { useCardEditor } from '~/composables/useCardEditor'
 import type { OCRExecutionState, useEditorOCR } from '~/composables/useEditorOCR'
 import type { useRegionCandidates } from '~/composables/useRegionCandidates'
@@ -8,6 +9,8 @@ import { inject, provide } from 'vue'
 
 /** 保存・カード切替を公開せず、既存の編集インスタンスへの操作だけを共有する。 */
 interface CardEditingContext {
+  cardId: Readonly<Ref<string>>
+  notify: (message: string) => void
   editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'selectedRegion' | 'selectedRegionId' | 'updateRegion'>
   workspace: Omit<ReturnType<typeof useCardWorkspace>, 'stopEditing' | 'resetCardSelection' | 'maskEditing' | 'exclusionEditing'>
 }
@@ -24,11 +27,10 @@ interface CardResourcesContext {
 }
 
 interface CardOCRContext {
-  region: Omit<ReturnType<typeof useEditorOCR>, 'clearOCRCandidate'>
+  region: ReturnType<typeof useEditorOCR>
   execution: OCRExecutionState
   dictionary: Readonly<Ref<OCRDictionaryEntry[]>>
   candidates: Pick<ReturnType<typeof useRegionCandidates>, 'regionCandidates' | 'selectedCandidateId' | 'selectRegionCandidate' | 'updateCandidateBounds'>
-  requestSourceIcons: () => void
 }
 
 interface CardTranslationContext {
@@ -65,3 +67,8 @@ export const provideCardOCR = ocr.provide
 export const useCardOCR = ocr.use
 export const provideCardTranslation = translation.provide
 export const useCardTranslation = translation.use
+
+/** Workspaceだけが生成し、詳細Inspectorから確認を開くための局所的な窓口。 */
+const sourceIcons = context<ReturnType<typeof useSourceIcons>>('card source icons')
+export const provideCardSourceIcons = sourceIcons.provide
+export const useCardSourceIcons = sourceIcons.use

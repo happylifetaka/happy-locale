@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import RegionInspector from '~/components/RegionInspector.vue'
-import { useCardEditing, useCardOCR, useCardResources, useCardTranslation } from './cardEditingContext'
+import { useCardEditing, useCardOCR, useCardResources, useCardSourceIcons, useCardTranslation } from './cardEditingContext'
 
 const { editor, workspace } = useCardEditing()
 const {
@@ -17,7 +17,7 @@ const {
   requestRegionSplit,
 } = workspace
 const { fonts, loadedFontIds, assets, assetImages } = useCardResources()
-const { region: ocr, execution, dictionary: ocrDictionary, requestSourceIcons } = useCardOCR()
+const { region: ocr, execution, dictionary: ocrDictionary } = useCardOCR()
 const { running: ocrRunning, progress: ocrProgress, status: ocrStatus } = execution
 const {
   ocrLayout,
@@ -42,6 +42,7 @@ const {
   requestReuse: requestTranslationReuse,
   translate: translateSelectedRegion,
 } = useCardTranslation()
+const sourceIcons = useCardSourceIcons()
 </script>
 
 <template>
@@ -91,6 +92,6 @@ const {
     "
     @translate="translateSelectedRegion"
     @split="editor.selectedRegionId.value && requestRegionSplit(editor.selectedRegionId.value)"
-    @source-icons="requestSourceIcons"
+    @source-icons="sourceIcons.open"
   />
 </template>

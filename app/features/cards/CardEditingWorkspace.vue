@@ -6,8 +6,10 @@ import EditorConfirmDialog from '~/components/EditorConfirmDialog.vue'
 import EditorInspectorPanel from '~/components/EditorInspectorPanel.vue'
 import RegionList from '~/components/RegionList.vue'
 import RegionSplitDialog from '~/components/RegionSplitDialog.vue'
-import { useCardEditing, useCardOCR, useCardResources } from './cardEditingContext'
+import SourceIconsDialog from '~/components/SourceIconsDialog.vue'
+import { provideCardSourceIcons, useCardEditing, useCardOCR, useCardResources } from './cardEditingContext'
 import CardRegionInspector from './CardRegionInspector.vue'
+import { useSourceIcons } from './useSourceIcons'
 
 defineProps<{
   visible: boolean
@@ -19,7 +21,7 @@ const emit = defineEmits<{
   diagnostic: [message: string, details?: unknown, level?: 'info' | 'error']
   updatePrintArea: [area: RegionDraft]
 }>()
-const { editor, workspace } = useCardEditing()
+const { editor, workspace, cardId, notify } = useCardEditing()
 const {
   canvasApi,
   cardZoom,
@@ -46,15 +48,40 @@ const {
   confirmRegionDeletion,
 } = workspace
 const { image, projectSelected, assets, assetImages, fontFamilies } = useCardResources()
-const { candidates } = useCardOCR()
+const { candidates, region: ocr, execution: { running: ocrRunning } } = useCardOCR()
 const { regionCandidates, selectedCandidateId, selectRegionCandidate, updateCandidateBounds } = candidates
 // Canvas APIを登録した画面が解除も担当し、資源の所有者には触れない。
 onBeforeUnmount(() => {
   canvasApi.value = null
 })
+/** 原文アイコンの確認は領域UI内で完結させ、確定後だけOCR候補を破棄する。 */
+const sourceIcons = useSourceIcons({
+  editor,
+  cardId,
+  assets,
+  ocrRunning,
+  notify,
+  onApplied: () => {
+    ocr.clearOCRCandidate()
+    inspectorTab.value = 'ocr'
+  },
+})
+const { request: sourceIconsRequest } = sourceIcons
+provideCardSourceIcons(sourceIcons)
 </script>
 
 <template>
+  <SourceIconsDialog
+    v-if="sourceIconsRequest && image"
+    :region="sourceIconsRequest.region"
+    :image-url="image.src"
+    :image-width="editor.project.value.imageWidth"
+    :image-height="editor.project.value.imageHeight"
+    :assets="assets"
+    @apply="sourceIcons.apply"
+    @close="sourceIcons.close"
+  />
+
   <RegionSplitDialog
     v-if="regionSplitRequest && image"
     :region="regionSplitRequest.region"

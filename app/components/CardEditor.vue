@@ -7,7 +7,6 @@ import type {
 } from '~/services/ocr/types'
 import type {
   LayoutTemplate,
-  SourceIcon,
   TextRegion,
 } from '~/types/editor'
 import { storeToRefs } from 'pinia'
@@ -45,7 +44,6 @@ import { readImageDpi } from '~/utils/image-dpi'
 import { historyShortcut } from '~/utils/keyboard'
 import { fitsImage } from '~/utils/layout-template'
 import { savedProjectSignature } from '~/utils/project-save'
-import { sourceIconProblems } from '~/utils/source-icons'
 import DiagnosticsDialog from './DiagnosticsDialog.vue'
 import EditorConfirmDialog from './EditorConfirmDialog.vue'
 import RegionCandidatePanel from './RegionCandidatePanel.vue'
@@ -130,8 +128,6 @@ const assetEditing = ref(false)
 const currentView = ref<'card' | 'assets' | 'print'>('card')
 /** 配置雛形ダイアログの保存・適用モード。nullなら閉じている。 */
 const layoutTemplateMode = ref<'capture' | 'apply' | null>(null)
-/** 原文アイコン指定を開いた時点のカードと領域の情報。 */
-const sourceIconsRequest = shallowRef<{ cardId: string, region: TextRegion } | null>(null)
 /** 操作結果や失敗理由を画面へ通知するメッセージ。 */
 const message = ref('')
 /** 単一・全体・一括OCRで共有する実行状態。 */
@@ -698,34 +694,6 @@ function applyLayoutTemplate(regions: TextRegion[]) {
   setMessage(`${regions.length}領域を追加しました。原文と訳文を設定してください。`)
 }
 
-/** 選択領域の原文アイコンを指定する画面を開く。 */
-function requestSourceIcons() {
-  const region = editor.selectedRegion.value
-  if (!region || ocrRunning.value)
-    return
-  sourceIconsRequest.value = { cardId: currentImageId.value, region: JSON.parse(JSON.stringify(region)) as TextRegion }
-}
-
-/** 確認した原文アイコンの範囲と参照を領域へ反映する。 */
-function applySourceIcons(icons: SourceIcon[]) {
-  const request = sourceIconsRequest.value
-  if (!request)
-    return
-  const current = editor.project.value.regions.find(region => region.id === request.region.id)
-  if (currentImageId.value !== request.cardId || JSON.stringify(current) !== JSON.stringify(request.region)) {
-    sourceIconsRequest.value = null
-    setMessage('対象の領域が変更されました。現在の内容でアイコンを指定し直してください。')
-    return
-  }
-  if (sourceIconProblems({ ...request.region, sourceIcons: icons }, assets.value).length)
-    return
-  editor.updateRegion(request.region.id, { sourceIcons: icons })
-  clearOCRCandidate()
-  sourceIconsRequest.value = null
-  inspectorTab.value = 'ocr'
-  setMessage('アイコンの位置を記録しました。OCRを実行して原文候補を確認してください。')
-}
-
 /** 現在の保存対象データから計算した変更検出用文字列。 */
 const currentProjectSignature = computed(projectSignature)
 /** 現在の内容と保存成功時の内容を比較した保存状態。 */
@@ -954,7 +922,7 @@ function openPrintLayout() {
 }
 
 // 既存インスタンスを責務別に共有する。資源解放・保存操作は全体側に残す。
-provideCardEditing({ editor, workspace })
+provideCardEditing({ editor, workspace, cardId: currentImageId, notify: setMessage })
 provideCardResources({
   image,
   projectSelected: computed(() => Boolean(projectDirectory.value)),
@@ -969,7 +937,6 @@ provideCardOCR({
   execution: { running: ocrRunning, progress: ocrProgress, status: ocrStatus },
   dictionary: ocrDictionary,
   candidates: candidateEditing,
-  requestSourceIcons,
 })
 provideCardTranslation({
   enabled: computed(() => isDemo.value || (translationEndpointEnabled && translationSettings.value.provider === 'local')),
@@ -1067,16 +1034,6 @@ provideCardTranslation({
       @save="saveLayoutTemplate"
       @apply="applyLayoutTemplate"
       @close="layoutTemplateMode = null"
-    />
-    <SourceIconsDialog
-      v-if="sourceIconsRequest && image"
-      :region="sourceIconsRequest.region"
-      :image-url="image.src"
-      :image-width="editor.project.value.imageWidth"
-      :image-height="editor.project.value.imageHeight"
-      :assets="assets"
-      @apply="applySourceIcons"
-      @close="sourceIconsRequest = null"
     />
     <TranslationRequestDialog
       v-if="translationRequest"
