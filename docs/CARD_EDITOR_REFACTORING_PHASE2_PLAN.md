@@ -3,6 +3,8 @@
 作成日: 2026-09-16
 状態: 工程0〜7・最終確認完了
 
+次の改善計画: [CardEditingWorkspace分割・状態と操作の所有整理計画](./CARD_EDITOR_WORKSPACE_PLAN.md)（実装未着手）。
+
 ## 目的と基準
 
 [前回の分割計画](./CARD_EDITOR_REFACTORING_PLAN.md)で、`CardEditor.vue`を3,993行から1,936行へ縮小した。
