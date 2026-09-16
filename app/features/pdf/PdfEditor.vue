@@ -8,10 +8,7 @@ import type {
 } from '~/services/pdf'
 import type { PdfProjectDocument } from '~/services/pdf-project'
 import { loadUserFont } from '~/services/fonts/user-font'
-import { prepareRegionForOCR } from '~/services/ocr/image'
-import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import {
-  addPdfOcrEntry,
   analyzePdf,
   createTranslatedPdf,
   fingerprintPdfFile,
@@ -40,6 +37,7 @@ import {
 
 import PdfPreviewCanvas from './PdfPreviewCanvas.vue'
 import { usePdfEntryEditing } from './usePdfEntryEditing'
+import { usePdfOCR } from './usePdfOCR'
 import { usePdfPreview } from './usePdfPreview'
 
 /** 元PDFを選ぶための入力要素。 */
@@ -115,14 +113,18 @@ const previewZoom = ref(100)
 const protectionEditing = ref(false)
 /** PDF上でOCR対象範囲を指定しているか。 */
 const ocrEditing = ref(false)
-/** OCR処理を実行しているか。 */
-const ocrRunning = ref(false)
-/** OCRエンジンから通知された進捗値。 */
-const ocrProgress = ref(0)
-/** OCRエンジンが現在実行している処理の説明。 */
-const ocrStatus = ref('')
-/** ブラウザ内で英語OCRを実行するWorkerの管理窓口。 */
-const ocrProvider = new TesseractOCRProvider(useRuntimeConfig().app.baseURL)
+/** OCRの状態・Worker・終了処理は専用composableが所有する。 */
+const { running: ocrRunning, progress: ocrProgress, status: ocrStatus, recognizeArea: addOcrArea } = usePdfOCR({
+  analysis,
+  pageNumber: previewPageNumber,
+  image: previewImage,
+  baseURL: useRuntimeConfig().app.baseURL,
+  onApplied: (entryId) => {
+    selectedEntryId.value = entryId
+    ocrEditing.value = false
+  },
+  setMessage: value => message.value = value,
+})
 /** PDFページ番号ごとに保持する保護領域。 */
 const protectedAreas = shallowRef(
   new Map<number, readonly PdfProtectedArea[]>(),
@@ -217,9 +219,6 @@ onBeforeUnmount(() => {
   disposed = true
   processingController.value?.abort()
   largePdfWarning.value?.resolve(false)
-  ocrRunning.value = false
-  ocrStatus.value = ''
-  void ocrProvider.dispose?.().catch(() => undefined)
   if (pdfFontFace.value)
     document.fonts.delete(pdfFontFace.value)
 })
@@ -275,61 +274,6 @@ function addProtectedArea(area: PdfProtectedArea) {
   const pageNumber = previewPageNumber.value
   next.set(pageNumber, [...(next.get(pageNumber) ?? []), area])
   protectedAreas.value = next
-}
-
-/** 画像PDFの指定範囲をOCRし、文字抽出で得た項目と同じ編集一覧へ追加する。 */
-async function addOcrArea(area: PdfProtectedArea) {
-  const current = analysis.value
-  const page = previewPage.value
-  const image = previewImage.value
-  if (disposed || !current || !page || !image || ocrRunning.value)
-    return
-  const isCurrent = () => !disposed && analysis.value === current && previewPageNumber.value === page.pageNumber
-  ocrRunning.value = true
-  ocrProgress.value = 0
-  ocrStatus.value = 'OCRを初期化しています…'
-  try {
-    const rasterScale = image.naturalWidth / page.width
-    const blob = await prepareRegionForOCR(image, {
-      x: area.x * rasterScale,
-      y: area.y * rasterScale,
-      width: area.width * rasterScale,
-      height: area.height * rasterScale,
-    }, { scale: 2, padding: 8 })
-    if (!isCurrent())
-      return
-    const result = await ocrProvider.recognize(blob, {
-      language: 'eng',
-      layout: 'text-block',
-      onProgress: (progress) => {
-        if (!isCurrent())
-          return
-        ocrProgress.value = progress.progress
-        ocrStatus.value = progress.status
-      },
-    })
-    if (!isCurrent())
-      return
-    const added = addPdfOcrEntry(current, page.pageNumber, area, result.text)
-    analysis.value = added.analysis
-    selectedEntryId.value = added.entry.id
-    ocrEditing.value = false
-    message.value = `${added.entry.id} をOCR結果としてCSV対象へ追加しました。`
-  }
-  catch (error) {
-    if (!isCurrent())
-      return
-    message.value = pdfProcessingErrorMessage(
-      error,
-      '選択範囲をOCRできませんでした。',
-    )
-  }
-  finally {
-    if (!disposed) {
-      ocrRunning.value = false
-      ocrStatus.value = ''
-    }
-  }
 }
 
 /** PDFの保護領域指定モードを切り替える。 */
