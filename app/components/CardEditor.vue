@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { DiagnosticEntry } from './DiagnosticsDialog.vue'
-import type { InspectorDetailTab, InspectorTab } from './EditorInspectorPanel.vue'
 import type { RuntimeLoadedImage } from '~/composables/useProjectRuntime'
 import type { OpenedFolderProject } from '~/composables/useProjectSession'
 import type {
@@ -23,6 +22,7 @@ import { useEditorImageLoading } from '~/composables/useEditorImageLoading'
 import { useEditorOCR } from '~/composables/useEditorOCR'
 import { useEditorPrintSettings } from '~/composables/useEditorPrintSettings'
 import { useEditorTranslation } from '~/composables/useEditorTranslation'
+import { useInspectorTabs } from '~/composables/useInspectorTabs'
 import { usePreviewDeferral } from '~/composables/usePreviewDeferral'
 import { useProjectCards } from '~/composables/useProjectCards'
 import { useProjectNavigation } from '~/composables/useProjectNavigation'
@@ -147,8 +147,12 @@ const canvasApi = ref<CanvasApi | null>(null)
 const message = ref('')
 /** 自動検出した消去マスクを重ねて表示するか。 */
 const autoMaskPreview = ref(false)
-/** 右側インスペクターで現在選択しているタブ。 */
-const inspectorTab = ref<InspectorTab>('list')
+/** タブの利用条件、記憶と領域選択時の遷移。 */
+const { inspectorTab, activeInspectorDetailTab, canOpenInspectorTab, switchInspectorTab, selectRegionForEditing } = useInspectorTabs({
+  editor,
+  hasImage: computed(() => Boolean(image.value)),
+  hasProject: computed(() => Boolean(folderDocument.value)),
+})
 /** 入力中の描画遅延と、編集対象を変更した際の待機解除。 */
 const { previewDeferred, deferPreview, flushPreview } = usePreviewDeferral([
   editor.selectedRegionId,
@@ -156,16 +160,6 @@ const { previewDeferred, deferPreview, flushPreview } = usePreviewDeferral([
   inspectorTab,
   image,
 ])
-/** 一覧へ移る前などに開いていた領域の詳細タブ。 */
-const lastInspectorDetailTab = ref<InspectorDetailTab>('text')
-/** 詳細画面に戻る際に表示するタブ。 */
-const activeInspectorDetailTab = computed<InspectorDetailTab>(() =>
-  inspectorTab.value === 'region'
-  || inspectorTab.value === 'ocr'
-  || inspectorTab.value === 'text'
-    ? inspectorTab.value
-    : lastInspectorDetailTab.value,
-)
 /** 編集ツールの一時状態。寿命はこのエディターの表示期間とする。 */
 const editorTools = useEditorToolsStore()
 const { maskEditing, exclusionEditing } = storeToRefs(editorTools)
@@ -377,42 +371,6 @@ watch(maskEditing, (editing) => {
   if (editing)
     switchInspectorTab('region')
 })
-
-// 領域選択がなくなったら、領域が必要な詳細タブから一覧へ戻す。
-watch(
-  () => editor.selectedRegionId.value,
-  (id) => {
-    if (!id && (inspectorTab.value === 'region' || inspectorTab.value === 'text'))
-      inspectorTab.value = 'list'
-  },
-)
-
-/** 選択領域や画像の有無からタブを開けるか判定する。 */
-function canOpenInspectorTab(tab: InspectorTab) {
-  if (tab === 'list')
-    return true
-  if (tab === 'ocr')
-    return Boolean(image.value)
-  if (tab === 'print')
-    return Boolean(image.value && folderDocument.value)
-  return Boolean(editor.selectedRegion.value)
-}
-
-/** 開けるタブへ切り替え、領域の詳細タブなら次回表示用に記憶する。 */
-function switchInspectorTab(tab: InspectorTab) {
-  if (!canOpenInspectorTab(tab))
-    return
-  inspectorTab.value = tab
-  if (tab === 'region' || tab === 'ocr' || tab === 'text')
-    lastInspectorDetailTab.value = tab
-}
-
-/** 領域を選択し、編集に使うインスペクターを表示する。 */
-function selectRegionForEditing(id: string | null) {
-  editor.selectedRegionId.value = id
-  if (id)
-    switchInspectorTab(lastInspectorDetailTab.value)
-}
 
 /** 下書きまたは保存済み文書から構成したカード一覧。 */
 const projectCards = computed(() => {
