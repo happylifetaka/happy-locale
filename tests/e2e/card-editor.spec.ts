@@ -1,5 +1,29 @@
 import { expect, test } from '@playwright/test'
 
+test('retains independent card and asset zoom settings and switches the preview mode', async ({ page }) => {
+  await page.goto('/cards?demo=1')
+  const canvas = page.getByLabel('カード編集キャンバス')
+  await expect(canvas).toBeVisible()
+  const image = await canvas.screenshot()
+  await page.getByRole('combobox', { name: '表示倍率', exact: true }).selectOption('100')
+  await expect.poll(() => canvas.evaluate((element: HTMLCanvasElement) => element.getBoundingClientRect().width / element.width)).toBe(1)
+  await page.getByRole('button', { name: '元画像', exact: true }).click()
+  await expect(page.getByRole('button', { name: '元画像', exact: true })).toHaveClass(/selected/)
+  await page.getByRole('button', { name: 'アセット編集', exact: true }).click()
+  await page.locator('.asset-editor-layout input[type=file]').setInputFiles({ name: 'source.png', mimeType: 'image/png', buffer: image })
+  const source = page.getByLabel('アセット切り出し元画像')
+  await expect(source).toBeVisible()
+  await page.getByRole('combobox', { name: '表示倍率', exact: true }).selectOption('75')
+  await expect.poll(() => source.evaluate((element: HTMLCanvasElement) => element.getBoundingClientRect().width / element.width)).toBe(0.75)
+  await page.getByRole('button', { name: 'カード', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: '表示倍率', exact: true })).toHaveValue('100')
+  await expect(page.getByRole('button', { name: '元画像', exact: true })).toHaveClass(/selected/)
+  await page.getByRole('button', { name: '編集結果', exact: true }).click()
+  await expect(page.getByRole('button', { name: '編集結果', exact: true })).toHaveClass(/selected/)
+  await page.getByRole('button', { name: 'アセット編集', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: '表示倍率', exact: true })).toHaveValue('75')
+})
+
 test('inspector tools control Canvas strokes, undo, and mutually exclusive editing modes', async ({ page }) => {
   await page.goto('/cards?demo=1')
   const canvas = page.getByLabel('カード編集キャンバス')
