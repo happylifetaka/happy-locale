@@ -4,6 +4,8 @@
 
 ## 完了状況
 
+追加改善は [CardEditor.vue追加改善計画](./CARD_EDITOR_REFACTORING_PHASE2_PLAN.md) を参照。編集ツール状態のPinia共有、v-model整理、残る責務の分割を扱う。
+
 工程0〜6の受け入れ条件を完了。全437テスト、型検査、lint、ビルドが成功した。
 実ブラウザはPlaywrightの3テストと、ユーザーによる日本語IMEの手動確認で検証した。
 
