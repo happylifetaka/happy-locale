@@ -16,9 +16,18 @@ flowchart TD
 
 `CardEditor.vue`がこれらをつなぐ調整役です。PDF編集の実装は`app/features/pdf/PdfEditor.vue`を中心に、カード編集とは別の状態・保存形式を持ちます。
 
+カードのCanvas・領域Inspector・確認ダイアログの接続は`app/features/cards/`へまとめています。
+`useCardWorkspace`が画面状態を所有し、親で一度だけ生成した編集・資源・OCR・翻訳のAPIを用途別に共有します。
+保存・読込・追加・切替・一括書き出しの状態は各操作が所有し、`useProjectActivity`は排他判定に必要な状態だけを読み取ります。
+画像・フォントの解放とカード別履歴の所有者は、従来のruntimeとeditorのままです。
+
+PDF専用のプレビュー・項目編集・OCR・処理中状態は、`app/features/pdf/`のcomposableと隣接単体テストで確認できます。
+文書の採用と画面間の調整はPdfEditor、解析・変換・入出力の実処理は既存サービスに残します。
+複数機能が使う部品・サービス・型は共通配置を維持し、機能をまたぐ接続テストとE2Eは`tests/`に置きます。
+
 | 担当 | 主な実装 | 責務 |
 |---|---|---|
-| 画面と操作 | `app/components/` | 入力、選択、ダイアログ、プレビュー |
+| 画面と操作 | `app/components/`、`app/features/` | 共通部品と機能専用UI、入力、選択、ダイアログ、プレビュー |
 | 編集ロジック | [useCardEditor.ts](../app/composables/useCardEditor.ts) | 領域編集、訳文反映、Undo／Redo |
 | 永続データ | [project.ts](../app/stores/project.ts) | 全カードと共有アセット情報の管理 |
 | ブラウザ資源 | [useProjectRuntime.ts](../app/composables/useProjectRuntime.ts) | 画像、Blob、フォントの保持と解放 |
