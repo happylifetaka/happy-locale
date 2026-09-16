@@ -1,9 +1,48 @@
 // @vitest-environment happy-dom
 import { flushPromises } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 import { useProjectStore } from '~/stores/project'
 import { FILE_LIMITS } from '~/utils/file-limits'
-import { editorRuntime, loadFolderProjectCardImage, mountSavedEditor } from './helpers/card-editor'
+import { deferred, editorRuntime, loadFolderProjectCardImage, mountSavedEditor, unmountEditor } from './helpers/card-editor'
+
+it('keeps image loading alive across a view change and releases the adopted image at editor shutdown', async () => {
+  const { wrapper, canvas, toolbar } = await mountSavedEditor()
+  const decoded = deferred<void>()
+  const removeAttribute = vi.fn()
+  vi.stubGlobal('Image', class {
+    naturalWidth = 100
+    naturalHeight = 140
+    onload: (() => void) | null = null
+    source = ''
+    get src() { return this.source }
+    set src(value: string) {
+      this.source = value
+      queueMicrotask(() => this.onload?.())
+    }
+
+    decode = () => decoded.promise
+    removeAttribute = removeAttribute
+  })
+  vi.mocked(URL.createObjectURL).mockReturnValueOnce('blob:pending-asset')
+  const card = canvas.vm
+  const project = JSON.stringify(canvas.props('project'))
+  toolbar.vm.$emit('view', 'assets')
+  await nextTick()
+  wrapper.getComponent({ name: 'AssetEditor' }).vm.$emit('image', new File(['image'], 'asset.png', { type: 'image/png' }))
+  await flushPromises()
+  toolbar.vm.$emit('view', 'card')
+  await nextTick()
+  decoded.resolve()
+  await flushPromises()
+  expect(wrapper.getComponent({ name: 'CardCanvas' }).vm).toBe(card)
+  expect(JSON.stringify(canvas.props('project'))).toBe(project)
+  expect(editorRuntime().assetSourceImage.value!.src).toBe('blob:pending-asset')
+  expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:pending-asset')
+  unmountEditor()
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:pending-asset')
+  expect(removeAttribute).toHaveBeenCalledExactlyOnceWith('src')
+})
 
 it.each(['format', 'size'] as const)('rejects invalid image %s before allocating a URL and preserves the current card', async (invalid) => {
   const { wrapper } = await mountSavedEditor()
