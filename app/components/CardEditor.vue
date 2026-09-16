@@ -8,8 +8,6 @@ import type {
 } from '~/services/ocr/types'
 import type {
   ExclusionArea,
-  FolderProjectCard,
-  FolderProjectDocument,
   GlossaryEntry,
   LayoutTemplate,
   MaskStroke,
@@ -26,6 +24,7 @@ import { useCardThumbnails } from '~/composables/useCardThumbnails'
 import { useEditorAssets } from '~/composables/useEditorAssets'
 import { useEditorFonts } from '~/composables/useEditorFonts'
 import { useEditorOCR } from '~/composables/useEditorOCR'
+import { useEditorPrintSettings } from '~/composables/useEditorPrintSettings'
 import { useEditorTranslation } from '~/composables/useEditorTranslation'
 import { usePreviewDeferral } from '~/composables/usePreviewDeferral'
 import { useProjectCards } from '~/composables/useProjectCards'
@@ -560,6 +559,16 @@ const activeCardId = computed(
 const activeProjectCard = computed(() => folderDocument.value?.cards.find(
   card => card.id === activeCardId.value,
 ) ?? null)
+/** 印刷範囲・DPI・用紙設定の更新と未設定カードへの一括適用。 */
+const {
+  updatePrintSettings,
+  updateCardPrintDpi,
+  updatePrintArea,
+  clearPrintArea,
+  updatePrintDpi,
+  applyPrintAreaToUnconfiguredCards,
+} = useEditorPrintSettings({ projectStore, activeCardId, setMessage })
+
 /** エラーや補足データを診断ログ用の文字列へ変換する。 */
 function diagnosticDetails(value: unknown): string | undefined {
   if (value === undefined)
@@ -1253,82 +1262,6 @@ function openPrintLayout() {
     return
   currentView.value = 'print'
   editorTools.stopEditing()
-}
-
-/** 列数・余白・間隔などの用紙設定を文書へ反映する。 */
-function updatePrintSettings(settings: FolderProjectDocument['printSettings']) {
-  if (!folderDocument.value)
-    return
-  projectStore.replaceProject({ ...folderDocument.value, printSettings: settings })
-}
-
-/** 指定カードの縦横DPIを変更する。 */
-function updateCardPrintDpi(cardId: string, sourceDpi: FolderProjectCard['sourceDpi']) {
-  if (!folderDocument.value)
-    return
-  projectStore.replaceProject({
-    ...folderDocument.value,
-    cards: folderDocument.value.cards.map(card => card.id === cardId
-      ? { ...card, sourceDpi }
-      : card),
-  })
-}
-
-/** 現在のカードの印刷用メタデータを更新する。 */
-function updateActivePrintCard(
-  patch: Partial<Pick<FolderProjectCard, 'printArea' | 'sourceDpi'>>,
-) {
-  const documentValue = folderDocument.value
-  if (!documentValue)
-    return
-  projectStore.replaceProject({
-    ...documentValue,
-    cards: documentValue.cards.map(card => card.id === activeCardId.value
-      ? { ...card, ...patch }
-      : card),
-  })
-}
-
-/** 現在のカードへ印刷範囲を設定する。 */
-function updatePrintArea(area: RegionDraft) {
-  updateActivePrintCard({ printArea: area })
-}
-
-/** 現在のカードの印刷範囲を解除する。 */
-function clearPrintArea() {
-  updateActivePrintCard({ printArea: null })
-}
-
-/** 現在のカードへ縦横DPIを設定する。 */
-function updatePrintDpi(sourceDpi: FolderProjectCard['sourceDpi']) {
-  updateActivePrintCard({ sourceDpi })
-}
-
-/** 他カードの未設定の印刷範囲を画像サイズ比で補い、未設定のDPIも現在のカードから引き継ぐ。 */
-function applyPrintAreaToUnconfiguredCards() {
-  const documentValue = folderDocument.value
-  const sourceCard = activeProjectCard.value
-  if (!documentValue || !sourceCard?.printArea)
-    return
-  const area = sourceCard.printArea
-  projectStore.replaceProject({
-    ...documentValue,
-    cards: documentValue.cards.map((card) => {
-      if (card.id === sourceCard.id)
-        return card
-      return {
-        ...card,
-        printArea: card.printArea ?? {
-          x: area.x / sourceCard.imageWidth * card.imageWidth,
-          y: area.y / sourceCard.imageHeight * card.imageHeight,
-          width: area.width / sourceCard.imageWidth * card.imageWidth,
-          height: area.height / sourceCard.imageHeight * card.imageHeight,
-        },
-        sourceDpi: card.sourceDpi ?? sourceCard.sourceDpi,
-      }
-    }),
-  })
-  setMessage('印刷範囲とDPIを未設定のカードへ一括適用しました。')
 }
 
 /** 指定範囲に新しい翻訳領域を追加する。 */
