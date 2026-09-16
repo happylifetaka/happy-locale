@@ -7,15 +7,12 @@ import type {
   OCRProvider,
 } from '~/services/ocr/types'
 import type {
-  ExclusionArea,
   GlossaryEntry,
   LayoutTemplate,
-  MaskStroke,
   RegionDraft,
   SourceIcon,
   TextRegion,
 } from '~/types/editor'
-import type { SplitAxis, SplitText } from '~/utils/split-region'
 import type { ReusableTranslation } from '~/utils/translation-reuse'
 import { storeToRefs } from 'pinia'
 import { useBatchOCR } from '~/composables/useBatchOCR'
@@ -33,6 +30,7 @@ import { useProjectNavigation } from '~/composables/useProjectNavigation'
 import { useProjectPersistence } from '~/composables/useProjectPersistence'
 import { useProjectSession } from '~/composables/useProjectSession'
 import { useRegionCandidates } from '~/composables/useRegionCandidates'
+import { useRegionEditing } from '~/composables/useRegionEditing'
 import { useTranslationReview } from '~/composables/useTranslationReview'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
@@ -50,7 +48,6 @@ import { readImageDpi } from '~/utils/image-dpi'
 import { historyShortcut } from '~/utils/keyboard'
 import { fitsImage } from '~/utils/layout-template'
 import { savedProjectSignature } from '~/utils/project-save'
-import { transformRegionContents } from '~/utils/regions'
 import { sourceIconProblems } from '~/utils/source-icons'
 import { findReusableTranslations } from '~/utils/translation-reuse'
 import { statusForTranslation } from '~/utils/translation-status'
@@ -139,16 +136,12 @@ const {
 })
 /** 次回保存時に削除するカードID。保存前なら取り消せる。 */
 const pendingCardDeletionIds = shallowRef(new Set<string>())
-/** 削除確認を待っている翻訳領域。 */
-const regionPendingDeletionConfirmation = shallowRef<TextRegion | null>(null)
 /** カード上でアセットの切り出し範囲を指定しているか。 */
 const assetEditing = ref(false)
 /** カード・アセット・印刷のうち現在表示する作業画面。 */
 const currentView = ref<'card' | 'assets' | 'print'>('card')
 /** 配置雛形ダイアログの保存・適用モード。nullなら閉じている。 */
 const layoutTemplateMode = ref<'capture' | 'apply' | null>(null)
-/** 分割確認を開いた時点のカードと領域の情報。 */
-const regionSplitRequest = shallowRef<{ cardId: string, region: TextRegion } | null>(null)
 /** 原文アイコン指定を開いた時点のカードと領域の情報。 */
 const sourceIconsRequest = shallowRef<{ cardId: string, region: TextRegion } | null>(null)
 /** 子Canvasの画像書き出し等を呼び出す公開API。 */
@@ -181,6 +174,24 @@ const editorTools = useEditorToolsStore()
 const { maskEditing, exclusionEditing } = storeToRefs(editorTools)
 /** 現在選択している保護領域のID。 */
 const selectedExclusionId = ref<string | null>(null)
+/** 領域の追加・削除・分割と内部マスク・保護領域の更新。 */
+const {
+  regionPendingDeletionConfirmation,
+  regionSplitRequest,
+  requestRegionSplit,
+  applyRegionSplit,
+  addRegion,
+  renameRegion,
+  requestRegionDeletion,
+  cancelRegionDeletion,
+  confirmRegionDeletion,
+  updateRegionBounds,
+  addMaskStroke,
+  addExclusion,
+  updateExclusion,
+  removeExclusion,
+} = useRegionEditing({ editor, currentImageId, projectBusy, selectedExclusionId, exclusionEditing, switchInspectorTab, setMessage })
+
 /** カード編集画面の表示倍率。100が等倍。 */
 const cardZoom = ref(50)
 /** 編集結果と元画像のどちらを表示するか。 */
@@ -858,31 +869,6 @@ function applyLayoutTemplate(regions: TextRegion[]) {
   setMessage(`${regions.length}領域を追加しました。原文と訳文を設定してください。`)
 }
 
-/** 領域の現在値を控えて分割確認を開く。 */
-function requestRegionSplit(id: string) {
-  const region = editor.project.value.regions.find(item => item.id === id)
-  if (!region || projectBusy.value)
-    return
-  regionSplitRequest.value = { cardId: currentImageId.value, region: JSON.parse(JSON.stringify(region)) as TextRegion }
-}
-
-/** 確認した分割位置と本文を二つの編集領域へ反映する。 */
-function applyRegionSplit(axis: SplitAxis, position: number, texts: [SplitText, SplitText]) {
-  const request = regionSplitRequest.value
-  if (!request)
-    return
-  const current = editor.project.value.regions.find(item => item.id === request.region.id)
-  if (request.cardId !== currentImageId.value || JSON.stringify(current) !== JSON.stringify(request.region)) {
-    regionSplitRequest.value = null
-    setMessage('領域が変更されたため分割を中止しました。現在の内容でやり直してください。')
-    return
-  }
-  editor.splitRegion(request.region.id, axis, position, texts)
-  regionSplitRequest.value = null
-  inspectorTab.value = 'list'
-  setMessage('領域を分割しました。原文・訳文と保護領域を確認してください。')
-}
-
 /** 選択領域の原文アイコンを指定する画面を開く。 */
 function requestSourceIcons() {
   const region = editor.selectedRegion.value
@@ -1182,72 +1168,6 @@ function openPrintLayout() {
   editorTools.stopEditing()
 }
 
-/** 指定範囲に新しい翻訳領域を追加する。 */
-function addRegion(bounds: RegionDraft, backgroundColor: string) {
-  editor.addRegion(bounds, backgroundColor)
-  switchInspectorTab('region')
-}
-
-/** 翻訳領域の表示名を変更する。 */
-function renameRegion(id: string, displayName: string) {
-  const name = displayName.trim()
-  if (!name)
-    return
-  editor.updateRegion(id, { displayName: name })
-  setMessage(`領域名を「${name}」へ変更しました。`)
-}
-
-/** 領域削除の確認を開く。 */
-function requestRegionDeletion(id: string) {
-  regionPendingDeletionConfirmation.value
-    = editor.project.value.regions.find(region => region.id === id) ?? null
-}
-
-/** 領域削除の確認を閉じる。 */
-function cancelRegionDeletion() {
-  regionPendingDeletionConfirmation.value = null
-}
-
-/** 確認した翻訳領域を削除する。 */
-function confirmRegionDeletion() {
-  const region = regionPendingDeletionConfirmation.value
-  if (!region)
-    return
-  editor.removeRegion(region.id)
-  regionPendingDeletionConfirmation.value = null
-  setMessage(`「${region.displayName.trim() || region.regionId}」を削除しました。`)
-}
-
-/** 領域と内部マスク・保護範囲の座標を合わせて変更する。 */
-function updateRegionBounds(regionId: string, bounds: RegionDraft) {
-  const region = editor.project.value.regions.find(
-    item => item.id === regionId,
-  )
-  if (!region)
-    return
-  editor.updateRegion(regionId, {
-    ...bounds,
-    ...transformRegionContents(region, bounds),
-  })
-}
-
-/** 一筆分の手動マスクを領域へ追加する。 */
-function addMaskStroke(regionId: string, stroke: MaskStroke) {
-  const region = editor.project.value.regions.find(
-    item => item.id === regionId,
-  )
-  if (!region)
-    return
-  const savedStroke: MaskStroke = {
-    brushSize: stroke.brushSize,
-    mode: stroke.mode,
-    points: stroke.points.map(point => ({ ...point })),
-  }
-  editor.updateRegion(regionId, {
-    manualMaskStrokes: [...region.manualMaskStrokes, savedStroke],
-  })
-}
-
 /** 原文消去用マスクの描画モードを切り替える。 */
 function toggleMaskEditing() {
   editorTools.toggleMaskEditing()
@@ -1260,57 +1180,6 @@ function toggleExclusionEditing() {
   editorTools.toggleExclusionEditing()
   if (exclusionEditing.value)
     assetEditing.value = false
-}
-
-/** 原文領域の内部へ保護矩形を追加する。 */
-function addExclusion(regionId: string, bounds: RegionDraft) {
-  const region = editor.project.value.regions.find(
-    item => item.id === regionId,
-  )
-  if (!region)
-    return
-  const area: ExclusionArea = {
-    id: crypto.randomUUID(),
-    ...bounds,
-  }
-  editor.updateRegion(regionId, {
-    exclusionAreas: [...region.exclusionAreas, area],
-  })
-  selectedExclusionId.value = area.id
-  exclusionEditing.value = false
-}
-
-/** 指定した保護領域の位置と大きさを変更する。 */
-function updateExclusion(
-  regionId: string,
-  exclusionId: string,
-  bounds: RegionDraft,
-) {
-  const region = editor.project.value.regions.find(
-    item => item.id === regionId,
-  )
-  if (!region)
-    return
-  editor.updateRegion(regionId, {
-    exclusionAreas: region.exclusionAreas.map(area =>
-      area.id === exclusionId ? { ...area, ...bounds } : area,
-    ),
-  })
-}
-
-/** 指定した保護領域を削除する。 */
-function removeExclusion(regionId: string, exclusionId: string) {
-  const region = editor.project.value.regions.find(
-    item => item.id === regionId,
-  )
-  if (!region)
-    return
-  editor.updateRegion(regionId, {
-    exclusionAreas: region.exclusionAreas.filter(
-      area => area.id !== exclusionId,
-    ),
-  })
-  selectedExclusionId.value = null
 }
 </script>
 
