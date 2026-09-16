@@ -28,6 +28,8 @@ import { useProjectSession } from '~/composables/useProjectSession'
 import { useRegionCandidates } from '~/composables/useRegionCandidates'
 import { useTranslationReuse } from '~/composables/useTranslationReuse'
 import { useTranslationReview } from '~/composables/useTranslationReview'
+import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTranslation } from '~/features/cards/cardEditingContext'
+import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
 import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
@@ -46,7 +48,6 @@ import { savedProjectSignature } from '~/utils/project-save'
 import { sourceIconProblems } from '~/utils/source-icons'
 import DiagnosticsDialog from './DiagnosticsDialog.vue'
 import EditorConfirmDialog from './EditorConfirmDialog.vue'
-import EditorInspectorPanel from './EditorInspectorPanel.vue'
 import RegionCandidatePanel from './RegionCandidatePanel.vue'
 
 const props = defineProps<{
@@ -147,39 +148,7 @@ const workspace = useCardWorkspace({
   assetEditing,
   setMessage,
 })
-const {
-  canvasApi,
-  autoMaskPreview,
-  inspectorTab,
-  activeInspectorDetailTab,
-  canOpenInspectorTab,
-  switchInspectorTab,
-  selectRegionForEditing,
-  previewDeferred,
-  deferPreview,
-  flushPreview,
-  maskEditing,
-  exclusionEditing,
-  selectedExclusionId,
-  regionPendingDeletionConfirmation,
-  regionSplitRequest,
-  requestRegionSplit,
-  applyRegionSplit,
-  addRegion,
-  renameRegion,
-  requestRegionDeletion,
-  cancelRegionDeletion,
-  confirmRegionDeletion,
-  updateRegionBounds,
-  addMaskStroke,
-  addExclusion,
-  updateExclusion,
-  removeExclusion,
-  cardZoom,
-  cardPreviewMode,
-  toggleMaskEditing,
-  toggleExclusionEditing,
-} = workspace
+const { canvasApi, inspectorTab, switchInspectorTab, maskEditing, exclusionEditing, cardPreviewMode } = workspace
 /** アセット編集画面の表示倍率。100が等倍。 */
 const assetZoom = ref(100)
 /** ブラウザがフォルダへの読み書きに対応しているか。 */
@@ -197,22 +166,7 @@ const ocrProgress = ref<number | null>(null)
 /** OCRエンジンが現在実行している処理の説明。 */
 const ocrStatus = ref('')
 /** 単一領域の認識と補正。実行状態とWorkerは全体・一括OCRと共有する。 */
-const {
-  ocrLayout,
-  ocrCandidate,
-  ocrConfidence,
-  ocrCorrectionCandidate,
-  ocrCorrectionChanges,
-  clearOCRCandidate,
-  updateOCRCandidate,
-  applyOCRCorrection,
-  discardOCRCorrection,
-  addOCRDictionaryEntry,
-  removeOCRDictionaryEntry,
-  finishOCRCandidate,
-  recognizeSelectedRegion,
-  applyOCRCandidate,
-} = useEditorOCR({
+const regionOCR = useEditorOCR({
   editor,
   provider: ocrProvider,
   execution: { running: ocrRunning, progress: ocrProgress, status: ocrStatus },
@@ -225,6 +179,7 @@ const {
   setMessage,
   logDiagnostic,
 })
+const { clearOCRCandidate } = regionOCR
 /** フォントの読込・復元・使用箇所を考慮した削除。 */
 const {
   cachedFontIds,
@@ -298,19 +253,7 @@ const {
   logDiagnostic,
 })
 /** 現在の画像の候補検出・選択・編集履歴。 */
-const {
-  regionCandidates,
-  selectedCandidateId,
-  regionCandidateEditHistory,
-  clearRegionCandidates,
-  selectRegionCandidate,
-  toggleRegionCandidate,
-  selectAllRegionCandidates,
-  splitCandidate,
-  updateCandidateBounds,
-  undoCandidateChange,
-  detectRegionCandidates,
-} = useRegionCandidates({
+const candidateEditing = useRegionCandidates({
   editor,
   image,
   provider: ocrProvider,
@@ -322,6 +265,17 @@ const {
   setMessage,
   logDiagnostic,
 })
+const {
+  regionCandidates,
+  selectedCandidateId,
+  regionCandidateEditHistory,
+  clearRegionCandidates,
+  toggleRegionCandidate,
+  selectAllRegionCandidates,
+  splitCandidate,
+  undoCandidateChange,
+  detectRegionCandidates,
+} = candidateEditing
 /** 現在の翻訳設定と、ブラウザへの保存を伴う更新操作。 */
 const { settings: translationSettings, updateSettings: updateTranslationSettings }
   = useTranslationSettings()
@@ -998,6 +952,33 @@ function openPrintLayout() {
   currentView.value = 'print'
   workspace.stopEditing()
 }
+
+// 既存インスタンスを責務別に共有する。資源解放・保存操作は全体側に残す。
+provideCardEditing({ editor, workspace })
+provideCardResources({
+  image,
+  projectSelected: computed(() => Boolean(projectDirectory.value)),
+  assets,
+  assetImages,
+  fontFamilies,
+  fonts,
+  loadedFontIds,
+})
+provideCardOCR({
+  region: regionOCR,
+  execution: { running: ocrRunning, progress: ocrProgress, status: ocrStatus },
+  dictionary: ocrDictionary,
+  candidates: candidateEditing,
+  requestSourceIcons,
+})
+provideCardTranslation({
+  enabled: computed(() => isDemo.value || (translationEndpointEnabled && translationSettings.value.provider === 'local')),
+  running: translationRunning,
+  glossary,
+  reusableCount: computed(() => reusableTranslations.value.length),
+  requestReuse: requestTranslationReuse,
+  translate: translateSelectedRegion,
+})
 </script>
 
 <template>
@@ -1087,15 +1068,6 @@ function openPrintLayout() {
       @apply="applyLayoutTemplate"
       @close="layoutTemplateMode = null"
     />
-    <RegionSplitDialog
-      v-if="regionSplitRequest && image"
-      :region="regionSplitRequest.region"
-      :image-url="image.src"
-      :image-width="editor.project.value.imageWidth"
-      :image-height="editor.project.value.imageHeight"
-      @apply="applyRegionSplit"
-      @close="regionSplitRequest = null"
-    />
     <SourceIconsDialog
       v-if="sourceIconsRequest && image"
       :region="sourceIconsRequest.region"
@@ -1116,17 +1088,6 @@ function openPrintLayout() {
     <p v-if="message" class="notice" role="status">
       {{ message }}
     </p>
-    <EditorConfirmDialog
-      v-if="regionPendingDeletionConfirmation"
-      id="region-delete"
-      title="領域を削除しますか？"
-      @cancel="cancelRegionDeletion"
-      @confirm="confirmRegionDeletion"
-    >
-      「{{ regionPendingDeletionConfirmation.displayName.trim()
-        || regionPendingDeletionConfirmation.regionId }}」を削除します。
-      元テキスト、訳文、文字設定も削除されます。
-    </EditorConfirmDialog>
     <EditorConfirmDialog
       v-if="cardPendingDeletionConfirmation"
       id="card-delete"
@@ -1150,132 +1111,84 @@ function openPrintLayout() {
       削除すると、そのフォント指定は標準フォントへ戻ります。
       この変更はプロジェクト保存時に確定します。
     </EditorConfirmDialog>
-    <div
-      v-show="currentView === 'card'"
-      class="editor-layout"
-      :class="{ 'has-card-list': projectCards.length > 0 }"
+    <CardEditingWorkspace
+      :visible="currentView === 'card'"
+      :has-card-list="projectCards.length > 0"
+      :print-area="activeProjectCard?.printArea ?? null"
+      @image="openCardImage"
+      @diagnostic="logDiagnostic"
+      @update-print-area="updatePrintArea"
     >
-      <CardList
-        v-if="projectCards.length > 0"
-        :cards="projectCards"
-        :active-card-id="activeCardId"
-        :loading-card-id="loadingCardId"
-        :adding-cards="addingCards"
-        :exporting-cards="exportingCards"
-        :can-add-cards="Boolean(folderDocument) && !isDemo"
-        :add-cards-disabled-reason="isDemo ? 'デモではサンプルカードのみ編集できます。' : undefined"
-        :thumbnails="cardThumbnails"
-        :pending-deletion-ids="pendingCardDeletionIds"
-        :batch-ocr-running="batchOCRRunning"
-        :batch-ocr-completed="batchOCRCompleted"
-        :batch-ocr-total="batchOCRTotal"
-        :batch-ocr-eligible-count="batchOCREligibleCards.length"
-        :batch-ocr-states="batchOCRStates"
-        :batch-translation-available="true"
-        :batch-translation-count="translationReviewCards.filter(card => card.regions.length).length"
-        :translation-running="translationRunning"
-        @start-batch-translation="openTranslationReview(undefined, false, isDemo)"
-        @select="selectProjectCard"
-        @add="addProjectCards"
-        @add-folder="addProjectCardsFromFolder"
-        @export-png="exportCardImage($event, 'png')"
-        @export-jpeg="exportCardImage($event, 'jpeg')"
-        @export-csv="exportCardCsv"
-        @delete="requestProjectCardDeletion"
-        @cancel-delete="cancelProjectCardDeletionRequest"
-        @rename="renameCard"
-        @move="moveCard"
-        @export-all="exportAllCardImages"
-        @select-region="selectProjectRegion"
-        @request-thumbnail="requestCardThumbnail"
-        @start-batch-ocr="startBatchOCR"
-        @cancel-batch-ocr="requestBatchOCRCancellation"
-        @open-print-layout="openPrintLayout"
-      />
-      <CardCanvas
-        ref="canvasApi"
-        v-model:zoom="cardZoom"
-        v-model:preview-mode="cardPreviewMode"
-        :image="image"
-        :project-selected="Boolean(projectDirectory)"
-        :project="editor.project.value"
-        :preview-deferred="previewDeferred"
-        :selected-region-id="editor.selectedRegionId.value"
-        :auto-mask-preview="autoMaskPreview"
-        :selected-exclusion-id="selectedExclusionId"
-        :assets="assets"
-        :asset-images="assetImages"
-        :font-families="fontFamilies"
-        :region-candidates="regionCandidates"
-        :selected-candidate-id="selectedCandidateId"
-        :print-area="activeProjectCard?.printArea ?? null"
-        :print-area-editing="inspectorTab === 'print'"
-        @image="openCardImage"
-        @diagnostic="logDiagnostic"
-        @add-region="addRegion"
-        @update-region-bounds="updateRegionBounds"
-        @add-mask-stroke="addMaskStroke"
-        @add-exclusion="addExclusion"
-        @update-exclusion="updateExclusion"
-        @select-exclusion="selectedExclusionId = $event"
-        @select-region="selectRegionForEditing"
-        @select-region-candidate="selectRegionCandidate"
-        @update-region-candidate-bounds="updateCandidateBounds"
-        @update-print-area="updatePrintArea"
-      />
-      <EditorInspectorPanel
-        :active-tab="inspectorTab"
-        :can-open-tab="canOpenInspectorTab"
-        :selection-label="editor.selectedRegion.value ? (editor.selectedRegion.value.displayName.trim() || editor.selectedRegion.value.regionId) : null"
-        @select="switchInspectorTab"
-      >
-        <template #header>
-          <p v-if="isDemo" class="muted">
-            デモ：左側の「まとめて領域検出」→「選択した候補を追加」→ 左側の「まとめて翻訳」→PDF(A4)作成で翻訳からPDF作成の流れを体験できます。<br>
-            デモでは領域・原文・翻訳・アセットはデモ用データを使います。実際はOCR認識、アセット登録、翻訳をする必要があります。<br>
-          </p>
-          <div v-if="isDemo && editor.project.value.regions.length" class="batch-translation-actions">
-            <button
-              type="button"
-              :disabled="translationRunning || !batchTranslationRegions.length"
-              @click="translateUntranslatedRegions"
-            >
-              {{ translationRunning ? '翻訳候補を取得中…' : `未翻訳をまとめて取得（${batchTranslationRegions.length}件）` }}
-            </button>
-            <small>このカードの原文がある未翻訳領域が対象です。</small>
-          </div>
-        </template>
-        <div
-          v-show="inspectorTab === 'list'"
-          id="inspector-panel-list"
-          class="side-panel-tab-content"
-          role="tabpanel"
-          aria-labelledby="inspector-tab-list"
-        >
-          <RegionList
-            :regions="editor.project.value.regions"
-            :selected-id="editor.selectedRegionId.value"
-            @select="selectRegionForEditing"
-            @rename="renameRegion"
-            @split="requestRegionSplit"
-            @remove="requestRegionDeletion"
-          />
-          <details class="layout-template-tools">
-            <summary>配置雛形</summary>
-            <p v-if="!folderDocument" class="muted">
-              プロジェクトを一度保存すると、配置雛形を登録できます。
-            </p>
-            <button type="button" :disabled="!folderDocument || !editor.project.value.regions.length || projectBusy" @click="layoutTemplateMode = 'capture'">
-              このカードの領域を雛形にする
-            </button>
-            <button type="button" :disabled="!folderDocument?.layoutTemplates?.length || projectBusy" @click="layoutTemplateMode = 'apply'">
-              配置雛形から領域を追加
-            </button>
-          </details>
-          <p v-if="editor.project.value.regions.length === 0" class="muted">
-            画像上をドラッグして最初の領域を追加してください。
-          </p>
+      <template #cards>
+        <CardList
+          v-if="projectCards.length > 0"
+          :cards="projectCards"
+          :active-card-id="activeCardId"
+          :loading-card-id="loadingCardId"
+          :adding-cards="addingCards"
+          :exporting-cards="exportingCards"
+          :can-add-cards="Boolean(folderDocument) && !isDemo"
+          :add-cards-disabled-reason="isDemo ? 'デモではサンプルカードのみ編集できます。' : undefined"
+          :thumbnails="cardThumbnails"
+          :pending-deletion-ids="pendingCardDeletionIds"
+          :batch-ocr-running="batchOCRRunning"
+          :batch-ocr-completed="batchOCRCompleted"
+          :batch-ocr-total="batchOCRTotal"
+          :batch-ocr-eligible-count="batchOCREligibleCards.length"
+          :batch-ocr-states="batchOCRStates"
+          :batch-translation-available="true"
+          :batch-translation-count="translationReviewCards.filter(card => card.regions.length).length"
+          :translation-running="translationRunning"
+          @start-batch-translation="openTranslationReview(undefined, false, isDemo)"
+          @select="selectProjectCard"
+          @add="addProjectCards"
+          @add-folder="addProjectCardsFromFolder"
+          @export-png="exportCardImage($event, 'png')"
+          @export-jpeg="exportCardImage($event, 'jpeg')"
+          @export-csv="exportCardCsv"
+          @delete="requestProjectCardDeletion"
+          @cancel-delete="cancelProjectCardDeletionRequest"
+          @rename="renameCard"
+          @move="moveCard"
+          @export-all="exportAllCardImages"
+          @select-region="selectProjectRegion"
+          @request-thumbnail="requestCardThumbnail"
+          @start-batch-ocr="startBatchOCR"
+          @cancel-batch-ocr="requestBatchOCRCancellation"
+          @open-print-layout="openPrintLayout"
+        />
+      </template>
+      <template #header>
+        <p v-if="isDemo" class="muted">
+          デモ：左側の「まとめて領域検出」→「選択した候補を追加」→ 左側の「まとめて翻訳」→PDF(A4)作成で翻訳からPDF作成の流れを体験できます。<br>
+          デモでは領域・原文・翻訳・アセットはデモ用データを使います。実際はOCR認識、アセット登録、翻訳をする必要があります。<br>
+        </p>
+        <div v-if="isDemo && editor.project.value.regions.length" class="batch-translation-actions">
+          <button
+            type="button"
+            :disabled="translationRunning || !batchTranslationRegions.length"
+            @click="translateUntranslatedRegions"
+          >
+            {{ translationRunning ? '翻訳候補を取得中…' : `未翻訳をまとめて取得（${batchTranslationRegions.length}件）` }}
+          </button>
+          <small>このカードの原文がある未翻訳領域が対象です。</small>
         </div>
+      </template>
+      <template #layout-tools>
+        <details class="layout-template-tools">
+          <summary>配置雛形</summary>
+          <p v-if="!folderDocument" class="muted">
+            プロジェクトを一度保存すると、配置雛形を登録できます。
+          </p>
+          <button type="button" :disabled="!folderDocument || !editor.project.value.regions.length || projectBusy" @click="layoutTemplateMode = 'capture'">
+            このカードの領域を雛形にする
+          </button>
+          <button type="button" :disabled="!folderDocument?.layoutTemplates?.length || projectBusy" @click="layoutTemplateMode = 'apply'">
+            配置雛形から領域を追加
+          </button>
+        </details>
+      </template>
+      <template #candidates>
         <RegionCandidatePanel
           v-show="inspectorTab === 'ocr'"
           :detection-disabled-reason="isDemo ? 'デモでは使用できません。左側の「まとめて領域検出」を使ってください。' : undefined"
@@ -1294,57 +1207,8 @@ function openPrintLayout() {
           @confirm="confirmRegionCandidates"
           @cancel="discardRegionCandidates"
         />
-        <RegionInspector
-          v-show="inspectorTab === 'region' || inspectorTab === 'ocr' || inspectorTab === 'text'"
-          v-model:auto-mask-preview="autoMaskPreview"
-          v-model:ocr-layout="ocrLayout"
-          v-model:ocr-correction-candidate="ocrCorrectionCandidate"
-          :region="editor.selectedRegion.value"
-          :active-tab="activeInspectorDetailTab"
-          :selected-exclusion-id="selectedExclusionId"
-          :fonts="fonts"
-          :loaded-font-ids="loadedFontIds"
-          :assets="assets"
-          :asset-images="assetImages"
-          :ocr-running="ocrRunning"
-          :ocr-progress="ocrProgress"
-          :ocr-status="ocrStatus"
-          :ocr-candidate="ocrCandidate"
-          :ocr-confidence="ocrConfidence"
-          :ocr-fill-enabled="cardPreviewMode === 'edited'"
-          :ocr-correction-changes="ocrCorrectionChanges"
-          :ocr-dictionary="ocrDictionary"
-          :translation-enabled="
-            isDemo
-              || (translationEndpointEnabled && translationSettings.provider === 'local')
-          "
-          :translation-running="translationRunning"
-          :glossary="glossary"
-          :reusable-translation-count="reusableTranslations.length"
-          @reuse-translation="requestTranslationReuse"
-          @update="editor.updateRegion"
-          @defer-preview="deferPreview"
-          @flush-preview="flushPreview"
-          @toggle-mask-editing="toggleMaskEditing"
-          @clear-mask="editor.updateRegion($event, { manualMaskStrokes: [] })"
-          @toggle-exclusion-editing="toggleExclusionEditing"
-          @select-exclusion="selectedExclusionId = $event"
-          @remove-exclusion="removeExclusion"
-          @recognize-text="recognizeSelectedRegion"
-          @update-ocr-candidate="updateOCRCandidate"
-          @apply-ocr-candidate="applyOCRCandidate"
-          @discard-ocr-candidate="finishOCRCandidate"
-          @apply-ocr-correction="applyOCRCorrection"
-          @discard-ocr-correction="discardOCRCorrection"
-          @add-ocr-dictionary-entry="addOCRDictionaryEntry"
-          @remove-ocr-dictionary-entry="removeOCRDictionaryEntry"
-          @update-ocr-fill-enabled="
-            cardPreviewMode = $event ? 'edited' : 'original'
-          "
-          @translate="translateSelectedRegion"
-          @split="editor.selectedRegionId.value && requestRegionSplit(editor.selectedRegionId.value)"
-          @source-icons="requestSourceIcons"
-        />
+      </template>
+      <template #print>
         <PrintAreaInspector
           v-if="activeProjectCard"
           v-show="inspectorTab === 'print'"
@@ -1358,6 +1222,8 @@ function openPrintLayout() {
           @clear-area="clearPrintArea"
           @apply-to-others="applyPrintAreaToUnconfiguredCards"
         />
+      </template>
+      <template #fonts>
         <FontLibrary
           v-show="inspectorTab === 'text'"
           :fonts="fonts"
@@ -1367,8 +1233,8 @@ function openPrintLayout() {
           @rename="renameFont"
           @remove="requestFontDeletion"
         />
-      </EditorInspectorPanel>
-    </div>
+      </template>
+    </CardEditingWorkspace>
     <AssetEditor
       v-show="currentView === 'assets'"
       v-model:zoom="assetZoom"

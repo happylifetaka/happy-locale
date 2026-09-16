@@ -230,3 +230,10 @@ Workspace計画の準備として `app/features/cards/useCardWorkspace.ts` を�
 OCR候補の選択変更時クリアは `useEditorOCR` 内へ移し、候補の所有元が監視も担当する。
 全76ファイル・485テスト、型検査、lint、ビルド、Playwright 5件が成功。
 Workspace UI、型付き共有API、残る処理中フラグの所有整理と機能別コロケーションは継続中。
+
+## 実装記録: 2026-09-16（Workspace UIとコロケーション）
+
+カード専用のWorkspace、領域Inspector接続、型付き共有API、Workspace単体テストを `app/features/cards/` に配置した。
+既存の描画・入力部品と共有サービスは従来の場所に残す。
+詳細はWorkspace計画の実装記録を参照。全487テストと型検査・lint・ビルド、ブラウザ6ケースが成功している。
+カード側の適用範囲は機能UI・接続・専用状態に限定し、保存ストアや汎用入力部品の移動は行っていない。

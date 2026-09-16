@@ -34,7 +34,7 @@ const props = defineProps<{
   autoMaskPreview: boolean
   selectedExclusionId: string | null
   fonts: FontReference[]
-  loadedFontIds: Set<string>
+  loadedFontIds: ReadonlySet<string>
   assets: ImageAsset[]
   assetImages: ReadonlyMap<string, CanvasImageSource>
   ocrRunning: boolean

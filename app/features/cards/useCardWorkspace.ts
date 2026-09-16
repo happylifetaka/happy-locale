@@ -93,7 +93,6 @@ export function useCardWorkspace({ editor, image, hasProject, currentImageId, cu
   }
 
   onBeforeUnmount(() => {
-    canvasApi.value = null
     editorTools.$reset()
   })
 

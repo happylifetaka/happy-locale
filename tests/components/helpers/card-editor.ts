@@ -174,6 +174,8 @@ export async function mountEditor(pinia = createPinia(), realInspector = false) 
       components: { RegionInspector },
       stubs: {
         ...Object.fromEntries(childNames.map(name => [name, true])),
+        CardEditingWorkspace: false,
+        CardRegionInspector: false,
         EditorConfirmDialog: false,
         EditorInspectorPanel: false,
         DiagnosticsDialog: false,
