@@ -4,6 +4,7 @@ import { flushPromises, shallowMount } from '@vue/test-utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import PdfEditor from '~/features/pdf/PdfEditor.vue'
+import { serializePdfTranslationCsv } from '~/services/pdf'
 
 const io = vi.hoisted(() => ({
   analyzePdf: vi.fn<typeof import('~/services/pdf').analyzePdf>(),
@@ -60,7 +61,7 @@ beforeEach(() => {
         BrandMark: true,
         DataPrivacyFooter: true,
         UnsavedChangesDialog: true,
-        PdfPreviewCanvas: { name: 'PdfPreviewCanvas', props: ['page', 'selectedEntryId', 'protectionEditing', 'ocrEditing'], template: '<div />' },
+        PdfPreviewCanvas: { name: 'PdfPreviewCanvas', props: ['page', 'entries', 'translations', 'excludedEntryIds', 'selectedEntryId', 'protectionEditing', 'ocrEditing'], template: '<div />' },
       },
     },
   })
@@ -103,4 +104,61 @@ it('clears the previous document image when a replacement preview fails', async 
   expect(wrapper!.findComponent({ name: 'PdfPreviewCanvas' }).exists()).toBe(false)
   expect(wrapper!.get('[role="status"]').text()).toContain('replacement failed')
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview')
+})
+
+async function clickButton(label: string) {
+  const button = wrapper!.findAll('button').find(button => button.text() === label)
+  expect(button, label).toBeDefined()
+  await button!.trigger('click')
+}
+
+async function importTranslations() {
+  const analysis = await io.analyzePdf.mock.results[0]!.value
+  const csv = serializePdfTranslationCsv(analysis, new Map([['entry-1', '訳文1'], ['entry-2', '訳文2']]))
+  const input = wrapper!.get('input[accept=".csv,text/csv"]')
+  const file = new File([csv], 'translations.csv')
+  Object.defineProperty(file, 'text', { value: async () => csv })
+  Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+  await input.trigger('change')
+  await flushPromises()
+}
+
+it('updates the selected original and invalidates only its translation', async () => {
+  await openPdf()
+  await importTranslations()
+  const canvas = wrapper!.getComponent({ name: 'PdfPreviewCanvas' })
+  expect(canvas.props('translations').get('entry-1')).toBe('訳文1')
+  await wrapper!.get('textarea').setValue('Corrected original')
+  await clickButton('原文を更新')
+  expect(canvas.props('entries')[0].original).toBe('Corrected original')
+  expect(canvas.props('translations').has('entry-1')).toBe(false)
+  expect(canvas.props('translations').get('entry-2')).toBe('訳文2')
+  await wrapper!.get('.pdf-preview-toolbar select').setValue('2')
+  await flushPromises()
+  expect(wrapper!.get('textarea').element.value).toBe('Page 2')
+})
+
+it('keeps selection and exclusion consistent through split, reorder and merge', async () => {
+  await openPdf()
+  await importTranslations()
+  const canvas = wrapper!.getComponent({ name: 'PdfPreviewCanvas' })
+  await clickButton('CSV対象から除外')
+  await wrapper!.get('textarea').setValue('First line\nSecond line')
+  await clickButton('改行で分割')
+  const ids = canvas.props('entries').map((entry: { id: string }) => entry.id)
+  expect(ids).toHaveLength(2)
+  expect(canvas.props('selectedEntryId')).toBe(ids[0])
+  expect([...canvas.props('excludedEntryIds')]).toEqual(expect.arrayContaining(ids))
+  expect(canvas.props('translations').has('entry-1')).toBe(false)
+  expect(canvas.props('translations').get('entry-2')).toBe('訳文2')
+  await clickButton('次へ')
+  expect(canvas.props('entries').map((entry: { id: string }) => entry.id)).toEqual([ids[1], ids[0]])
+  await clickButton('前へ')
+  await clickButton('次の項目と結合')
+  expect(canvas.props('entries')).toHaveLength(1)
+  expect(canvas.props('selectedEntryId')).toBe(ids[0])
+  expect([...canvas.props('excludedEntryIds')]).toEqual([ids[0]])
+  expect(wrapper!.get('textarea').element.value).toContain('Second line')
+  await clickButton('CSV対象へ戻す')
+  expect(canvas.props('excludedEntryIds').size).toBe(0)
 })
