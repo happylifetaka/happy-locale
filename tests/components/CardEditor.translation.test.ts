@@ -24,6 +24,25 @@ describe('card editor translation candidates', () => {
     return { ...context, toolbar }
   }
 
+  it('offers browser translation in the public build without an endpoint request', async () => {
+    vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/' }, public: { translationEndpointEnabled: false } }))
+    localStorage.setItem(TRANSLATION_SETTINGS_STORAGE_KEY, JSON.stringify({ provider: 'browser', endpoint: 'http://localhost:4578' }))
+    const destroy = vi.fn()
+    const translate = vi.fn().mockResolvedValue('2 ZXQICON1QXZを得る。')
+    vi.stubGlobal('Translator', { create: vi.fn().mockResolvedValue({ translate, destroy }) })
+    const { inspector, wrapper, canvas } = await mountEditor()
+    inspector.vm.$emit('update', inspector.props('region').id, { originalText: 'Gain 2 [icon:sun].', translatedText: '手修正済み' })
+    await nextTick()
+    inspector.vm.$emit('translate')
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'TranslationRequestDialog' }).exists()).toBe(false)
+    expect(LocalTranslationProvider.prototype.translate).not.toHaveBeenCalled()
+    expect(translate).toHaveBeenCalledWith('Gain 2 zxqicon1qxz.', expect.any(Object))
+    expect(wrapper.findComponent({ name: 'TranslationPreviewDialog' }).props('proposedTranslation')).toBe('2 [icon:sun]を得る。')
+    expect(canvas.props('project').regions[0].translatedText).toBe('手修正済み')
+    expect(destroy).toHaveBeenCalledOnce()
+  })
+
   it('blocks card switching during translation and allows it after the request finishes', async () => {
     const result = deferred<string>()
     vi.mocked(LocalTranslationProvider.prototype.translate).mockReturnValueOnce(result.promise)

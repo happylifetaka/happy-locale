@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TranslationSettings } from '~/services/translator/types'
+import { browserTranslationAvailability, browserTranslationError } from '~/services/translator/browser'
 import {
   LocalTranslationProvider,
   translationErrorMessage,
@@ -20,6 +21,22 @@ const emit = defineEmits<{
 const draft = ref<TranslationSettings>({ ...props.settings })
 /** 翻訳接続先のヘルスチェック中か。 */
 const checking = ref(false)
+const browserStatus = ref('未確認')
+async function checkBrowser() {
+  checking.value = true
+  try {
+    const state = await browserTranslationAvailability()
+    browserStatus.value = {
+      unsupported: '非対応です。デスクトップ版Chromeをご利用ください。',
+      unavailable: 'この環境では英日翻訳を利用できません。',
+      downloadable: '利用可能です。最初の翻訳時にモデルを取得します。',
+      downloading: '翻訳モデルを取得中です。',
+      available: '取得済みの翻訳モデルを利用できます。',
+    }[state]
+  }
+  catch (error) { browserStatus.value = browserTranslationError(error) }
+  finally { checking.value = false }
+}
 /** 接続確認の未実施・成功・失敗と応答情報。 */
 const connectionStatus = ref<
   | { state: 'idle' }
@@ -101,11 +118,24 @@ function save() {
           <input v-model="draft.provider" type="radio" value="manual">
           手動
         </label>
+        <label>
+          <input v-model="draft.provider" type="radio" value="browser">
+          ブラウザ内翻訳（英語 → 日本語・試験機能）
+        </label>
         <label v-if="endpointEnabled">
           <input v-model="draft.provider" type="radio" value="local">
           Translation Endpoint（α）
         </label>
       </fieldset>
+      <div v-if="draft.provider === 'browser'">
+        <p>Chromeが翻訳モデルを初回にダウンロードします。原文は端末内で処理します。APIキーは不要です。翻訳候補の意味・数字・用語を確認してから反映してください。</p>
+        <button type="button" :disabled="checking" @click="checkBrowser">
+          {{ checking ? '確認中…' : '英日翻訳の対応状況を確認' }}
+        </button>
+        <p role="status">
+          {{ browserStatus }}
+        </p>
+      </div>
       <template v-if="endpointEnabled && draft.provider === 'local'">
         <label class="translation-endpoint-field">
           Endpoint

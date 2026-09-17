@@ -25,7 +25,7 @@ function parseSettings(value: string | null): TranslationSettings {
       typeof parsed === 'object'
       && parsed !== null
       && 'provider' in parsed
-      && (parsed.provider === 'manual' || parsed.provider === 'local' || parsed.provider === 'sample')
+      && (parsed.provider === 'manual' || parsed.provider === 'local' || parsed.provider === 'browser' || parsed.provider === 'sample')
       && 'endpoint' in parsed
       && typeof parsed.endpoint === 'string'
     ) {

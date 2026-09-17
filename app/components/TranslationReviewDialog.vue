@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { BrowserTranslationOptions } from '~/services/translator/browser'
 import type { FolderProjectCard, GlossaryEntry, ImageAsset } from '~/types/editor'
 import type { TranslationMatchResult } from '~/utils/csv'
 import type { TranslationReviewRow } from '~/utils/translation-review'
@@ -16,7 +17,8 @@ const props = defineProps<{
   initialImport?: TranslationMatchResult
   autoTranslate?: boolean
   loadImage: (cardId: string) => Promise<Blob>
-  translate?: (text: string) => Promise<string>
+  translate?: (text: string, options?: BrowserTranslationOptions) => Promise<string>
+  browserTranslation?: boolean
   error?: string
   appliedRows?: { key: string, translation: string }[]
 }>()
@@ -37,6 +39,11 @@ const pinnedKeys = ref(new Set<string>())
 const message = ref('')
 /** 翻訳候補をまとめて取得しているか。 */
 const busy = ref(false)
+const progress = ref('')
+let translationController: AbortController | null = null
+function cancelTranslation() {
+  translationController?.abort()
+}
 /** 未反映の変更を破棄するか確認するダイアログ。 */
 const discardDialog = ref<HTMLDialogElement | null>(null)
 /** 翻訳確認画面でCSVを選択する入力要素。 */
@@ -204,21 +211,57 @@ function reuse(row: TranslationReviewRow) {
   else message.value = candidates.length ? '同じ原文に複数の訳があります。原文を検索して、使う訳を確認してください。' : '同じ原文の既存訳はありません。'
 }
 /** 選択行があればそれを優先し、なければ絞り込み結果の未翻訳を順番に取得する。 */
-async function fillCandidates() {
+async function fillCandidates(failedOnly = false) {
   if (!props.translate || busy.value)
     return
   busy.value = true
-  const targets = (selected.value.length ? selected.value : filtered.value).filter(row => row.region.originalText.trim() && !row.translation.trim())
-  for (const row of targets) {
-    if (!alive)
-      break
-    try {
-      update(row, await props.translate(row.region.originalText))
+  const controller = new AbortController()
+  translationController = controller
+  const targets = (failedOnly ? rows.value.filter(row => row.error) : selected.value.length ? selected.value : filtered.value)
+    .filter(row => row.region.originalText.trim() && !row.translation.trim())
+  let completed = 0
+  let failed = 0
+  let reused = 0
+  const batchCache = new Map<string, string>()
+  try {
+    for (const row of targets) {
+      if (!alive || controller.signal.aborted)
+        break
+      row.error = ''
+      const before = row.translation
+      try {
+        const reusable = findReusableTranslations(row.region, row.cardId, props.cards, props.glossary)
+        const cached = batchCache.get(row.region.originalText)
+        const result = cached ?? (reusable.length === 1
+          ? reusable[0]!.translation
+          : await props.translate(row.region.originalText, {
+              signal: controller.signal,
+              onProgress: text => progress.value = `${completed + failed + 1}/${targets.length}件 — ${text}`,
+            }))
+        if (!alive || controller.signal.aborted)
+          break
+        if (row.translation !== before)
+          continue
+        batchCache.set(row.region.originalText, result)
+        update(row, result)
+        completed++
+        if (reusable.length === 1 || cached !== undefined)
+          reused++
+      }
+      catch (error) {
+        if (controller.signal.aborted || !alive)
+          break
+        row.error = error instanceof Error ? error.message : '翻訳候補を取得できませんでした。'
+        failed++
+      }
     }
-    catch (error) { row.error = error instanceof Error ? error.message : '翻訳候補を取得できませんでした。' }
   }
-  busy.value = false
-  message.value = `${targets.length}件の取得が完了しました。候補を確認して反映してください。`
+  finally {
+    busy.value = false
+    translationController = null
+    progress.value = ''
+    message.value = `${controller.signal.aborted ? '中止しました。' : ''}${completed}件の候補を取得（既存訳${reused}件）、失敗${failed}件。候補を確認して反映してください。`
+  }
 }
 /** 未反映の編集があれば破棄を確認し、なければ確認画面を閉じる。 */
 function close() {
@@ -274,12 +317,13 @@ watch(visible, loadVisibleImages)
 onMounted(() => {
   dialog.value?.focus()
   void loadVisibleImages()
-  if (props.autoTranslate)
+  if (props.autoTranslate && !props.browserTranslation)
     void fillCandidates()
 })
 // 画面終了後の結果反映を止め、原画像の一時URLを解放する。
 onBeforeUnmount(() => {
   alive = false
+  cancelTranslation()
   imageUrls.value.forEach(url => URL.revokeObjectURL(url))
 })
 </script>
@@ -324,7 +368,7 @@ onBeforeUnmount(() => {
         <button type="button" :disabled="busy" @click="fileInput?.click()">
           CSVを読み込む
         </button>
-        <button v-if="translate" type="button" :disabled="busy" @click="fillCandidates">
+        <button v-if="translate" type="button" :disabled="busy" @click="fillCandidates()">
           {{ busy ? '取得しています…' : selected.length ? '選択した未翻訳を取得' : '表示中の未翻訳を取得' }}
         </button>
         <button type="button" :disabled="busy || !selected.length" @click="rows.forEach(row => row.selected = false)">
@@ -332,6 +376,17 @@ onBeforeUnmount(() => {
         </button>
         <span>訳文は反映するまで保存されません。</span>
       </div>
+      <p v-if="browserTranslation" class="review-translation-note">
+        ブラウザ内で翻訳します。初回はChromeがモデルを取得します。既存の訳文は上書きせず、一意に決まる既存訳を優先します。
+      </p>
+      <p v-if="busy" role="status">
+        {{ progress || '候補を取得しています…' }} <button type="button" @click="cancelTranslation">
+          取得を中止
+        </button>
+      </p>
+      <button v-if="translate && rows.some(row => row.error)" type="button" :disabled="busy" @click="fillCandidates(true)">
+        失敗した未翻訳を再試行
+      </button>
       <p v-if="message || error" class="review-message" role="status">
         {{ error || message }}
       </p>
@@ -435,6 +490,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.review-translation-note { margin: 0; padding: 12px 20px; }
 .review-backdrop { padding: 0.75rem; }
 .review-discard-dialog { margin: auto; border: 0; }
 .review-discard-dialog::backdrop { background: #0008; }

@@ -41,7 +41,7 @@ describe('saved translation settings', () => {
     expect(reloaded.settings.value).toEqual({ provider: 'manual', endpoint })
   })
 
-  it.each(['manual', 'local'] as const)('keeps the saved %s provider and endpoint', async (provider) => {
+  it.each(['manual', 'local', 'browser'] as const)('keeps the saved %s provider and endpoint', async (provider) => {
     storage.set(TRANSLATION_SETTINGS_STORAGE_KEY, JSON.stringify({ provider, endpoint }))
     const settings = scope.run(useTranslationSettings)!
     hooks.mounted()

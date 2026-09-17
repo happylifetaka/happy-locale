@@ -22,6 +22,14 @@
 
 - [静的サイトのビルドと配置](deployment.md)
 
+## 検討中の改善案
+
+- [OCRとアセット認識・登録の統合](proposals/ocr-asset-recognition.md)
+- [文章領域の自動選択と微調整](proposals/region-selection.md)
+- [無償翻訳による下訳の一括生成](proposals/free-translation.md)
+
+これらは未実装の改善提案です。各文書に現状、操作フロー、実装方針、完了条件を記載しています。
+
 ## 過去の計画・設計記録
 
 - [完了済み計画・設計提案のアーカイブ](archive/README.md)

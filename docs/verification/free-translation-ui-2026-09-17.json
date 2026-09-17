@@ -1,0 +1,20 @@
+{
+  "settings": "browser selected; endpoint hidden",
+  "values": [
+    "2 [icon:sun] を獲得します。",
+    "1 [icon:drop] を 2 [icon:sun] にするために使用します。",
+    "手修正済みの訳"
+  ],
+  "undone": [
+    "",
+    "",
+    "手修正済みの訳"
+  ],
+  "offline": {
+    "online": false,
+    "availability": "available",
+    "translation": "このカードを破棄しないでください。"
+  },
+  "cancelled": "AbortError",
+  "errors": []
+}
