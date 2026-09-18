@@ -78,7 +78,7 @@ function mountWorkspace() {
         logDiagnostic: vi.fn(),
       })
       provideCardEditing({ editor, workspace, cardId: currentImageId, notify: setMessage })
-      provideCardResources({ image, projectSelected, assets, assetImages: shallowRef(new Map()), fontFamilies: shallowRef(new Map()), fonts: ref([]), loadedFontIds: shallowRef(new Set()) })
+      provideCardResources({ createSourceIconAsset: vi.fn(), image, projectSelected, assets, assetImages: shallowRef(new Map()), fontFamilies: shallowRef(new Map()), fonts: ref([]), loadedFontIds: shallowRef(new Set()) })
       provideCardOCR({ region: ocr, execution, dictionary, candidates })
       provideCardTranslation({ enabled: ref(false), running: ref(false), glossary: ref([]), reusableCount: ref(0), requestReuse: vi.fn(), translate: vi.fn() })
       return () => attached.value ? h(CardEditingWorkspace, { visible: visible.value, hasCardList: false, printArea: null }) : null

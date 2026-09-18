@@ -216,6 +216,49 @@ export function useEditorAssets({
         assetCreationPending.value = null
     }
   }
+  /** OCR内で確認した切り出しを共有資源へ登録する。原文のUndoとは独立して保持する。 */
+  async function createSourceIconAsset(
+    draft: AssetCreationDraft,
+    source: HTMLImageElement,
+    sourceImageId: string,
+    isCurrent: () => boolean,
+  ): Promise<ImageAsset | null> {
+    if (assetCreationDisposed || !isCurrent())
+      return null
+    const name = draft.name.trim()
+    const error = validateAssetName(name, assets.value)
+    if (error)
+      throw new Error(error)
+    const canvas = renderAssetCrop(source, draft.sourceRect, draft.removeBackground, {
+      threshold: draft.backgroundThreshold,
+      feather: draft.edgeFeather,
+      backgroundColor: draft.backgroundColor,
+    }, draft.manualMaskStrokes)
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+    if (assetCreationDisposed || !isCurrent())
+      return null
+    const currentError = validateAssetName(name, assets.value)
+    if (currentError)
+      throw new Error(currentError)
+    if (!blob)
+      throw new Error('アセット画像を作成できませんでした。再試行してください。')
+    const id = crypto.randomUUID()
+    const asset: ImageAsset = {
+      id,
+      name,
+      sourceImageId,
+      sourceRect: { ...draft.sourceRect },
+      imagePath: `assets/${id}.png`,
+      scale: 1,
+      baselineOffset: 0,
+      inlinePadding: 0,
+    }
+    projectStore.setAssets([...assets.value, asset])
+    projectRuntime.setAssetImage(id, canvas)
+    projectRuntime.setPendingAssetWrite(id, blob)
+    return asset
+  }
+
   /** 共有定義・全カードのトークン・編集履歴を揃えて改名し、Undo後の参照切れを防ぐ。 */
   function renameAsset(id: string, name: string) {
     const asset = assets.value.find(item => item.id === id)
@@ -259,6 +302,7 @@ export function useEditorAssets({
   })
 
   return {
+    createSourceIconAsset,
     assetCreationDraft,
     assetCreationRunning,
     assetRecropId,

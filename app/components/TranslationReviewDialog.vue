@@ -5,7 +5,7 @@ import type { TranslationMatchResult } from '~/utils/csv'
 import type { TranslationReviewRow } from '~/utils/translation-review'
 import { matchProjectTranslationRows, parseTranslationCsv } from '~/utils/csv'
 import { assertFileSize, FILE_LIMITS } from '~/utils/file-limits'
-import { findReusableTranslations } from '~/utils/translation-reuse'
+import { createTranslationReuseAvailability, findReusableTranslations } from '~/utils/translation-reuse'
 import { createTranslationReviewRows, mergeReviewImport, reviewApplySelection, reviewWarnings } from '~/utils/translation-review'
 
 const props = defineProps<{
@@ -22,7 +22,7 @@ const props = defineProps<{
   error?: string
   appliedRows?: { key: string, translation: string }[]
 }>()
-const emit = defineEmits<{ close: [], apply: [rows: TranslationReviewRow[], closeAfterApply: boolean], locate: [cardId: string, regionId: string] }>()
+const emit = defineEmits<{ close: [], apply: [rows: TranslationReviewRow[], closeAfterApply: boolean] }>()
 /** モーダル専用の下書き。親が反映を受理するまで元のカード本文は変更しない。 */
 const rows = ref(createTranslationReviewRows(props.cards))
 /** 翻訳確認一覧の未翻訳・要確認・変更あり等の表示条件。 */
@@ -40,6 +40,8 @@ const message = ref('')
 /** 翻訳候補をまとめて取得しているか。 */
 const busy = ref(false)
 const progress = ref('')
+/** 個別取得中の行。まとめて取得中はnull。 */
+const translatingKey = ref<string | null>(null)
 let translationController: AbortController | null = null
 function cancelTranslation() {
   translationController?.abort()
@@ -89,6 +91,16 @@ const filtered = computed(() => rows.value.filter(row => pinnedKeys.value.has(ro
 /** 現在のページへ表示する最大20件の確認行。 */
 const visible = computed(() => filtered.value.slice(page.value * 20, page.value * 20 + 20))
 const allFilteredSelected = computed(() => filtered.value.length > 0 && filtered.value.every(row => row.selected))
+/** 候補の有無は共有原文・訳文が変わったときだけ索引を作る。入力中の下書きでは作り直さない。 */
+const canReuse = computed(() => createTranslationReuseAvailability(props.cards, props.glossary))
+/** 別ページ・絞り込み外の選択も実際の処理対象なので、件数と解除操作を明示する。 */
+const hiddenSelected = computed(() => {
+  const keys = new Set(visible.value.map(row => row.key))
+  return selected.value.filter(row => !keys.has(row.key))
+})
+function clearHiddenSelection() {
+  hiddenSelected.value.forEach(row => row.selected = false)
+}
 const someFilteredSelected = computed(() => filtered.value.some(row => row.selected) && !allFilteredSelected.value)
 
 /** 絞り込み結果をまとめて選択・解除する。ページをまたぐ既存の選択範囲を維持する。 */
@@ -210,15 +222,16 @@ function reuse(row: TranslationReviewRow) {
     update(row, candidates[0]!.translation)
   else message.value = candidates.length ? '同じ原文に複数の訳があります。原文を検索して、使う訳を確認してください。' : '同じ原文の既存訳はありません。'
 }
-/** 選択行があればそれを優先し、なければ絞り込み結果の未翻訳を順番に取得する。 */
-async function fillCandidates(failedOnly = false) {
-  if (!props.translate || busy.value)
+/** 選択した行は既存の訳文があっても翻訳し直す。既存訳の優先利用は未翻訳の行だけ。 */
+async function fillCandidates(failedOnly = false, target?: TranslationReviewRow) {
+  if (!props.translate || busy.value || (!target && !failedOnly && !selected.value.length))
     return
   busy.value = true
+  translatingKey.value = target?.key ?? null
   const controller = new AbortController()
   translationController = controller
-  const targets = (failedOnly ? rows.value.filter(row => row.error) : selected.value.length ? selected.value : filtered.value)
-    .filter(row => row.region.originalText.trim() && !row.translation.trim())
+  const targets = (target ? [target] : failedOnly ? rows.value.filter(row => row.error) : selected.value)
+    .filter(row => row.region.originalText.trim())
   let completed = 0
   let failed = 0
   let reused = 0
@@ -230,7 +243,7 @@ async function fillCandidates(failedOnly = false) {
       row.error = ''
       const before = row.translation
       try {
-        const reusable = findReusableTranslations(row.region, row.cardId, props.cards, props.glossary)
+        const reusable = target || before.trim() ? [] : findReusableTranslations(row.region, row.cardId, props.cards, props.glossary)
         const cached = batchCache.get(row.region.originalText)
         const result = cached ?? (reusable.length === 1
           ? reusable[0]!.translation
@@ -258,6 +271,7 @@ async function fillCandidates(failedOnly = false) {
   }
   finally {
     busy.value = false
+    translatingKey.value = null
     translationController = null
     progress.value = ''
     message.value = `${controller.signal.aborted ? '中止しました。' : ''}${completed}件の候補を取得（既存訳${reused}件）、失敗${failed}件。候補を確認して反映してください。`
@@ -317,8 +331,10 @@ watch(visible, loadVisibleImages)
 onMounted(() => {
   dialog.value?.focus()
   void loadVisibleImages()
-  if (props.autoTranslate && !props.browserTranslation)
+  if (props.autoTranslate && !props.browserTranslation) {
+    rows.value.forEach(row => row.selected = Boolean(row.region.originalText.trim() && !row.translation.trim()))
     void fillCandidates()
+  }
 })
 // 画面終了後の結果反映を止め、原画像の一時URLを解放する。
 onBeforeUnmount(() => {
@@ -368,16 +384,17 @@ onBeforeUnmount(() => {
         <button type="button" :disabled="busy" @click="fileInput?.click()">
           CSVを読み込む
         </button>
-        <button v-if="translate" type="button" :disabled="busy" @click="fillCandidates()">
-          {{ busy ? '取得しています…' : selected.length ? '選択した未翻訳を取得' : '表示中の未翻訳を取得' }}
+        <button v-if="translate" type="button" :disabled="busy || !selected.length" title="選択した行を翻訳します。訳文がある行は再翻訳します" @click="fillCandidates()">
+          選択した行を翻訳
         </button>
-        <button type="button" :disabled="busy || !selected.length" @click="rows.forEach(row => row.selected = false)">
-          すべて解除
-        </button>
+        <span v-if="hiddenSelected.length" class="review-hidden-selection" role="status">
+          表示外に{{ hiddenSelected.length }}件の選択があります（翻訳・反映の対象）
+          <button type="button" :disabled="busy" @click="clearHiddenSelection">表示外の選択を解除</button>
+        </span>
         <span>訳文は反映するまで保存されません。</span>
       </div>
-      <p v-if="browserTranslation" class="review-translation-note">
-        ブラウザ内で翻訳します。初回はChromeがモデルを取得します。既存の訳文は上書きせず、一意に決まる既存訳を優先します。
+      <p v-if="!translate" class="review-translation-note">
+        個別翻訳を使うには、この画面を閉じて「翻訳設定」でブラウザ内翻訳を選択してください。
       </p>
       <p v-if="busy" role="status">
         {{ progress || '候補を取得しています…' }} <button type="button" @click="cancelTranslation">
@@ -385,7 +402,7 @@ onBeforeUnmount(() => {
         </button>
       </p>
       <button v-if="translate && rows.some(row => row.error)" type="button" :disabled="busy" @click="fillCandidates(true)">
-        失敗した未翻訳を再試行
+        失敗した行を再試行
       </button>
       <p v-if="message || error" class="review-message" role="status">
         {{ error || message }}
@@ -423,10 +440,15 @@ onBeforeUnmount(() => {
             <label class="review-sr-only" :for="`review-${row.key}`">日本語訳</label>
             <textarea :id="`review-${row.key}`" :ref="el => { if (el) inputs.set(row.key, el as HTMLTextAreaElement); else inputs.delete(row.key) }" :value="row.translation" :rows="row.region.ocrLayout === 'single-line' ? 1 : 3" :disabled="busy" @input="update(row, ($event.target as HTMLTextAreaElement).value)" />
             <div class="review-row-actions">
-              <button type="button" :disabled="changes.length > 0 || busy" @click="emit('locate', row.cardId, row.region.id)">
-                カード上で確認
+              <button
+                type="button"
+                :disabled="busy || !translate || !row.region.originalText.trim()"
+                :title="!translate ? '翻訳設定でブラウザ内翻訳を選択してください' : row.translation.trim() ? 'この行の訳文候補を作り直します。カードへの反映は確認後です。' : 'この行だけの訳文候補を取得します'"
+                @click="fillCandidates(false, row)"
+              >
+                {{ translatingKey === row.key ? '翻訳中…' : row.translation.trim() ? '再翻訳' : '翻訳' }}
               </button>
-              <button type="button" :disabled="busy" @click="reuse(row)">
+              <button type="button" :disabled="busy || !canReuse(row.region, row.cardId)" :title="canReuse(row.region, row.cardId) ? undefined : '同じ原文の既存訳はありません'" @click="reuse(row)">
                 同じ原文の訳を再利用
               </button>
               <AssetInsertPicker v-if="!busy" :assets="assets" :asset-images="assetImages" target-label="日本語訳" @insert="insertAsset(row, $event)" />
@@ -510,6 +532,7 @@ onBeforeUnmount(() => {
 .review-header button, .review-selection button, .review-footer button { padding: 0.4rem 0.65rem; font-size: 0.8rem; }
 .review-selection { font-size: 0.75rem; padding-top: 0.35rem; padding-bottom: 0.35rem; }
 .review-selection span { color: #607089; }
+.review-selection .review-hidden-selection { color: #885600; }
 .review-message { flex-shrink: 0; margin: 0; padding: 0.4rem 1rem; background: #edf3ff; font-size: 0.8rem; }
 .review-body { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; overflow-anchor: none; }
 .review-columns { display: grid; grid-template-columns: 20px 140px minmax(0, 1fr) minmax(0, 1.2fr); gap: 0.65rem; padding: 0.6rem 1rem; }

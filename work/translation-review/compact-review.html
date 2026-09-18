@@ -1,0 +1,67 @@
+<style>
+#compact-review { --r-bg:light-dark(#fff,#202632); --r-text:light-dark(#263247,#e5ebf5); --r-muted:light-dark(#596a82,#afbdd2); --r-line:light-dark(#d5dbe3,#465064); --r-soft:light-dark(#f5f7fa,#293242); --r-blue:light-dark(#245dd8,#9dbdff); color:var(--r-text); font:14px/1.5 system-ui,sans-serif; }
+#compact-review * { box-sizing:border-box; }
+#compact-review [hidden] { display:none; }
+#compact-review .r-window { background:var(--r-bg); border:1px solid var(--r-line); border-radius:10px; }
+#compact-review .r-top, #compact-review .r-tools, #compact-review .r-footer { padding:12px 16px; display:flex; flex-wrap:wrap; align-items:center; gap:10px; border-bottom:1px solid var(--r-line); }
+#compact-review .r-top strong { font-size:18px; font-weight:600; }
+#compact-review .r-count { color:var(--r-muted); font-size:12px; }
+#compact-review button, #compact-review select, #compact-review input[type=search] { font:inherit; color:inherit; background:var(--r-bg); border:1px solid var(--r-line); border-radius:5px; padding:6px 9px; max-width:100%; }
+#compact-review button, #compact-review summary { cursor:pointer; }
+#compact-review .r-tools input { flex:1; min-width:130px; }
+#compact-review .r-spacer { margin-left:auto; }
+#compact-review .r-columns { display:grid; grid-template-columns:26px minmax(0,1fr) minmax(0,1.2fr); gap:12px; }
+#compact-review .r-head { background:var(--r-soft); padding:7px 16px; color:var(--r-muted); font-size:12px; }
+#compact-review .r-row { padding:var(--r-padding,10px) 16px; border-bottom:1px solid var(--r-line); }
+#compact-review .r-row input[type=checkbox] { margin:5px 0; accent-color:var(--r-blue); }
+#compact-review .r-meta { color:var(--r-muted); font-size:12px; margin-bottom:3px; }
+#compact-review .r-source { overflow-wrap:anywhere; }
+#compact-review textarea { width:100%; min-height:38px; font:inherit; color:inherit; background:var(--r-bg); border:1px solid var(--r-line); border-radius:5px; padding:6px 8px; resize:vertical; }
+#compact-review details { grid-column:2 / -1; color:var(--r-muted); font-size:12px; }
+#compact-review .r-detail { padding:10px; background:var(--r-soft); margin-top:7px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+#compact-review .r-footer { border:0; font-size:12px; }
+#compact-review .r-primary { background:light-dark(#245dd8,#9dbdff); color:light-dark(#fff,#10264b); border-color:transparent; }
+#compact-review .r-warning { color:light-dark(#885600,#ffd182); font-size:12px; }
+#compact-review .r-notice { padding:0 16px 10px; font-size:12px; color:var(--r-muted); }
+@media(max-width:480px) { #compact-review .r-columns { grid-template-columns:22px minmax(0,1fr); gap:6px; } #compact-review .r-translation { grid-column:2; } #compact-review .r-head .r-ja { display:none; } #compact-review .r-count { width:100%; } }
+@media(pointer:coarse) { #compact-review button, #compact-review select, #compact-review summary { min-height:44px; } #compact-review textarea, #compact-review input[type=search] { font-size:16px; } }
+</style>
+<div id="compact-review" aria-label="翻訳の一括確認・コンパクト案">
+ <section class="r-window" aria-label="翻訳をまとめて確認">
+  <header class="r-top"><strong>翻訳をまとめて確認</strong><span class="r-count">5枚・20領域 ／ 要確認 2・変更 20</span></header>
+  <div class="r-tools"><select aria-label="カード"><option>すべてのカード</option><option>05-bridge.png</option></select><select aria-label="表示条件"><option value="all">すべて</option><option value="issues">要確認</option></select><input type="search" placeholder="原文・訳文を検索" aria-label="原文・訳文を検索"></div>
+  <div class="r-head r-columns"><input id="r-all" type="checkbox" checked aria-label="表示中をすべて選択"><span>カード・原文</span><span class="r-ja">日本語訳</span></div>
+  <div id="r-rows"></div>
+  <footer class="r-footer"><span>1–5 / 20件</span><span class="r-spacer" id="r-selected" aria-live="polite"></span><button type="button" class="r-primary" id="r-apply">選択した変更を反映</button></footer>
+  <div class="r-notice" id="r-status" role="status">サンプル表示・訳文は反映するまで未確定</div>
+ </section>
+</div>
+<script>
+(() => {
+ const root = document.getElementById('compact-review');
+ const data = [
+  ['種別','ONE USE','使い切り'],
+  ['効果','Draw 2 cards.','カードを2枚引く。'],
+  ['効果','Gain 3 coins.','コインを2枚得る。','数値の違い：原文 3 ／ 訳文 2'],
+  ['条件','At the end of your turn, discard this card.','あなたのターン終了時、このカードを捨てる。'],
+  ['効果','You may play one additional card this turn.','このターン、追加でカードを1枚プレイしてもよい。']
+ ];
+ const rows = root.querySelector('#r-rows');
+ data.forEach((item,i) => {
+  const row=document.createElement('article'); row.className='r-row r-columns'; row.dataset.issue=String(Boolean(item[3]));
+  row.innerHTML='<input type="checkbox" checked aria-label="'+item[0]+'の翻訳を選択"><div class="r-source"><div class="r-meta">05-bridge.png · '+item[0]+'</div>'+item[1]+'</div><div class="r-translation"><textarea rows="'+(i>2?2:1)+'" aria-label="'+item[0]+'の日本語訳">'+item[2]+'</textarea>'+(item[3]?'<div class="r-warning">'+item[3]+'</div>':'')+'</div><details><summary>画像・補助操作</summary><div class="r-detail"><span>原画像プレビュー（実装時に表示）</span><button type="button">カード上で確認</button><button type="button">訳を再利用</button><button type="button">＋ アセット</button></div></details>';
+  rows.appendChild(row);
+ });
+ function count() { const n=rows.querySelectorAll('input:checked').length; root.querySelector('#r-selected').textContent=n+'件を選択中'; }
+ root.querySelector('#r-all').onchange=e=>{ rows.querySelectorAll('article').forEach(r=>{if(!r.hidden)r.querySelector('input').checked=e.target.checked;}); count(); };
+ rows.addEventListener('change',count);
+ function filter() {const q=root.querySelector('input[type=search]').value.toLowerCase(); const issues=root.querySelector('[aria-label="表示条件"]').value==='issues'; rows.querySelectorAll('article').forEach(r=>{r.hidden=!(r.textContent+r.querySelector('textarea').value).toLowerCase().includes(q)||(issues&&r.dataset.issue!=='true');});}
+ root.querySelector('input[type=search]').oninput=filter; root.querySelector('[aria-label="表示条件"]').onchange=filter;
+ root.querySelector('#r-apply').onclick=()=>root.querySelector('#r-status').textContent='モックのため反映は行いません。';
+ rows.addEventListener('click',e=>{if(e.target.tagName==='BUTTON')root.querySelector('#r-status').textContent='補助操作の配置イメージです。';});
+ const state={spacing:'compact',expand:false};
+ function render(){root.style.setProperty('--r-padding',state.spacing==='compact'?'10px':'18px');rows.querySelectorAll('details').forEach(d=>d.open=state.expand);}
+ render(); count();
+ if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:render});tweak.addSelect(state,'spacing',{label:'行間',options:[{label:'コンパクト',value:'compact'},{label:'ゆったり',value:'relaxed'}]});tweak.addToggle(state,'expand',{label:'補助操作を常に展開'});}
+})();
+</script>

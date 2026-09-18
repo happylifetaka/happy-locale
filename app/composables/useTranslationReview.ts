@@ -23,7 +23,6 @@ interface TranslationReviewOptions {
   pendingCardDeletionIds: Ref<Set<string>>
   projectDirectory: Ref<FileSystemDirectoryHandle | null>
   image: Ref<HTMLImageElement | null>
-  selectProjectRegion: (cardId: string, regionId: string) => Promise<void>
   setMessage: (message: string) => void
   logDiagnostic: (message: string, details?: unknown) => void
 }
@@ -38,7 +37,6 @@ export function useTranslationReview({
   pendingCardDeletionIds,
   projectDirectory,
   image,
-  selectProjectRegion,
   setMessage,
   logDiagnostic,
 }: TranslationReviewOptions) {
@@ -83,12 +81,6 @@ export function useTranslationReview({
     if (!card.imagePath && cardId === currentImageId.value && image.value)
       return (await fetch(image.value.src)).blob()
     return loadFolderProjectCardImage(directory, card)
-  }
-
-  /** 翻訳確認画面を閉じ、指定カードの領域へ移動する。 */
-  async function locateReviewRegion(cardId: string, regionId: string) {
-    translationReview.value = null
-    await selectProjectRegion(cardId, regionId)
   }
 
   /** 対象が現在も同じ内容か照合し、選択された訳をCSVと共通の反映経路へ渡す。 */
@@ -240,7 +232,6 @@ export function useTranslationReview({
     openTranslationReview,
     translateUntranslatedRegions,
     loadReviewImage,
-    locateReviewRegion,
     applyTranslationReview,
     importCsv,
     exportCsv,

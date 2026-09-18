@@ -57,3 +57,20 @@ describe('source image icons', () => {
     expect(editor.selectedRegion.value!.sourceIcons![1]!.assetId).toBe('b')
   })
 })
+
+it('places repeated and consecutive icons at the start, middle and end while retaining adjacent numbers and punctuation', () => {
+  const positions = [0, 40, 60, 120].map((x, index) => ({ id: String(index), assetId: index === 2 ? 'b' : 'a', x, y: 0, width: 15, height: 20 }))
+  const result = { text: '2 , 3', confidence: 99, blocks: [], words: [word('2', 20, 0), word(',', 80, 0), word('3', 100, 0)] }
+  expect(textWithSourceIcons(result, positions, assets)).toBe('[icon:wound] 2 [icon:wound] [icon:spell] , 3 [icon:wound]')
+  const editor = editorFixture()
+  editor.updateRegion(editor.selectedRegionId.value!, { sourceIcons: positions, originalText: textWithSourceIcons(result, positions, assets) })
+  const restored = JSON.parse(JSON.stringify(editor.project.value))
+  expect(restored.regions[0].sourceIcons).toEqual(positions)
+  expect(restored.regions[0].originalText).toContain('[icon:wound]')
+})
+
+it('discards OCR artifacts inside a confirmed icon but preserves the same text and punctuation outside it', () => {
+  const icon = { id: 'i', assetId: 'a', x: 40, y: 0, width: 20, height: 20 }
+  const result = { text: 'a [J] , [J]', confidence: 99, blocks: [], words: [word('a', 20, 0), word('[J]', 42, 0), word(',', 61, 0), word('[J]', 90, 0)] }
+  expect(textWithSourceIcons(result, [icon], assets)).toBe('a [icon:wound] , [J]')
+})

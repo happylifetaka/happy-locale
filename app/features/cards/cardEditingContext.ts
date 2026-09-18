@@ -2,6 +2,7 @@ import type { InjectionKey, Ref } from 'vue'
 import type { useCardWorkspace } from './useCardWorkspace'
 import type { useSourceIcons } from './useSourceIcons'
 import type { useCardEditor } from '~/composables/useCardEditor'
+import type { useEditorAssets } from '~/composables/useEditorAssets'
 import type { OCRExecutionState, useEditorOCR } from '~/composables/useEditorOCR'
 import type { useRegionCandidates } from '~/composables/useRegionCandidates'
 import type { FontReference, GlossaryEntry, ImageAsset, OCRDictionaryEntry } from '~/types/editor'
@@ -15,8 +16,9 @@ interface CardEditingContext {
   workspace: Omit<ReturnType<typeof useCardWorkspace>, 'stopEditing' | 'resetCardSelection' | 'maskEditing' | 'exclusionEditing'>
 }
 
-/** runtimeが所有する描画資源への参照。解放・保存用のAPIは渡さない。 */
+/** runtimeが所有する描画資源への参照と、OCR内での新規登録窓口。解放・保存は全体側に残す。 */
 interface CardResourcesContext {
+  createSourceIconAsset: ReturnType<typeof useEditorAssets>['createSourceIconAsset']
   image: Readonly<Ref<HTMLImageElement | null>>
   projectSelected: Readonly<Ref<boolean>>
   assets: Readonly<Ref<ImageAsset[]>>

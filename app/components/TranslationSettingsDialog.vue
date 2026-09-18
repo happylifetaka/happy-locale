@@ -128,7 +128,9 @@ function save() {
         </label>
       </fieldset>
       <div v-if="draft.provider === 'browser'">
-        <p>Chromeが翻訳モデルを初回にダウンロードします。原文は端末内で処理します。APIキーは不要です。翻訳候補の意味・数字・用語を確認してから反映してください。</p>
+        <p class="muted">
+          ChromeのTranslator APIを使用します。初回利用時に翻訳モデルをダウンロードし、翻訳は端末内で処理します。APIキーは不要です。機械翻訳のため、候補の意味・数字・用語を確認してから反映してください。
+        </p>
         <button type="button" :disabled="checking" @click="checkBrowser">
           {{ checking ? '確認中…' : '英日翻訳の対応状況を確認' }}
         </button>

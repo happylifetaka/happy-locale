@@ -12,13 +12,12 @@ const translationEndpointEnabled
     </svg>
     <div class="data-privacy-footer__messages">
       <p>
-        画像・PDF・プロジェクトデータは端末内で処理されます。<template v-if="translationEndpointEnabled">
-          Translation Endpointを選んだ場合だけ、原文テキストと言語が指定先へ送信されます。
+        データは端末内で処理します。<template v-if="translationEndpointEnabled">
+          外部翻訳の利用時のみ、原文と言語を指定先へ送信します。
         </template>
       </p>
-      <p>ブラウザ内翻訳の原文は端末内で処理します。初回はChromeが翻訳モデルを取得します。</p>
       <p>
-        <strong>重要：</strong>本アプリに読み込む画像、PDF、フォント等の利用権限、および作成した成果物の利用については、適用される法令、ライセンス、利用規約等を利用者ご自身で確認してください。
+        画像・フォントおよび成果物の利用条件（著作権・利用規約）を確認のうえ、ご自身の責任でご利用ください。
       </p>
     </div>
   </footer>

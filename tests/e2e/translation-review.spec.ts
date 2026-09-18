@@ -44,10 +44,10 @@ test('reviews a dense list without losing the current row when expanding images'
   await expect(dialog).toBeVisible()
 
   // Filtering resets the scroll and selection includes every matching row, not only those on screen.
+  await dialog.getByRole('checkbox', { name: '絞り込み結果をすべて選択' }).uncheck()
   await dialog.getByRole('combobox', { name: 'カード', exact: true }).selectOption({ label: '05-bridge.png' })
   await expect(rows).toHaveCount(4)
   await expect.poll(() => body.evaluate(element => element.scrollTop)).toBe(0)
-  await dialog.getByRole('button', { name: 'すべて解除', exact: true }).click()
   const selectAll = dialog.getByRole('checkbox', { name: '絞り込み結果をすべて選択' })
   await selectAll.check()
   await expect(dialog.getByText('4件を選択中（変更 4件）', { exact: true })).toBeVisible()

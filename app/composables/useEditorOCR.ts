@@ -73,7 +73,7 @@ export function useEditorOCR({
   /** OCR候補を取得した対象領域のID。 */
   const ocrCandidateRegionId = ref<string | null>(null)
   /** OCR開始時のカードIDと内容の照合情報。 */
-  const ocrCandidateSource = shallowRef<{ cardId: string, signature: string } | null>(null)
+  const ocrCandidateSource = shallowRef<{ cardId: string, signature: string, assets: string } | null>(null)
   /** ローカル補正後の原文候補。 */
   const ocrCorrectionCandidate = ref('')
   /** 辞書や文字補正により提案された変更箇所。 */
@@ -238,7 +238,7 @@ export function useEditorOCR({
       ocrCandidate.value = recognizedText
       ocrConfidence.value = result.confidence
       ocrCandidateRegionId.value = targetRegionId
-      ocrCandidateSource.value = { cardId: targetCardId, signature: targetSignature }
+      ocrCandidateSource.value = { cardId: targetCardId, signature: targetSignature, assets: JSON.stringify(assets.value) }
       if (recognizedText) {
         const correction = await ocrCorrector.correct(
           recognizedText,
@@ -291,7 +291,8 @@ export function useEditorOCR({
       return
     const region = editor.project.value.regions.find(item => item.id === regionId)
     if (ocrCandidateSource.value?.cardId !== currentImageId.value
-      || ocrCandidateSource.value.signature !== JSON.stringify(region)) {
+      || ocrCandidateSource.value.signature !== JSON.stringify(region)
+      || ocrCandidateSource.value.assets !== JSON.stringify(assets.value)) {
       clearOCRCandidate()
       setMessage('領域が変更されたため、OCR候補を反映しませんでした。認識し直してください。')
       return

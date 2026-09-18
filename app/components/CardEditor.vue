@@ -213,6 +213,7 @@ const { savingProject, saveProject } = useProjectPersistence({
 })
 /** 共有アセットの作成・再切り出し・配置設定・画像の登録。 */
 const {
+  createSourceIconAsset,
   assetCreationDraft,
   assetCreationRunning,
   assetRecropId,
@@ -420,7 +421,6 @@ const {
   openTranslationReview,
   translateUntranslatedRegions,
   loadReviewImage,
-  locateReviewRegion,
   applyTranslationReview,
   importCsv,
   exportCsv,
@@ -434,7 +434,6 @@ const {
   pendingCardDeletionIds,
   projectDirectory,
   image,
-  selectProjectRegion,
   setMessage,
   logDiagnostic,
 })
@@ -915,6 +914,7 @@ function openPrintLayout() {
 // 既存インスタンスを責務別に共有する。資源解放・保存操作は全体側に残す。
 provideCardEditing({ editor, workspace, cardId: currentImageId, notify: setMessage })
 provideCardResources({
+  createSourceIconAsset,
   image,
   projectSelected: computed(() => Boolean(projectDirectory.value)),
   assets,
@@ -1004,7 +1004,6 @@ provideCardTranslation({
       :applied-rows="translationReviewApplied"
       @apply="applyTranslationReview"
       @close="translationReview = null"
-      @locate="locateReviewRegion"
     />
     <TranslationReuseDialog
       v-if="reuseRequest"

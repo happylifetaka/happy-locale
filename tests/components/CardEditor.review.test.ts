@@ -117,14 +117,12 @@ describe('card editor translation review', () => {
     expect(parseTranslationCsv(cardCsv).map(row => row.translation)).toEqual(['Before 2'])
   })
 
-  it('loads a review image and locates its region through the normal card switch', async () => {
-    const { dialog, wrapper, inspector } = await openReview()
+  it('loads a review image without leaving the review or switching cards', async () => {
+    const { dialog, wrapper } = await openReview()
     await dialog.props('loadImage')('two')
     expect(loadFolderProjectCardImage).toHaveBeenCalledWith(expect.objectContaining({ name: 'cards' }), expect.objectContaining({ id: 'two' }))
-    dialog.vm.$emit('locate', 'two', 'region-1')
     await flushPromises()
-    expect(wrapper.findComponent({ name: 'TranslationReviewDialog' }).exists()).toBe(false)
-    expect(useProjectStore().document!.activeCardId).toBe('two')
-    expect(inspector.props('region')).toMatchObject({ id: 'region-1', translatedText: 'Before 1' })
+    expect(wrapper.findComponent({ name: 'TranslationReviewDialog' }).exists()).toBe(true)
+    expect(useProjectStore().document!.activeCardId).toBe('one')
   })
 })

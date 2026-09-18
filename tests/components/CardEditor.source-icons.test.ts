@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { flushPromises } from '@vue/test-utils'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { useProjectStore } from '~/stores/project'
-import { mountSavedEditor } from './helpers/card-editor'
+import { editorRuntime, mountSavedEditor, ocrIO } from './helpers/card-editor'
 
 const icon = { id: 'icon-1', assetId: 'asset-1', x: 2, y: 2, width: 8, height: 8 }
 
@@ -61,4 +61,81 @@ it.each(['asset', 'bounds'] as const)('keeps the source icon draft open when %s 
   await nextTick()
   expect(JSON.stringify(canvas.props('project'))).toBe(before)
   expect(wrapper.findComponent({ name: 'SourceIconsDialog' }).exists()).toBe(true)
+})
+
+it('re-OCRs confirmed ranges and waits for text acceptance', async () => {
+  const { canvas, inspector, dialog } = await setup()
+  ocrIO.recognize.mockResolvedValue({
+    text: 'Gain 2 .',
+    confidence: 90,
+    blocks: [],
+    words: [
+      { text: 'Gain', x: 12, y: 18, width: 45, height: 24, confidence: 90 },
+      { text: '2', x: 60, y: 18, width: 9, height: 24, confidence: 90 },
+      { text: '.', x: 99, y: 18, width: 3, height: 24, confidence: 90 },
+    ],
+  })
+  const range = { ...icon, x: 20 }
+  const original = canvas.props('project').regions[0].originalText
+  dialog.vm.$emit('recognize', [range])
+  await flushPromises()
+  expect(ocrIO.prepareRegionForOCR).toHaveBeenCalledWith(expect.anything(), expect.anything(), { scale: 3, exclusions: [range] })
+  expect(inspector.props('ocrCandidate')).toBe('Gain 2 [icon:coin] .')
+  expect(canvas.props('project').regions[0].originalText).toBe(original)
+  inspector.vm.$emit('apply-ocr-candidate')
+  await nextTick()
+  expect(canvas.props('project').regions[0].originalText).toBe('Gain 2 [icon:coin] .')
+})
+
+it.each(['cancel', 'card', 'region'])('discards a pending inline registration after %s changes', async (change) => {
+  const { dialog, wrapper, inspector } = await setup()
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+  let finish!: BlobCallback
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+    finish = callback
+  })
+  const pending = dialog.props('createAsset')({
+    editingAssetId: null,
+    name: 'sun',
+    sourceRect: { x: 2, y: 2, width: 8, height: 8 },
+    removeBackground: true,
+    backgroundColor: null,
+    backgroundThreshold: 48,
+    edgeFeather: 12,
+    manualMaskStrokes: [],
+  }, () => true)
+  if (change === 'cancel')
+    dialog.vm.$emit('close')
+  else if (change === 'card')
+    wrapper.getComponent({ name: 'CardList' }).vm.$emit('select', 'two')
+  else
+    inspector.vm.$emit('update', 'region-0', { originalText: 'Changed' })
+  await flushPromises()
+  finish(new Blob(['png']))
+  expect(await pending).toBeNull()
+  expect(useProjectStore().assets.map(asset => asset.name)).toEqual(['coin'])
+})
+
+it('stores a new inline asset and retains its PNG when the icon application is undone', async () => {
+  const { dialog, toolbar } = await setup()
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+  const png = new Blob(['png'])
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(png))
+  const asset = await dialog.props('createAsset')({
+    editingAssetId: null,
+    name: 'sun',
+    sourceRect: { x: 2, y: 2, width: 8, height: 8 },
+    removeBackground: true,
+    backgroundColor: null,
+    backgroundThreshold: 48,
+    edgeFeather: 12,
+    manualMaskStrokes: [],
+  }, () => true)
+  expect(asset).toMatchObject({ name: 'sun', sourceImageId: 'one' })
+  dialog.vm.$emit('apply', [{ ...icon, assetId: asset!.id }])
+  await nextTick()
+  toolbar.vm.$emit('undo')
+  await nextTick()
+  expect(useProjectStore().assets).toContainEqual(asset)
+  expect(editorRuntime().pendingAssetWrites.value.get(asset!.id)).toBe(png)
 })

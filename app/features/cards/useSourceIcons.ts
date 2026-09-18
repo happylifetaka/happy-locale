@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
 import type { useCardEditor } from '~/composables/useCardEditor'
 import type { ImageAsset, SourceIcon, TextRegion } from '~/types/editor'
-import { shallowRef } from 'vue'
+import { shallowRef, watch } from 'vue'
 import { sourceIconProblems } from '~/utils/source-icons'
 
 interface SourceIconsOptions {
@@ -25,6 +25,18 @@ export function useSourceIcons({ editor, cardId, assets, ocrRunning, onApplied, 
     request.value = { cardId: cardId.value, region: JSON.parse(JSON.stringify(region)) as TextRegion }
   }
 
+  function isCurrent() {
+    const pending = request.value
+    return Boolean(pending && cardId.value === pending.cardId
+      && editor.selectedRegion.value?.id === pending.region.id
+      && JSON.stringify(editor.selectedRegion.value) === JSON.stringify(pending.region))
+  }
+
+  watch([cardId, () => JSON.stringify(editor.selectedRegion.value)], () => {
+    if (request.value && !isCurrent())
+      close()
+  }, { flush: 'sync' })
+
   function apply(icons: SourceIcon[]) {
     const pending = request.value
     if (!pending)
@@ -40,12 +52,13 @@ export function useSourceIcons({ editor, cardId, assets, ocrRunning, onApplied, 
     editor.updateRegion(pending.region.id, { sourceIcons: icons })
     request.value = null
     onApplied()
-    notify('アイコンの位置を記録しました。OCRを実行して原文候補を確認してください。')
+    notify('アイコンの位置を記録しました。OCRで原文候補を確認してください。')
+    return true
   }
 
   function close() {
     request.value = null
   }
 
-  return { request, open, apply, close }
+  return { request, open, apply, close, isCurrent }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { RegionDraft } from '~/types/editor'
+import type { AssetCreationDraft, RegionDraft } from '~/types/editor'
 import { onBeforeUnmount } from 'vue'
 import CardCanvas from '~/components/CardCanvas.vue'
 import EditorConfirmDialog from '~/components/EditorConfirmDialog.vue'
@@ -47,7 +47,7 @@ const {
   cancelRegionDeletion,
   confirmRegionDeletion,
 } = workspace
-const { image, projectSelected, assets, assetImages, fontFamilies } = useCardResources()
+const { image, projectSelected, assets, assetImages, fontFamilies, createSourceIconAsset } = useCardResources()
 const { candidates, region: ocr, execution: { running: ocrRunning } } = useCardOCR()
 const { regionCandidates, selectedCandidateId, selectRegionCandidate, updateCandidateBounds } = candidates
 // Canvas APIを登録した画面が解除も担当し、資源の所有者には触れない。
@@ -68,6 +68,16 @@ const sourceIcons = useSourceIcons({
 })
 const { request: sourceIconsRequest } = sourceIcons
 provideCardSourceIcons(sourceIcons)
+
+/** 登録開始時の画像と確認画面を固定し、閉じ直しや画像差替え後の結果を捨てる。 */
+function registerSourceAsset(draft: AssetCreationDraft, isCurrent: () => boolean) {
+  const source = image.value
+  const pending = sourceIconsRequest.value
+  if (!source || !pending)
+    return Promise.resolve(null)
+  return createSourceIconAsset(draft, source, cardId.value, () => sourceIconsRequest.value === pending
+    && image.value === source && sourceIcons.isCurrent() && isCurrent())
+}
 </script>
 
 <template>
@@ -78,7 +88,11 @@ provideCardSourceIcons(sourceIcons)
     :image-width="editor.project.value.imageWidth"
     :image-height="editor.project.value.imageHeight"
     :assets="assets"
+    :image="image"
+    :asset-images="assetImages"
+    :create-asset="registerSourceAsset"
     @apply="sourceIcons.apply"
+    @recognize="icons => { if (sourceIcons.apply(icons)) ocr.recognizeSelectedRegion() }"
     @close="sourceIcons.close"
   />
 

@@ -27,6 +27,7 @@ import { regionTextLayout } from '~/utils/region-text-layout'
 import { rubyDisplayRegion, rubyFontSize } from '~/utils/ruby'
 import { applyTextStyle, reconcileTextStyles } from '~/utils/text-styles'
 import { translationConsistencyWarnings } from '~/utils/translation-reuse'
+import OCRCorrectionDiff from './OCRCorrectionDiff.vue'
 
 const props = defineProps<{
   region: TextRegion | null
@@ -513,15 +514,14 @@ function resetSelectedInlineAssetStyle() {
           </small>
           <div v-if="ocrCorrectionCandidate" class="ocr-correction">
             <strong>2. 自動補正で変わる箇所</strong>
+            <small>取消線は削除、下線は追加です。␠ はスペースを表します。</small>
             <ul class="ocr-correction-list">
               <li
                 v-for="(change, index) in ocrCorrectionChanges"
                 :key="`${change.line}-${change.original}-${index}`"
               >
                 <span class="ocr-correction-line">{{ change.line }}行目</span>
-                <del>{{ change.original }}</del>
-                <span aria-hidden="true">→</span>
-                <ins>{{ change.corrected }}</ins>
+                <OCRCorrectionDiff :original="change.original" :corrected="change.corrected" />
               </li>
             </ul>
             <label>

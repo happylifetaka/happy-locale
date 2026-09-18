@@ -12,6 +12,29 @@ function sourceKey(text: string) {
   return text.trim().split(/(\[icon:[^\]\r\n]+\])/gu).map((part, index) => index % 2 ? part : part.replace(/\s+/gu, ' ')).join('')
 }
 
+/** 一覧のボタン用に候補の有無を索引化する。全行を各ボタンから走査しない。 */
+export function createTranslationReuseAvailability(
+  cards: readonly FolderProjectCard[],
+  glossary: readonly GlossaryEntry[],
+): (region: TextRegion, cardId: string) => boolean {
+  const owners = new Map<string, Set<string>>()
+  const ownerKey = (cardId: string, regionId: string) => JSON.stringify([cardId, regionId])
+  const add = (source: string, translation: string, owner: string) => {
+    const key = sourceKey(source)
+    if (!key || !translation.trim())
+      return
+    const entries = owners.get(key) ?? new Set<string>()
+    entries.add(owner)
+    owners.set(key, entries)
+  }
+  glossary.forEach(entry => add(entry.source, entry.translation, 'glossary'))
+  cards.forEach(card => card.regions.forEach(region => add(region.originalText, region.translatedText, ownerKey(card.id, region.id))))
+  return (region, cardId) => {
+    const entries = owners.get(sourceKey(region.originalText))
+    return Boolean(entries && (entries.size > 1 || !entries.has(ownerKey(cardId, region.id))))
+  }
+}
+
 /** 同じ原文の訳を用語集・他領域から集め、同一の訳文には参照元だけを追加する。 */
 export function findReusableTranslations(
   region: TextRegion,

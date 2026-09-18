@@ -2,7 +2,7 @@ import type { OCRResult, OCRTextBlock } from '~/services/ocr/types'
 import type { ImageAsset, SourceIcon, TextRegion } from '~/types/editor'
 
 /** 原文アイコンの参照切れや領域からのはみ出しを検出する。 */
-export function sourceIconProblems(region: TextRegion, assets: readonly ImageAsset[]): string[] {
+export function sourceIconProblems(region: TextRegion, assets: readonly Pick<ImageAsset, 'id'>[]): string[] {
   const problems: string[] = []
   for (const [index, icon] of (region.sourceIcons ?? []).entries()) {
     if (!assets.some(asset => asset.id === icon.assetId))
@@ -41,7 +41,12 @@ export function textWithSourceIcons(
     y: (word.y - padding) / scale,
     width: word.width / scale,
     height: word.height / scale,
-  })).filter(word => word.text.trim())
+  })).filter(word => word.text.trim()).filter(word => !icons.some(icon =>
+    // 確定範囲内の認識文字はマスク由来のノイズ。範囲外の同じ文字列には触れない。
+    word.x >= icon.x && word.y >= icon.y
+    && word.x + word.width <= icon.x + icon.width
+    && word.y + word.height <= icon.y + icon.height,
+  ))
   for (const word of words.sort((a, b) => a.y - b.y || a.x - b.x)) {
     const row = rows.findLast(items => items.some(item => overlap(item, word) >= 0.5))
     if (row)
