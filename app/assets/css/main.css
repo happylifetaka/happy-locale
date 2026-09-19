@@ -3267,18 +3267,12 @@ button.danger {
   display: grid;
   grid-column: 1 / -1;
   width: 100%;
+  min-height: 4.15rem;
   padding-right: 4.2rem;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 0.35rem;
   text-align: left;
-}
-
-.region-list .region-split-button {
-  grid-column: 1 / -1;
-  justify-self: end;
-  padding: 0.2rem 0.5rem;
-  font-size: 0.8rem;
 }
 
 .region-list .region-list-select strong {
@@ -3291,44 +3285,41 @@ button.danger {
   position: absolute;
   top: 0.35rem;
   right: 0.35rem;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1.65rem);
+  grid-template-areas: "rename remove" "split merge";
   gap: 0.1rem;
 }
 
-.region-list .region-list-rename,
-.region-list .region-list-remove {
+.region-list-rename { grid-area: rename; }
+.region-list-remove { grid-area: remove; }
+.region-list-split { grid-area: split; }
+.region-list-merge { grid-area: merge; }
+
+.region-list-actions button {
   display: grid;
   width: 1.65rem;
   height: 1.65rem;
   padding: 0;
   border: 0;
-  color: #8a4b4b;
+  color: #64748b;
   background: transparent;
-  font-size: 1.05rem;
   line-height: 1;
   place-items: center;
-  opacity: 0.55;
 }
 
-.region-list .region-list-rename svg {
-  width: 0.95rem;
-  height: 0.95rem;
+.region-list-actions button svg {
+  width: 1.05rem;
+  height: 1.05rem;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.8;
+  stroke-width: 1.7;
 }
 
-.region-list-item:hover .region-list-rename,
-.region-list-item:hover .region-list-remove,
-.region-list-item:focus-within .region-list-rename,
-.region-list-item:focus-within .region-list-remove {
-  opacity: 1;
-}
-
-.region-list .region-list-rename:hover:not(:disabled),
-.region-list .region-list-rename:focus-visible:not(:disabled) {
+.region-list-actions button:hover:not(:disabled),
+.region-list-actions button:focus-visible:not(:disabled) {
   color: #174ea6;
   background: #edf3ff;
 }

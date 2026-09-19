@@ -114,14 +114,6 @@ function commitRename(region: TextRegion) {
           region.translatedText || region.originalText || region.regionId
         }}</span>
       </button>
-      <div class="region-shape-actions">
-        <button type="button" :aria-label="`${region.displayName || region.regionId}を分割`" @click="emit('split', region.id)">
-          分割…
-        </button>
-        <button type="button" :disabled="regions.length < 2" :aria-label="`${region.displayName || region.regionId}を結合`" @click="emit('merge', region.id)">
-          結合…
-        </button>
-      </div>
       <input
         v-if="editingRegionId === region.id"
         ref="renameInput"
@@ -139,7 +131,7 @@ function commitRename(region: TextRegion) {
           type="button"
           class="region-list-rename"
           :aria-label="`${region.displayName.trim() || region.regionId}の名前を変更`"
-          title="領域名を変更"
+          title="名前変更"
           @click="startRename(region)"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -151,17 +143,40 @@ function commitRename(region: TextRegion) {
           type="button"
           class="region-list-remove"
           :aria-label="`${region.displayName.trim() || region.regionId}を削除`"
-          title="領域を削除"
+          title="削除"
           @click="$emit('remove', region.id)"
         >
-          ×
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="region-list-split"
+          :aria-label="`${region.displayName.trim() || region.regionId}を分割`"
+          title="分割"
+          @click="emit('split', region.id)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 4H3v16h6M15 4h6v16h-6" />
+            <path d="M12 3v3m0 4v4m0 4v3" stroke-dasharray="2 2" />
+            <path d="m7 10-2 2 2 2m-2-2h4m8-2 2 2-2 2m2-2h-4" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="region-list-merge"
+          :disabled="regions.length < 2"
+          :aria-label="`${region.displayName.trim() || region.regionId}を結合`"
+          title="結合"
+          @click="emit('merge', region.id)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M5 12h5m-2-2 2 2-2 2m11-2h-5m2-2-2 2 2 2" />
+          </svg>
         </button>
       </span>
     </div>
   </section>
 </template>
-
-<style scoped>
-.region-shape-actions { grid-column: 1 / -1; display: flex; justify-content: end; gap: 0.35rem; }
-.region-shape-actions button { padding: 0.2rem 0.5rem; font-size: 0.8rem; }
-</style>
