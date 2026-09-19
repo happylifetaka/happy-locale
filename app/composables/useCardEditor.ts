@@ -1,9 +1,11 @@
 import type { CardProject, RegionDraft, TextRegion } from '~/types/editor'
+import type { MergeOptions } from '~/utils/merge-regions'
 import type { SplitAxis, SplitText } from '~/utils/split-region'
 import { computed, ref } from 'vue'
 import { useKeyedHistory } from '~/composables/useHistory'
 import { renameCardAssetTokens } from '~/services/project/cards'
 import { reconcileInlineAssetStyles } from '~/utils/inline-assets'
+import { mergeTextRegions } from '~/utils/merge-regions'
 import { splitTextRegion } from '~/utils/split-region'
 import { reconcileTextStyles } from '~/utils/text-styles'
 import { statusForTranslation } from '~/utils/translation-status'
@@ -272,6 +274,20 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
     publishProject()
   }
 
+  /** 結合を一つの履歴として確定し、基準領域のIDと一覧位置を維持する。 */
+  function mergeRegions(ids: string[], options: MergeOptions) {
+    const regions = ids.map(id => history.state.value.regions.find(region => region.id === id))
+    if (regions.some(region => !region))
+      throw new Error('結合対象の領域が見つかりません。')
+    const merged = mergeTextRegions(regions as TextRegion[], options)
+    history.commit({
+      ...history.state.value,
+      regions: history.state.value.regions.flatMap(region => region.id === options.baseId ? [merged] : ids.includes(region.id) ? [] : [region]),
+    })
+    selectedRegionId.value = merged.id
+    publishProject()
+  }
+
   /** 指定領域を履歴に記録して削除する。 */
   function removeRegion(id: string) {
     history.commit({
@@ -362,6 +378,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
     updateRegion,
     appendTemplateRegions,
     splitRegion,
+    mergeRegions,
     removeRegion,
     applyTranslations,
     renameAssetToken,

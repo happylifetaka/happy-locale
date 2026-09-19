@@ -1,12 +1,13 @@
 import type { Ref } from 'vue'
 import type { useCardEditor } from '~/composables/useCardEditor'
 import type { ExclusionArea, MaskStroke, RegionDraft, TextRegion } from '~/types/editor'
+import type { MergeOptions } from '~/utils/merge-regions'
 import type { SplitAxis, SplitText } from '~/utils/split-region'
 import { computed, shallowRef } from 'vue'
 import { transformRegionContents } from '~/utils/regions'
 
 interface RegionEditingOptions {
-  editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'addRegion' | 'updateRegion' | 'removeRegion' | 'splitRegion'>
+  editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'addRegion' | 'updateRegion' | 'removeRegion' | 'splitRegion' | 'mergeRegions'>
   currentImageId: Ref<string>
   projectBusy: Ref<boolean>
   selectedExclusionId: Ref<string | null>
@@ -21,6 +22,29 @@ export function useRegionEditing({ editor, currentImageId, projectBusy, selected
   const regionDeletionRequest = shallowRef<{ cardId: string, region: TextRegion } | null>(null)
   /** ダイアログに表示する削除対象。取消・確定は専用操作から行う。 */
   const regionPendingDeletionConfirmation = computed(() => regionDeletionRequest.value?.region ?? null)
+
+  const regionMergeRequest = shallowRef<{ cardId: string, baseId: string, regions: TextRegion[] } | null>(null)
+  function requestRegionMerge(id: string) {
+    if (projectBusy.value || editor.project.value.regions.length < 2 || !editor.project.value.regions.some(region => region.id === id))
+      return
+    regionMergeRequest.value = { cardId: currentImageId.value, baseId: id, regions: JSON.parse(JSON.stringify(editor.project.value.regions)) }
+  }
+  function applyRegionMerge(ids: string[], options: MergeOptions) {
+    const request = regionMergeRequest.value
+    if (!request || projectBusy.value)
+      return
+    if (request.cardId !== currentImageId.value || JSON.stringify(editor.project.value.regions) !== JSON.stringify(request.regions)) {
+      regionMergeRequest.value = null
+      setMessage('領域が変更されたため結合を中止しました。現在の内容でやり直してください。')
+      return
+    }
+    if (options.baseId !== request.baseId)
+      return
+    editor.mergeRegions(ids, options)
+    regionMergeRequest.value = null
+    switchInspectorTab('region')
+    setMessage('領域を結合しました。元に戻す操作で復元できます。')
+  }
 
   /** 分割確認を開いた時点のカードと領域の情報。 */
   const regionSplitRequest = shallowRef<{ cardId: string, region: TextRegion } | null>(null)
@@ -175,5 +199,5 @@ export function useRegionEditing({ editor, currentImageId, projectBusy, selected
     })
     selectedExclusionId.value = null
   }
-  return { regionPendingDeletionConfirmation, regionSplitRequest, requestRegionSplit, applyRegionSplit, addRegion, renameRegion, requestRegionDeletion, cancelRegionDeletion, confirmRegionDeletion, updateRegionBounds, addMaskStroke, addExclusion, updateExclusion, removeExclusion }
+  return { regionMergeRequest, requestRegionMerge, applyRegionMerge, regionPendingDeletionConfirmation, regionSplitRequest, requestRegionSplit, applyRegionSplit, addRegion, renameRegion, requestRegionDeletion, cancelRegionDeletion, confirmRegionDeletion, updateRegionBounds, addMaskStroke, addExclusion, updateExclusion, removeExclusion }
 }

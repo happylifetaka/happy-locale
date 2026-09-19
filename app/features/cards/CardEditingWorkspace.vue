@@ -5,6 +5,7 @@ import CardCanvas from '~/components/CardCanvas.vue'
 import EditorConfirmDialog from '~/components/EditorConfirmDialog.vue'
 import EditorInspectorPanel from '~/components/EditorInspectorPanel.vue'
 import RegionList from '~/components/RegionList.vue'
+import RegionMergeDialog from '~/components/RegionMergeDialog.vue'
 import RegionSplitDialog from '~/components/RegionSplitDialog.vue'
 import SourceIconsDialog from '~/components/SourceIconsDialog.vue'
 import { provideCardSourceIcons, useCardEditing, useCardOCR, useCardResources } from './cardEditingContext'
@@ -42,6 +43,9 @@ const {
   requestRegionSplit,
   requestRegionDeletion,
   regionSplitRequest,
+  regionMergeRequest,
+  requestRegionMerge,
+  applyRegionMerge,
   applyRegionSplit,
   regionPendingDeletionConfirmation,
   cancelRegionDeletion,
@@ -96,6 +100,17 @@ function registerSourceAsset(draft: AssetCreationDraft, isCurrent: () => boolean
     @close="sourceIcons.close"
   />
 
+  <RegionMergeDialog
+    v-if="regionMergeRequest && image"
+    :regions="regionMergeRequest.regions"
+    :base-id="regionMergeRequest.baseId"
+    :image="image"
+    :assets="assets"
+    :asset-images="assetImages"
+    :font-families="fontFamilies"
+    @apply="applyRegionMerge"
+    @close="regionMergeRequest = null"
+  />
   <RegionSplitDialog
     v-if="regionSplitRequest && image"
     :region="regionSplitRequest.region"
@@ -171,6 +186,7 @@ function registerSourceAsset(draft: AssetCreationDraft, isCurrent: () => boolean
           @select="selectRegionForEditing"
           @rename="renameRegion"
           @split="requestRegionSplit"
+          @merge="requestRegionMerge"
           @remove="requestRegionDeletion"
         />
         <slot name="layout-tools" />

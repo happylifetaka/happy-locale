@@ -13,6 +13,7 @@ const emit = defineEmits<{
   rename: [id: string, displayName: string]
   remove: [id: string]
   split: [id: string]
+  merge: [id: string]
 }>()
 
 /** 一覧を絞り込む検索文字列。 */
@@ -113,9 +114,14 @@ function commitRename(region: TextRegion) {
           region.translatedText || region.originalText || region.regionId
         }}</span>
       </button>
-      <button type="button" class="region-split-button" :aria-label="`${region.displayName || region.regionId}を分割`" @click="emit('split', region.id)">
-        分割…
-      </button>
+      <div class="region-shape-actions">
+        <button type="button" :aria-label="`${region.displayName || region.regionId}を分割`" @click="emit('split', region.id)">
+          分割…
+        </button>
+        <button type="button" :disabled="regions.length < 2" :aria-label="`${region.displayName || region.regionId}を結合`" @click="emit('merge', region.id)">
+          結合…
+        </button>
+      </div>
       <input
         v-if="editingRegionId === region.id"
         ref="renameInput"
@@ -154,3 +160,8 @@ function commitRename(region: TextRegion) {
     </div>
   </section>
 </template>
+
+<style scoped>
+.region-shape-actions { grid-column: 1 / -1; display: flex; justify-content: end; gap: 0.35rem; }
+.region-shape-actions button { padding: 0.2rem 0.5rem; font-size: 0.8rem; }
+</style>
