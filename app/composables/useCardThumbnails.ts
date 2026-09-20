@@ -136,6 +136,17 @@ export function useCardThumbnails({
       directory,
       cardId,
     )
+    if (thumbnail) {
+      try {
+        // File-backed URLs become unreadable when the cache file is rewritten.
+        // Own the small thumbnail bytes before validating/publishing its URL.
+        thumbnail = new Blob([await thumbnail.arrayBuffer()], { type: thumbnail.type })
+      }
+      catch {
+        // A concurrent rewrite can invalidate the File before its bytes are read.
+        thumbnail = null
+      }
+    }
     if (thumbnail && !(await isUsableCardThumbnail(thumbnail))) {
       logDiagnostic('破損したサムネイルキャッシュを再生成します', { cardId })
       thumbnail = null
@@ -150,7 +161,7 @@ export function useCardThumbnails({
       if (thumbnail && isCurrentThumbnailRequest(directory, cardId, generation))
         void persistCardThumbnail(directory, cardId, thumbnail, generation)
     }
-    if (thumbnail && isCurrentThumbnailRequest(directory, cardId, generation))
+    if (thumbnail && isCurrentThumbnailRequest(directory, cardId, generation) && !cardThumbnails.value.has(cardId))
       setCardThumbnail(cardId, thumbnail)
   }
 

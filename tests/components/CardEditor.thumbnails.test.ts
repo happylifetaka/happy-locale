@@ -89,6 +89,42 @@ describe('card editor thumbnails', () => {
     expect(loadFolderProjectCardThumbnail).toHaveBeenCalledTimes(4)
   })
 
+  it('publishes owned bytes instead of a File-backed URL that cache rewrites invalidate', async () => {
+    const { request } = await setupThumbnails()
+    request('one')
+    await flushPromises()
+    const published = vi.mocked(URL.createObjectURL).mock.calls[0]![0] as Blob
+    expect(published).not.toBe(cached)
+    expect(published).not.toBeInstanceOf(File)
+    expect(await published.text()).toBe('cached')
+    expect(createImageBitmap).toHaveBeenCalledWith(published)
+  })
+
+  it('regenerates a cached File invalidated before reading its bytes', async () => {
+    const { request } = await setupThumbnails()
+    const changed = new File(['stale'], 'changed.jpg')
+    vi.spyOn(changed, 'arrayBuffer').mockRejectedValueOnce(new DOMException('changed', 'NotReadableError'))
+    vi.mocked(loadFolderProjectCardThumbnail).mockResolvedValueOnce(changed)
+    request('one')
+    await flushPromises()
+    expect(loadFolderProjectCardImage).toHaveBeenCalledOnce()
+    expect(URL.createObjectURL).toHaveBeenCalledExactlyOnceWith(generated)
+  })
+
+  it('does not replace a freshly generated thumbnail with an older cache read', async () => {
+    const { request } = await setupThumbnails()
+    const pending = deferred<ArrayBuffer>()
+    const delayed = new File(['old'], 'old.jpg')
+    vi.spyOn(delayed, 'arrayBuffer').mockReturnValueOnce(pending.promise)
+    vi.mocked(loadFolderProjectCardThumbnail).mockResolvedValueOnce(delayed)
+    request('one')
+    await flushPromises()
+    editorRuntime().setCardThumbnail('one', generated)
+    pending.resolve(new TextEncoder().encode('old').buffer)
+    await flushPromises()
+    expect(URL.createObjectURL).toHaveBeenCalledExactlyOnceWith(generated)
+  })
+
   it.each(['directory', 'card removed', 'unmount'] as const)('discards late results after %s', async (change) => {
     const { request } = await setupThumbnails()
     const result = deferred<File | null>()
@@ -138,6 +174,7 @@ describe('card editor thumbnails', () => {
     current.resolve(generated)
     await flushPromises()
     expect([...editorRuntime().cardThumbnails.value.keys()]).toEqual(['one'])
-    expect(URL.createObjectURL).toHaveBeenCalledExactlyOnceWith(generated)
+    expect(URL.createObjectURL).toHaveBeenCalledOnce()
+    expect(await (vi.mocked(URL.createObjectURL).mock.calls[0]![0] as Blob).text()).toBe('generated')
   })
 })
