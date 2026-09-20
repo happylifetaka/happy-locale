@@ -153,6 +153,37 @@ it('does not persist a single-card result after the source image changes during 
   expect(useProjectStore().document!.cards.every(card => !card.ocrCandidates)).toBe(true)
 })
 
+it('refreshes externally changed candidate bounds and invalidates only stale candidate history before confirmation', async () => {
+  const { wrapper, canvas } = await mountSavedEditor(false)
+  const store = useProjectStore()
+  const panel = wrapper.findComponent({ name: 'RegionCandidatePanel' })
+  ocrIO.recognize.mockResolvedValue(result)
+  panel.vm.$emit('detect')
+  await flushPromises()
+  const id = store.document!.cards[0]!.ocrCandidates![0]!.id
+  canvas.vm.$emit('select-region-candidate', id)
+  canvas.vm.$emit('update-region-candidate-bounds', id, { x: 12, y: 15, width: 65, height: 22 })
+  await nextTick()
+  expect(panel.props('canUndoChange')).toBe(true)
+  const before = store.readCardCandidateEdit('one')
+  const updated = before.candidates.map(candidate => ({ ...candidate, x: candidate.x + 3 }))
+  const calls = ocrIO.recognize.mock.calls.length
+  store.applyCardCandidateEdit('one', before, { ...before, candidates: updated })
+  await nextTick()
+  expect(canvas.props('regionCandidates')).toEqual(updated)
+  expect(canvas.props('selectedCandidateId')).toBe(id)
+  expect(panel.props('canUndoChange')).toBe(false)
+  panel.vm.$emit('undo-change')
+  await nextTick()
+  expect(store.document!.cards[0]!.ocrCandidates).toEqual(updated)
+  expect(canvas.props('regionCandidates')).toEqual(updated)
+  expect(ocrIO.recognize).toHaveBeenCalledTimes(calls)
+  panel.vm.$emit('confirm')
+  await flushPromises()
+  expect(store.document!.cards[0]!.ocrCandidates).toBeUndefined()
+  expect(store.document!.cards[0]!.regions[0]).toMatchObject({ x: 15, y: 15, width: 65, height: 22, originalText: updated[0]!.text })
+})
+
 it.each([false, true])('persists unchecked noise and word-refined headings for batch=%s', async (batch) => {
   const { wrapper } = await mountSavedEditor(false)
   vi.stubGlobal('createImageBitmap', vi.fn().mockImplementation(async () => ({ width: 100, height: 140, close: vi.fn() })))

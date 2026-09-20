@@ -1,7 +1,7 @@
 import type { OCRQueueCardState } from '~/services/ocr/queue'
 import type { RegionCandidate } from '~/services/ocr/types'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { effectScope, ref } from 'vue'
 import { useCardEditor } from '~/composables/useCardEditor'
 import { resolveSampleCandidates } from '~/services/project/sample'
 import { baselineProject } from '../../../tests/fixtures/refactoring-baseline'
@@ -9,6 +9,8 @@ import { useCandidateReview } from './useCandidateReview'
 
 vi.mock('~/services/project/sample', () => ({ resolveSampleCandidates: vi.fn(() => null) }))
 beforeEach(() => vi.mocked(resolveSampleCandidates).mockReset().mockReturnValue(null))
+const cleanups: Array<() => void> = []
+afterEach(() => cleanups.splice(0).forEach(cleanup => cleanup()))
 
 function candidate(selected = true): RegionCandidate {
   const line = { text: 'Choose an ally.', x: 10, y: 20, width: 80, height: 20, confidence: 90 }
@@ -51,11 +53,13 @@ function setup() {
     setMessage: vi.fn(),
     logDiagnostic: vi.fn(),
   }
-  return { ...options, stored, events, review: useCandidateReview(options) }
+  const scope = effectScope()
+  cleanups.push(() => scope.stop())
+  return { ...options, stored, events, review: scope.run(() => useCandidateReview(options))! }
 }
 
 describe('candidate review operations', () => {
-  it('restores an independent working copy and persists using the current card ID', () => {
+  it('restores an independent working copy and clears old candidates before switching to an empty card', () => {
     const s = setup()
     expect(s.review.showBatchOCRCandidates('missing')).toBe(false)
     expect(s.selectedCandidateId.value).toBe('old')
@@ -67,9 +71,13 @@ describe('candidate review operations', () => {
     expect(s.cardPreviewMode.value).toBe('original')
     s.regionCandidates.value[0]!.lines[0]!.text = 'Adjusted line'
     expect(s.stored[0]!.lines[0]!.text).toBe('Choose an ally.')
-    s.currentImageId.value = 'synthetic-2'
     s.review.persistDisplayedBatchCandidates()
-    expect(s.updateBatchOCRResult).toHaveBeenCalledWith('synthetic-2', s.regionCandidates.value)
+    expect(s.updateBatchOCRResult).toHaveBeenCalledWith('synthetic-1', s.regionCandidates.value)
+    s.currentImageId.value = 'synthetic-2'
+    expect(s.regionCandidates.value).toEqual([])
+    expect(s.review.showBatchOCRCandidates('synthetic-1')).toBe(false)
+    s.review.persistDisplayedBatchCandidates()
+    expect(s.updateBatchOCRResult).toHaveBeenLastCalledWith('synthetic-2', [])
   })
 
   it('confirms selected candidates as one undoable operation before advancing review', () => {

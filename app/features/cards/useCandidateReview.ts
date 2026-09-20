@@ -2,6 +2,8 @@ import type { Ref } from 'vue'
 import type { OCRQueueCardState } from '~/services/ocr/queue'
 import type { FolderProjectCard, RegionDraft, TextRegion } from '~/types/editor'
 import type { RegionCandidate } from '~/types/ocr'
+import { watch } from 'vue'
+import { regionCandidatesSignature } from '~/services/ocr/candidate-edits'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { resolveSampleCandidates } from '~/services/project/sample'
 
@@ -49,13 +51,35 @@ export function useCandidateReview({
   setMessage,
   logDiagnostic,
 }: CandidateReviewOptions) {
+  let publishingCandidates: { cardId: string, signature: string } | null = null
+
+  // 通常Undo・再検出の混在適用など、保存側で変更された候補を作業コピーへ戻す。
+  // 自分のドラッグ／分割の保存通知では、今作った候補編集履歴を消さない。
+  watch([() => currentImageId.value, () => regionCandidatesSignature(batchOCRResults.value.get(currentImageId.value) ?? [])], ([cardId, signature], [previousCardId]) => {
+    if (cardId === previousCardId && publishingCandidates?.cardId === cardId && publishingCandidates.signature === signature)
+      return
+    const candidates = cloneRegionCandidates(batchOCRResults.value.get(cardId) ?? [])
+    regionCandidates.value = candidates
+    regionCandidateEditHistory.value = []
+    if (cardId !== previousCardId || !candidates.some(candidate => candidate.id === selectedCandidateId.value))
+      selectedCandidateId.value = null
+  }, { flush: 'sync' })
+
   /** 調整中の候補と選択状態をカード別に退避し、別カードの確認から戻れるようにする。 */
   function persistDisplayedBatchCandidates() {
-    updateBatchOCRResult(currentImageId.value, regionCandidates.value)
+    publishingCandidates = { cardId: currentImageId.value, signature: regionCandidatesSignature(regionCandidates.value) }
+    try {
+      updateBatchOCRResult(currentImageId.value, regionCandidates.value)
+    }
+    finally {
+      publishingCandidates = null
+    }
   }
 
   /** 指定カードに退避した領域候補を確認画面へ戻す。 */
   function showBatchOCRCandidates(cardId: string) {
+    if (cardId !== currentImageId.value)
+      return false
     const candidates = batchOCRResults.value.get(cardId)
     if (!candidates)
       return false

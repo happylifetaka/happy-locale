@@ -22,6 +22,11 @@ function candidateSignature(item: RegionCandidate | null): string {
   return JSON.stringify(item && [item.id, block(item), item.selected, item.sampleRegionId ?? null, item.lines.map(block)])
 }
 
+/** 表示コピーと保存値を比較する。JSONのキー順の差だけでは履歴を破棄しない。 */
+export function regionCandidatesSignature(items: readonly RegionCandidate[]): string {
+  return JSON.stringify(items.map(candidateSignature))
+}
+
 /** 入力は保存形式の検証済み候補。再検出では既存候補の削除・並べ替えをしない。 */
 export function candidateEdits(before: readonly RegionCandidate[], after: readonly RegionCandidate[]): CandidateEdit[] {
   const existing = new Set(before.map(item => item.id))
