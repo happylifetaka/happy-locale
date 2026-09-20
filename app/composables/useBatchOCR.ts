@@ -4,11 +4,8 @@ import type { OCRQueueCardState } from '~/services/ocr/queue'
 import type { OCRProvider, RegionCandidate } from '~/services/ocr/types'
 import type { FolderProjectCard, FolderProjectDocument } from '~/types/editor'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
-import { createRegionCandidates } from '~/services/ocr/candidates'
-import { refineHeadingImageBounds } from '~/services/ocr/heading-bounds'
-import { prepareRegionForOCR } from '~/services/ocr/image'
+import { detectRegions } from '~/services/ocr/detect-regions'
 import { runSequentialOCRQueue } from '~/services/ocr/queue'
-import { enhanceRegionDetection } from '~/services/ocr/region-image'
 import { loadFolderProjectCardImage } from '~/services/project/folder'
 import { sampleRegionCandidates } from '~/services/project/sample'
 import { assertFileSize, assertImageDimensions, FILE_LIMITS } from '~/utils/file-limits'
@@ -161,40 +158,25 @@ export function useBatchOCR({
       if (batchOCRDisposed)
         return []
       assertImageDimensions(bitmap.width, bitmap.height, `${card.imageName}`)
-      const scale = 2
-      const blob = await prepareRegionForOCR(
-        bitmap,
-        { x: 0, y: 0, width: bitmap.width, height: bitmap.height },
-        { scale, padding: 0 },
-      )
-      if (batchOCRDisposed)
-        return []
-      const result = await ocrProvider.recognize(blob, {
-        language: 'eng',
-        layout: 'sparse-text',
+      const detection = await detectRegions({
+        image: bitmap,
+        imageWidth: bitmap.width,
+        imageHeight: bitmap.height,
+        provider: ocrProvider,
+        isCurrent: () => !batchOCRDisposed,
+        continueLabelRecovery: () => !batchOCRCancelRequested.value,
         onProgress: (progress) => {
-          if (batchOCRDisposed)
-            return
           ocrProgress.value = progress.progress
           ocrStatus.value = `${index + 1}/${total} ${card.imageName}: ${progress.status}`
         },
+        onRefinement: () => {
+          ocrStatus.value = `${index + 1}/${total} ${card.imageName}: 文字の範囲と見出しを確認しています…`
+        },
+        onEnhancementError: error => logDiagnostic('見出しの追加確認に失敗したため全体OCRの候補を使用します', error, 'error'),
       })
-      if (batchOCRDisposed)
+      if (!detection || batchOCRDisposed)
         return []
-      ocrStatus.value = `${index + 1}/${total} ${card.imageName}: 文字の範囲と見出しを確認しています…`
-      const enhanced = await enhanceRegionDetection(bitmap, bitmap.width, bitmap.height, scale, result, ocrProvider, () => !batchOCRDisposed && !batchOCRCancelRequested.value, error => logDiagnostic('見出しの追加確認に失敗したため全体OCRの候補を使用します', error, 'error'))
-      if (batchOCRDisposed)
-        return []
-      const candidates = createRegionCandidates(enhanced.result.blocks, {
-        words: enhanced.result.words,
-        labelBounds: enhanced.labelBounds,
-        refineTextBounds: enhanced.refineTextBounds,
-        refineHeadingBounds: bounds => refineHeadingImageBounds(bitmap, bounds, scale),
-        scale,
-        imageWidth: bitmap.width,
-        imageHeight: bitmap.height,
-        padding: 6,
-      })
+      const candidates = detection.candidates
       updateBatchOCRResult(card.id, candidates.length > 0 ? candidates : null)
       return candidates
     }

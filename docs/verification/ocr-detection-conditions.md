@@ -16,7 +16,7 @@
 
 処理順は「全体OCR → 原画像から淡色帯を探索・局所OCR → 文字画素の補正準備 → 行ごとの装飾除去・枠補正 → 候補フィルター → 横結合 → 縦結合 → 余白追加・余白の重なり調整」。局所OCRで確定した見出しは、候補生成時に元の確定枠を優先し、明るい文字向け補正を重ねない。
 
-参照: [内部設定](../../app/services/ocr/detection-settings.ts)、[補正パイプライン](../../app/services/ocr/region-image.ts)、[候補生成](../../app/services/ocr/candidates.ts)。
+単体・一括とも[共通検出サービス](../../app/services/ocr/detect-regions.ts)が同じ順序で実行する。参照: [内部設定](../../app/services/ocr/detection-settings.ts)、[補正パイプライン](../../app/services/ocr/region-image.ts)、[候補生成](../../app/services/ocr/candidates.ts)。
 
 以下で輝度は `0.299R + 0.587G + 0.114B`、彩度は `max(R,G,B) - min(R,G,B)` を指す。いずれもRGBの0〜255を使用し、HSVの彩度ではない。画素解析のpxと、最終候補の原画像座標のpxは区別する。
 
