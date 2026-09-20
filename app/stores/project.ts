@@ -1,3 +1,4 @@
+import type { CardCandidateEditState } from '~/services/ocr/candidate-edits'
 import type { AssetDiscoveryState } from '~/types/asset-discovery'
 import type {
   CardProject,
@@ -12,6 +13,8 @@ import { defineStore } from 'pinia'
 import { computed, shallowRef } from 'vue'
 import { parseAssetDiscovery } from '~/services/asset-discovery/format'
 import { invalidateDiscoveryImage, reconcileDiscoveryContent, reconcileOccurrenceOwners, removeDiscoveryAssets } from '~/services/asset-discovery/review'
+import { cardEditingSignature } from '~/services/ocr/candidate-edits'
+import { parseRegionCandidates } from '~/services/ocr/candidate-format'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { finalizeProjectCardDeletions, reconcileProjectDiscoveryOwners, updateProjectCard } from '~/services/project/cards'
 
@@ -50,9 +53,19 @@ export const useProjectStore = defineStore('project', () => {
   /** 現在のフォルダプロジェクトの保存用文書。初回保存前はnull。 */
   const document = shallowRef<FolderProjectDocument | null>(null)
   /** フォルダ文書がまだない段階のカード編集データ。 */
-  const draftCard = shallowRef<CardProject>(emptyCardProject())
-  const draftOCRCandidates = shallowRef<RegionCandidate[]>([])
-  const draftAssetDiscovery = shallowRef<AssetDiscoveryState | undefined>()
+  const draftEditState = shallowRef<{ card: CardProject, candidates: RegionCandidate[], discovery: AssetDiscoveryState | undefined }>({ card: emptyCardProject(), candidates: [], discovery: undefined })
+  const draftCard = computed({
+    get: () => draftEditState.value.card,
+    set: (card: CardProject) => { draftEditState.value = { ...draftEditState.value, card } },
+  })
+  const draftOCRCandidates = computed({
+    get: () => draftEditState.value.candidates,
+    set: (candidates: RegionCandidate[]) => { draftEditState.value = { ...draftEditState.value, candidates } },
+  })
+  const draftAssetDiscovery = computed({
+    get: () => draftEditState.value.discovery,
+    set: (discovery: AssetDiscoveryState | undefined) => { draftEditState.value = { ...draftEditState.value, discovery } },
+  })
   const draftDiscoveryCardId = shallowRef<string | null>(null)
   /** 初回保存前に登録した共有アセット。 */
   const draftAssets = shallowRef<ImageAsset[]>([])
@@ -294,6 +307,48 @@ export const useProjectStore = defineStore('project', () => {
     reconcileDiscoveryOwners(cardId)
   }
 
+  /** 混在編集の比較基準。保存カードと下書きを取り違えた古い要求は拒否する。 */
+  function readCardCandidateEdit(cardId: string | null): CardCandidateEditState {
+    if (!document.value && cardId === null)
+      return clone({ project: draftCard.value, candidates: draftOCRCandidates.value })
+    const card = document.value?.cards.find(card => card.id === cardId)
+    if (!card)
+      throw new Error('編集対象のカードが変わりました。再比較してください。')
+    const { imageName, imageWidth, imageHeight, regions } = card
+    return clone({ project: { imageName, imageWidth, imageHeight, regions }, candidates: card.ocrCandidates ?? [] })
+  }
+
+  /** 領域・候補・所属参照の全検証後、一回の置換で反映する。共有素材は触らない。 */
+  function applyCardCandidateEdit(cardId: string | null, before: CardCandidateEditState, after: CardCandidateEditState) {
+    const current = readCardCandidateEdit(cardId)
+    const { imageWidth, imageHeight } = current.project
+    if (cardEditingSignature(current.project) !== cardEditingSignature(before.project)
+      || JSON.stringify(parseRegionCandidates(current.candidates, imageWidth, imageHeight)) !== JSON.stringify(parseRegionCandidates(before.candidates, imageWidth, imageHeight))
+      || after.project.imageWidth !== imageWidth || after.project.imageHeight !== imageHeight || after.project.imageName !== current.project.imageName) {
+      throw new Error('比較後にカード・領域・候補が変わりました。再比較してください。')
+    }
+    parseRegionCandidates(after.candidates, imageWidth, imageHeight)
+    const candidates = cloneRegionCandidates(after.candidates)
+    const project = clone({ imageName: after.project.imageName, imageWidth, imageHeight, regions: after.project.regions })
+    if (document.value) {
+      const next = {
+        ...document.value,
+        cards: document.value.cards.map(card => card.id === cardId ? { ...card, ...project, ocrCandidates: candidates.length ? candidates : undefined } : card),
+      }
+      document.value = reconcileProjectDiscoveryOwners(next, cardId!)
+    }
+    else {
+      const discovery = draftAssetDiscovery.value
+      const nextDiscovery = discovery && draftDiscoveryCardId.value
+        ? { ...discovery, occurrences: reconcileOccurrenceOwners(discovery.occurrences, draftDiscoveryCardId.value, [
+            ...project.regions.map(region => ({ ...region, kind: 'region' as const })),
+            ...candidates.map(candidate => ({ ...candidate, kind: 'candidate' as const })),
+          ]) }
+        : discovery
+      draftEditState.value = { card: project, candidates, discovery: nextDiscovery }
+    }
+  }
+
   /** フォルダプロジェクト文書を独立した複製として返す。文書がなければnullを返す。 */
   function snapshot() {
     return document.value ? clone(document.value) : null
@@ -301,6 +356,8 @@ export const useProjectStore = defineStore('project', () => {
 
   return {
     document,
+    // PiniaのSSR・devtoolsにも実際の所有状態を公開する。従来の下書き窓口は下のcomputedで維持する。
+    draftEditState,
     draftCard,
     draftOCRCandidates,
     draftAssetDiscovery,
@@ -324,6 +381,8 @@ export const useProjectStore = defineStore('project', () => {
     setGlossary,
     updateCard,
     setCardOCRCandidates,
+    readCardCandidateEdit,
+    applyCardCandidateEdit,
     setAssetDiscovery,
     reconcileDiscoveryOwners,
     invalidateAssetDiscoveryImage,

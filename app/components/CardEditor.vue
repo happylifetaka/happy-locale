@@ -57,6 +57,9 @@ const projectStore = useProjectStore()
 /** カード単位の編集履歴を管理し、確定した変更をストアへ通知する。 */
 const editor = useCardEditor((cardId, project) => {
   projectStore.updateCard(cardId, project)
+}, {
+  read: projectStore.readCardCandidateEdit,
+  apply: projectStore.applyCardCandidateEdit,
 })
 /** 保存ストアの各項目を、リアクティブな参照を保ったまま編集画面へ公開する。 */
 const {
