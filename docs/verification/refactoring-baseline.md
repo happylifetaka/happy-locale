@@ -164,3 +164,14 @@ P3で追加監査する既存の非同期境界: DPI読取後の文書同一性�
 - Chromiumの実ローカルOCR E2E1件成功。Canvas/bitmapの候補が一致し、合成文字3領域を検出、外部HTTP送信なし。
 - `NUXT_APP_BASE_URL=/happy-locale-public/`の`build:static`成功、静的出力62ファイル検査成功。
 - 私有37画像の再解析・手動確認・別ゲーム精度の評価は実施していない。
+
+## P3-a: 保存形式の移行・検証・正規化を分離
+
+`services/project/format.ts`を既存7 exportの窓口として維持し、内部をcodec/migrations/regions/entities/integrity/paths/valuesへ分けた。version 3・JSON項目・正規化順・書出しの末尾改行は変えない。フォルダの書込処理はこの単位では変更していない。
+
+- 抽出した34個の関数本体・定数値を変更前のTypeScript AST出力と照合し、すべて一致。
+- 新規8件で公開export、0/省略/1/2の移行、未知version拒否、複雑さ検査の優先順、入力非変更、候補を通常履歴へ含めない境界、書出し時に正規化で置換しないことを確認。
+- 関連4ファイル47件、全体108ファイル728件成功。既存の保存失敗・保存中編集・カード別履歴も全体実行に含む。P0 snapshotは変更なし。
+- 型検査・対象ESLint・`git diff --check`成功。
+- サブパス`/happy-locale-public/`の`build:static`成功、静的出力62ファイル検査成功。
+- E2E・実フォルダの手動確認はこの単位では再実行していない。保存トランザクション・非同期対象確認は引き続きP3で監査する。

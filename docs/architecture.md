@@ -145,7 +145,9 @@ A4面付けは編集済みカードを原寸Canvasへ描画して印刷範囲を
 
 ## project.jsonの検証と移行
 
-`app/services/project/format.ts`がJSONの解析、バージョン判定、型の正規化、相対パス検証を担当します。
+`app/services/project/format.ts`は公開窓口を維持し、内部を`format/`へ分割しています。`codec.ts`が読込・書出し順、`migrations.ts`が旧versionの補完、`regions.ts`と`entities.ts`が値の正規化、`integrity.ts`が項目・複雑さの検証、`paths.ts`が相対パス、`values.ts`が基本値の判定を担当します。フォルダI/O・ブラウザ資源・Storeには依存しません。
+
+読込は容量確認→JSON解析→移行→複雑さ検査→version/文書形状→項目検査→正規化の順です。書出しは現versionと複雑さ・項目を検査したうえで、渡された保存データをJSON化します。読込時の既定値補完を保存データへ黙って再適用せず、プロパティ順・末尾改行も従来どおりです。
 
 - 現行形式はversion 3。カードごとの任意フィールド`ocrCandidates`へ未確定OCR候補を保存する
 - version 0とversion省略形式はversion 1相当に補完し、version 1とともに印刷設定等を補ってversion 3へ移行する。version 2は既存設定を保持してversion 3へ読み替える
