@@ -190,7 +190,7 @@ export function createCardCanvasRenderer(readInput: () => CanvasRenderInput) {
         )
       }
     }
-    if (props.previewMode === 'edited' && !props.printAreaEditing)
+    if (!props.printAreaEditing)
       drawUnselectedRegionOutlines(context, previewRegions, props.selectedRegionId, props.zoom)
     if (selected && inspectingAutomaticMask)
       drawAutomaticMaskPreview(context, selected, sourceContext()?.getImageData(0, 0, props.project.imageWidth, props.project.imageHeight) ?? null)

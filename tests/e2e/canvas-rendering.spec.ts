@@ -26,7 +26,12 @@ test('renders real preview overlays while PNG/JPEG contain only committed conten
     await image.decode()
     const input: CanvasRenderInput = {
       image,
-      project: { imageName: 'synthetic.png', imageWidth: 320, imageHeight: 240, regions: [region] },
+      project: {
+        imageName: 'synthetic.png',
+        imageWidth: 320,
+        imageHeight: 240,
+        regions: [region, { ...region, id: 'other', regionId: 'region_2', x: 40, y: 75, width: 180, height: 20, translatedText: 'Second translation', manualMaskStrokes: [], exclusionAreas: [] }],
+      },
       selectedRegionId: region.id,
       autoMaskPreview: false,
       selectedExclusionId: 'area',
@@ -78,7 +83,12 @@ test('renders real preview overlays while PNG/JPEG contain only committed conten
         const bitmap = await createImageBitmap((await renderer.exportImage('image/png'))!)
         const size = [bitmap.width, bitmap.height]
         bitmap.close()
-        results.push({ mode, preview, png, size, pngMatches: png === reference.toDataURL(), jpegMatches: jpeg === reference.toDataURL('image/jpeg', 0.92) })
+        const matchesSource = (x: number, y: number, width: number, height: number) => {
+          const actual = output.getContext('2d')!.getImageData(x, y, width, height).data
+          const original = sourceContext.getImageData(x, y, width, height).data
+          return actual.every((value, index) => value === original[index])
+        }
+        results.push({ mode, preview, png, size, pngMatches: png === reference.toDataURL(), jpegMatches: jpeg === reference.toDataURL('image/jpeg', 0.92), unselectedBorderVisible: !matchesSource(60, 73, 100, 4), unselectedInteriorUnchanged: matchesSource(60, 80, 100, 6) })
       }
       return results
     }
@@ -91,6 +101,10 @@ test('renders real preview overlays while PNG/JPEG contain only committed conten
     expect(item.jpegMatches, `${item.mode}: JPEG pixels`).toBe(true)
     expect(item.size).toEqual([320, 240])
     expect(item.preview).not.toBe(item.png)
+    if (item.mode === 'original') {
+      expect(item.unselectedBorderVisible).toBe(true)
+      expect(item.unselectedInteriorUnchanged).toBe(true)
+    }
     for (const [suffix, data] of [['preview', item.preview], ['export', item.png]]) {
       const name = `${item.mode}-${suffix}.png`
       const path = testInfo.outputPath(name)

@@ -81,8 +81,20 @@ it('draws overlays in their existing order and never mutates committed geometry 
   expect(order).toEqual([...order].sort((a, b) => a - b))
 })
 
-it('uses original pixels for automatic mask inspection and suppresses editor overlays in print mode', () => {
+it.each([null, 'region'])('shows region outlines over the original image with selection %s', (selectedId) => {
   const { input, renderer, canvas } = setup()
+  input.previewMode = 'original'
+  input.selectedRegionId = selectedId
+  renderer.redraw(canvas, drafts, false)
+  expect(context.drawImage).toHaveBeenCalledWith(input.image, 0, 0, 320, 240)
+  expect(renderCard).not.toHaveBeenCalled()
+  expect(overlays.drawUnselectedRegionOutlines).toHaveBeenCalledWith(context, input.project.regions, selectedId, 50)
+  expect(overlays.drawRegionSelection).toHaveBeenCalledTimes(selectedId ? 1 : 0)
+})
+
+it.each(['edited', 'original'] as const)('uses original pixels for automatic mask inspection and suppresses editor overlays in print mode (%s)', (mode) => {
+  const { input, renderer, canvas } = setup()
+  input.previewMode = mode
   input.project.regions[0]!.backgroundMode = 'auto'
   input.autoMaskPreview = true
   renderer.redraw(canvas, drafts, false)
@@ -98,6 +110,7 @@ it('uses original pixels for automatic mask inspection and suppresses editor ove
   expect(overlays.drawExclusionOverlay).not.toHaveBeenCalled()
   expect(overlays.drawMaskOverlay).not.toHaveBeenCalled()
   expect(overlays.drawRegionCandidates).not.toHaveBeenCalled()
+  expect(overlays.drawUnselectedRegionOutlines).not.toHaveBeenCalled()
 })
 
 it('exports original-resolution committed content through renderCard without preview guides', async () => {
