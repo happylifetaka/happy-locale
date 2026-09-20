@@ -1,6 +1,51 @@
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 
+test('keeps legacy approval data while omitting approval controls and badges', async ({ page }) => {
+  await page.goto('/cards')
+  await expect(page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true })).toBeVisible()
+  const url = `/_nuxt/@fs${fileURLToPath(new URL('./helpers/discovery-ui-project.ts', import.meta.url))}`
+  const fixture = await page.evaluate(async (url) => {
+    const { prepareIconRegionUIProject } = await import(/* @vite-ignore */ url) as typeof import('./helpers/discovery-ui-project')
+    const fixture = await prepareIconRegionUIProject()
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(fixture.name)
+    const png = await (await (await dir.getDirectoryHandle('assets')).getFileHandle('token.png')).getFile()
+    const assetDigest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await png.arrayBuffer())), byte => byte.toString(16).padStart(2, '0')).join('')
+    const occurrence = fixture.project.assetDiscovery!.occurrences[0]!
+    occurrence.decision = 'accepted'
+    occurrence.approval = { imageDigest: occurrence.imageDigest, assetDigest, assetId: occurrence.assetId!, bounds: { ...occurrence.bounds } }
+    const writer = await (await dir.getFileHandle('project.json')).createWritable()
+    await writer.write(JSON.stringify(fixture.project))
+    await writer.close()
+    return fixture
+  }, url)
+  try {
+    await page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true }).click()
+    await page.getByText('ツール', { exact: true }).click()
+    await page.getByRole('button', { name: 'アイコン候補を収集・確認', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'アイコン候補の収集・確認', exact: true })
+    await dialog.locator('.occurrence button').first().click()
+    await expect(dialog.getByRole('button', { name: /承認/ })).toHaveCount(0)
+    await expect(dialog.locator('.occurrence button')).toContainText('候補')
+    await expect(dialog.locator('.occurrence button')).not.toContainText('承認済み')
+    await dialog.locator('.group-list button').first().click()
+    await dialog.getByLabel('グループ名', { exact: true }).fill('Legacy group preserved')
+    await dialog.getByLabel('グループ名', { exact: true }).press('Tab')
+    fixture.project.assetDiscovery!.groups[0]!.name = 'Legacy group preserved'
+    await dialog.getByRole('button', { name: '閉じる', exact: true }).click()
+    await page.getByRole('button', { name: 'プロジェクト保存', exact: true }).click()
+    await expect.poll(() => page.evaluate(async (name) => {
+      const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(name)
+      return JSON.parse(await (await (await dir.getFileHandle('project.json')).getFile()).text()).assetDiscovery
+    }, fixture.name)).toEqual(fixture.project.assetDiscovery)
+  }
+  finally {
+    await page.evaluate(async (name) => {
+      await (await navigator.storage.getDirectory()).removeEntry(name, { recursive: true })
+    }, fixture.name)
+  }
+})
+
 test('all 32 groups are reachable and share editable human-readable names', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/cards')
@@ -71,9 +116,9 @@ test('all 32 groups are reachable and share editable human-readable names', asyn
     await expect(dialog.locator('.bounds-editor svg rect')).toHaveCount(2)
     await dialog.locator('.bounds-editor').screenshot({ path: testInfo.outputPath('split-preview.png') })
     await dialog.getByRole('button', { name: '2候補への分割を確定', exact: true }).click()
-    await expect(dialog.getByText(/2つの未確認・未分類候補に分割しました/)).toBeVisible()
+    await expect(dialog.getByText(/2つの未分類候補に分割しました/)).toBeVisible()
     await expect(dialog.locator('.occurrence')).toHaveCount(2)
-    await expect(dialog.locator('.occurrence button')).toContainText(['未確認', '未確認'])
+    await expect(dialog.locator('.occurrence button')).toContainText(['候補', '候補'])
     await expect(dialog.locator('.occurrence button')).toContainText(['アセット未割当', 'アセット未割当'])
     await dialog.getByRole('button', { name: '候補編集を戻す', exact: true }).click()
     await expect(dialog.locator('.occurrence')).toHaveCount(0)
@@ -145,7 +190,7 @@ test('collects, reviews, registers and saves icons through the ordinary UI witho
     await dialog.getByRole('button', { name: '候補編集を戻す', exact: true }).click()
     await expect(width).toHaveValue(String(originalWidth))
     await dialog.getByRole('button', { name: '誤検出として除外', exact: true }).click()
-    await expect(dialog.getByRole('button', { name: '未確認に戻す', exact: true })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: '除外を取り消す', exact: true })).toBeVisible()
     await dialog.getByRole('button', { name: '候補編集を戻す', exact: true }).click()
     await dialog.getByRole('button', { name: /の名前を編集$/ }).click()
     await dialog.getByLabel('グループ名', { exact: true }).fill('Shared token')
@@ -156,7 +201,7 @@ test('collects, reviews, registers and saves icons through the ordinary UI witho
     await dialog.getByLabel('アセット名', { exact: true }).fill('review_token')
     await dialog.getByLabel('背景を透明化', { exact: true }).uncheck()
     await dialog.getByRole('button', { name: 'アセットを確定', exact: true }).click()
-    await expect(dialog.getByText('アセットを登録し、グループ全体に関連付けました。個別の承認・原文への適用は別操作です。')).toBeVisible()
+    await expect(dialog.getByText('アセットを登録し、グループ全体に関連付けました。「次へ：領域検出・アイコン反映」で位置と原文を確認してください。')).toBeVisible()
     await expect(dialog.locator('.occurrence button').filter({ hasText: 'review_token' })).toHaveCount(2)
     await dialog.screenshot({ path: testInfo.outputPath('group-asset-assignment.png') })
     await dialog.getByLabel('グループに関連付けるアセット', { exact: true }).selectOption('')
@@ -165,9 +210,9 @@ test('collects, reviews, registers and saves icons through the ordinary UI witho
     await dialog.getByLabel('グループに関連付けるアセット', { exact: true }).selectOption({ label: 'review_token' })
     await dialog.getByRole('button', { name: 'グループ全体に関連付け', exact: true }).click()
     await expect(dialog.locator('.occurrence button').filter({ hasText: 'review_token' })).toHaveCount(2)
-    await dialog.getByRole('button', { name: 'この出現箇所を承認', exact: true }).click()
+    await expect(dialog.getByRole('button', { name: /承認/ })).toHaveCount(0)
     await dialog.getByRole('button', { name: 'すべての候補', exact: true }).click()
-    await expect(dialog.locator('.occurrence button').filter({ hasText: '承認済み' })).toHaveCount(1)
+    await expect(dialog.locator('.occurrence button').filter({ hasText: /承認済み|未確認/ })).toHaveCount(0)
     await dialog.screenshot({ path: testInfo.outputPath('icon-review-desktop.png') })
     await dialog.getByRole('button', { name: '閉じる', exact: true }).click()
     await page.getByRole('button', { name: 'プロジェクト保存', exact: true }).click()
@@ -175,7 +220,7 @@ test('collects, reviews, registers and saves icons through the ordinary UI witho
     const saved = await readSaved()
     expect(saved.cards.map(card => card.regions)).toEqual(fixture.regions)
     expect(saved.assets.map(asset => asset.name)).toEqual(['review_token'])
-    expect(saved.assetDiscovery!.occurrences.filter(item => item.decision === 'accepted')).toHaveLength(1)
+    expect(saved.assetDiscovery!.occurrences.every(item => item.decision === 'pending')).toBe(true)
     expect(saved.assetDiscovery!.groups.some(group => group.name === 'Shared token')).toBe(true)
     const registeredGroup = saved.assetDiscovery!.groups.find(group => group.name === 'Shared token')!
     expect(registeredGroup.proposedAssetId).toBe(saved.assets[0]!.id)

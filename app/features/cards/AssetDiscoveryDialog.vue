@@ -42,12 +42,11 @@ function checkAll(event: Event) {
   checked.value = (event.target as HTMLInputElement).checked ? filtered.value.map(item => item.id) : []
 }
 const selectedGroup = computed(() => model.groups.value.find(group => group.memberIds.includes(model.selectedId.value ?? '')))
-const selectedGroupAssignment = computed(() => selectedGroup.value ? groupAssetState({ groups: model.groups.value, occurrences: model.occurrences.value }, selectedGroup.value) : null)
 const currentSelection = computed(() => model.selected.value?.cardId === props.options.currentImageId.value ? model.selected.value : undefined)
 const currentImage = computed(() => props.options.runtime.cardImage.value)
 const editableCard = computed(() => model.activeCard.value)
 const assets = computed(() => props.options.store.assets)
-const stateLabel = (item: IconOccurrence) => item.decision === 'accepted' ? '承認済み' : item.decision === 'excluded' ? '除外' : '未確認'
+const stateLabel = (item: IconOccurrence) => item.decision === 'excluded' ? '除外' : '候補'
 const cardName = (id: string) => model.cards.value.find(card => card.id === id)?.imageName ?? id
 const viewBox = (item: IconOccurrence) => `${item.bounds.x} ${item.bounds.y} ${item.bounds.width} ${item.bounds.height}`
 function preview(item: IconOccurrence) {
@@ -147,7 +146,7 @@ onMounted(() => dialog.value?.showModal())
         確認に戻る
       </button>
     </section>
-    <p>画像は端末内で処理します。候補の整理・登録・承認だけでは、原文・訳文・カードの描画を変更しません。</p>
+    <p>画像は端末内で処理します。候補の整理・登録だけでは、原文・訳文・カードの描画を変更しません。</p>
     <p>候補と調整内容は「プロジェクト保存」で保存できます。この画面の編集は即時に保存対象へ反映され、「候補編集を戻す」で取り消せます。</p>
     <button type="button" :disabled="model.working.value || model.pending.value.size > 0 || Boolean(model.creation.value)" @click="emit('analyzeRegions')">
       次へ：領域検出・アイコン反映
@@ -252,7 +251,7 @@ onMounted(() => dialog.value?.showModal())
           <button type="button" :disabled="Boolean(model.creation.value) || representative(activeGroup.representativeId)?.decision === 'excluded'" @click="model.prepareRegistration(activeGroup!.id)">
             代表候補からグループ用アセットを登録
           </button>
-          <small>全{{ activeGroup.memberIds.length }}候補に同じアセットを使います。割当変更で承認は解除されます。個別の承認は別操作です。</small>
+          <small>全{{ activeGroup.memberIds.length }}候補に同じアセットを使います。原文への反映は「次へ：領域検出・アイコン反映」で確認します。除外した候補は反映しません。</small>
         </fieldset>
         <div class="group-list" tabindex="0" aria-label="グループ一覧（スクロールできます）">
           <button v-for="group in visibleGroups" :key="group.id" type="button" :aria-pressed="groupId === group.id" @click="groupId = group.id">
@@ -260,7 +259,7 @@ onMounted(() => dialog.value?.showModal())
               <image :href="preview(representative(group.representativeId)!)" :width="representative(group.representativeId)!.imageSize.width" :height="representative(group.representativeId)!.imageSize.height" />
             </svg>
             {{ groupLabel(group.id) }}：{{ group.memberIds.length }}件・{{ new Set(model.occurrences.value.filter(item => group.memberIds.includes(item.id)).map(item => item.cardId)).size }}枚
-            <small>未確認 {{ model.occurrences.value.filter(item => group.memberIds.includes(item.id) && item.decision === 'pending').length }}件</small>
+            <small>除外 {{ model.occurrences.value.filter(item => group.memberIds.includes(item.id) && item.decision === 'excluded').length }}件</small>
           </button>
         </div>
       </section>
@@ -318,7 +317,7 @@ onMounted(() => dialog.value?.showModal())
           <fieldset v-if="currentSelection && !adding" :disabled="model.working.value">
             <legend>この出現箇所の判断</legend>
             <button type="button" @click="action(() => model.review.change(currentSelection!.id, { kind: 'decision', decision: currentSelection!.decision === 'excluded' ? 'pending' : 'excluded' }))">
-              {{ currentSelection.decision === 'excluded' ? '未確認に戻す' : '誤検出として除外' }}
+              {{ currentSelection.decision === 'excluded' ? '除外を取り消す' : '誤検出として除外' }}
             </button>
             <p v-if="selectedGroup">
               アセットは「{{ groupLabel(selectedGroup.id) }}」で設定します。
@@ -326,9 +325,6 @@ onMounted(() => dialog.value?.showModal())
             <p v-else>
               アセットを使うには、先にこの候補をグループに分類してください。
             </p>
-            <button type="button" :disabled="!selectedGroupAssignment || selectedGroupAssignment.needsSync || !currentSelection.assetId || currentSelection.decision === 'excluded'" @click="model.approve">
-              この出現箇所を承認
-            </button>
             <template v-if="selectedGroup">
               <button type="button" @click="groupId = selectedGroup!.id">
                 {{ groupLabel(selectedGroup.id) }}の名前を編集
@@ -337,7 +333,7 @@ onMounted(() => dialog.value?.showModal())
                 この候補を代表にする
               </button>
             </template>
-            <p>{{ stateLabel(currentSelection) }}。関連付けやグループ変更だけでは承認されません。</p>
+            <p>範囲と分類を調整し、誤検出は除外してください。位置と原文は次の画面で確認して反映します。</p>
           </fieldset>
           <AssetCreationPanel v-if="model.creation.value" :image="currentImage" :draft="model.creation.value" :existing-assets="assets" :running="model.registration.running.value" @update="model.creation.value = { ...model.creation.value!, ...$event }" @confirm="model.register" @cancel="model.creation.value = null" />
         </template>

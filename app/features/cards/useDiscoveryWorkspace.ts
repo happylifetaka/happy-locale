@@ -169,16 +169,6 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
         review.change(selectedId.value, { kind: 'bounds', bounds })
     })
   }
-  async function approve() {
-    if (working.value || !selected.value)
-      return
-    const id = selected.value.id
-    await run(async () => {
-      await verify()
-      if (selected.value?.id === id)
-        review.change(id, { kind: 'approve' })
-    })
-  }
   async function split(axis: 'horizontal' | 'vertical', ratio: number) {
     const item = selected.value
     if (working.value || !item || creation.value)
@@ -190,7 +180,7 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
         throw new Error('分割対象が変わりました。候補を選び直してください。')
       const ids = review.split(item.id, axis, ratio)
       selectedId.value = ids[0]!
-      notice.value = '2つの未確認・未分類候補に分割しました。それぞれ範囲と登録先を確認してください。候補編集を戻す1回で元に戻せます。'
+      notice.value = '2つの未分類候補に分割しました。それぞれ範囲と登録先を確認してください。候補編集を戻す1回で元に戻せます。'
       applied = true
     })
     return applied
@@ -209,7 +199,7 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
       await verify()
       const item = selected.value!
       if (item.cardId !== currentImageId.value || item.decision === 'excluded' || item.imageDigest !== imageDigest())
-        throw new Error('元画像と候補を確認し、除外している場合は未確認に戻してください。')
+        throw new Error('元画像と候補を確認し、除外している場合は除外を取り消してください。')
       creation.value = { editingAssetId: null, name: group?.name || `asset_${store.assets.length + 1}`, sourceRect: { ...item.bounds }, removeBackground: true, backgroundColor: null, backgroundThreshold: 48, edgeFeather: 12, manualMaskStrokes: [] }
       creationGroupId.value = groupId
     })
@@ -224,7 +214,7 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
       await verify()
       const result = await registration.register(id, draft, { groupId, linkGroupMembers: true, isCurrent: () => creation.value === draft && selectedId.value === id && creationGroupId.value === groupId })
       if (result) {
-        notice.value = result.warning ?? 'アセットを登録し、グループ全体に関連付けました。個別の承認・原文への適用は別操作です。'
+        notice.value = result.warning ?? 'アセットを登録し、グループ全体に関連付けました。「次へ：領域検出・アイコン反映」で位置と原文を確認してください。'
         creation.value = null
       }
     })
@@ -270,5 +260,5 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
     disposed = true
     digestCache.clear()
   })
-  return { cards, activeCard, occurrences, groups, selectedId, selected, error, notice, creation, comparison, pending, working, collection, registration, review, run, select, collect, changeBounds, split, approve, prepareRegistration, register, compare, adopt }
+  return { cards, activeCard, occurrences, groups, selectedId, selected, error, notice, creation, comparison, pending, working, collection, registration, review, run, select, collect, changeBounds, split, prepareRegistration, register, compare, adopt }
 }
