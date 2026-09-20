@@ -45,8 +45,12 @@ it('acknowledges only the saved snapshot while retaining edits and replacement a
   await flushPromises()
   expect(saveFolderProject).toHaveBeenCalledOnce()
   expect(vi.mocked(saveFolderProject).mock.calls[0]![6]!.get('asset-one')).toBe(before)
+  const savingDocument = vi.mocked(saveFolderProject).mock.calls[0]![1]!
+  expect(savingDocument).toEqual(saved)
+  expect(savingDocument).not.toBe(useProjectStore().document)
   inspector.vm.$emit('update', 'region-0', { translatedText: 'Later edit' })
   editorRuntime().setPendingAssetWrite('asset-one', after)
+  expect(savingDocument).toEqual(saved)
   result.resolve(saved)
   await flushPromises()
   expect(inspector.props('region').translatedText).toBe('Later edit')
