@@ -109,13 +109,19 @@ PDF専用UIとcomposable、その単体テストは`app/features/pdf/`へまと�
 
 カード一覧は`IntersectionObserver`で表示範囲の前後300pxを監視し、サムネイルを最大2件並列で読み込みます。キャッシュがなければ元画像を縮小して保存し、破損または規定寸法を超えるキャッシュも再生成します。Object URLは置換・プロジェクト変更・画面破棄時にrevokeし、`ImageBitmap`は不要になった時点でcloseします。登録した`FontFace`は削除時や画面破棄時に`document.fonts`から外します。
 
+サムネイルキャッシュのFileは再書込で読めなくなるため、読込時にバイト列をBlobへ複製してから検証・表示します。遅いキャッシュ読込は既に生成した新しい画像を上書きしません。元カード画像全体の複製を増やす変更ではありません。
+
 カード用OCR Providerは`CardEditor`が生成・破棄し、単一領域・候補検出・一括OCRで同じWorkerを再利用します。Workerは`useProjectRuntime`の管理対象ではありません。
+
+TesseractのWorkerは同一アプリの配信ファイルを直接起動し、ライブラリ側のBlob URLラッパーを作りません。WASM・学習データと合わせてNuxtのbaseURLを付け、CDNへフォールバックしません。
 
 ## Canvas描画
 
 `app/features/cards/canvas/geometry.ts`は表示座標から原画像座標への変換、ヒット判定、矩形の移動・リサイズを担当する純粋関数です。通常領域・OCR候補・保護領域・印刷範囲が同じ計算を使い、候補だけ辺中央のハンドルも判定します。ドラッグ中は小数を保ち、確定時に整数化します。DOM・Store・描画資源は所有しません。
 
 同じディレクトリの`renderer.ts`は元画像・編集済みプレビューのCanvasキャッシュを所有し、`CardCanvas`のスコープ終了時に参照を破棄します。画像・アセット・フォントは借用し、解放責任を移しません。`overlays.ts`は選択枠・候補・保護領域・マスク・印刷範囲の編集用表示だけを描画します。プレビューとPNG/JPEG出力は既存の`renderCard`を共用し、出力経路へ仮ドラッグ・選択枠を渡しません。
+
+倍率やアセット画像Mapの差し替えも再描画の対象です。同じtickの変更はpost-flush watchで集約し、倍率・選択だけの変更では本体キャッシュを再利用します。文書・画像・アセット・フォント参照の変更でキャッシュを失効させ、入力中の描画保留は解除まで維持します。
 
 `useCanvasInteractions`はポインター操作の優先順と仮状態を所有します。入力・編集ツール・確定コールバックを受け、描画用の仮状態とイベントハンドラーを公開します。Storeや履歴を直接更新せず、`CardCanvas`が従来のprops/eventsへ接続します。
 
@@ -288,6 +294,8 @@ Vitestでは次を中心に検証しています。
 Vueコンポーネントの統合テストは`tests/components/`で、保存・読込・カード切替・OCR・翻訳・Workspaceとの接続などを検証します。機能内のテストは`app/features/cards/`と`app/features/pdf/`にも隣接配置しています。
 
 Playwrightの`tests/e2e/card-editor.spec.ts`は、サンプル上のCanvas操作、Undo、訳文の描画反映、Inspectorのキーボード操作、画面往復、原文アイコン確認などをブラウザで検証します。実フォルダの権限・入出力、ブラウザフォントや印刷結果などは[`MANUAL_TESTS.md`](MANUAL_TESTS.md)で補います。自動テストが実ブラウザの全機能を網羅しているわけではありません。
+
+`tests/public/`はビルド済みNuxtのサブパス配信・公開runtimeConfigの効果・ルート遷移・実OCR・OPFSへの保存再読込を検証します。通常Vitest・開発サーバーE2Eと分離し、実行方法と対象外は[配信文書](deployment.md#公開用生成物をブラウザで検証する)へ記載しています。性能計測は`tests/performance/`で別途行います。
 
 ## 現在認識している設計上の課題
 

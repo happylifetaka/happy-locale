@@ -42,6 +42,19 @@ NUXT_APP_BASE_URL=/happy-locale/ mise exec -- pnpm build:static
 
 公開先固有のファイル数・容量制限やアップロード手順は、各サービスの設定・運用で確認します。共通の検査では特定サービスの上限や `/` 固定のURLを要求しません。
 
+## 公開用生成物をブラウザで検証する
+
+開発サーバーとは別に、ビルド済みのサブパス配信・ルート遷移・OCRのローカル配信・外部Endpoint無効化を確認できます。テストのパスは`/happy-locale-public/`固定です（実際の公開URLとは別）。
+
+```bash
+NUXT_APP_BASE_URL=/happy-locale-public/ mise exec -- pnpm build:static
+mise exec -- pnpm exec playwright test --config playwright.public.config.ts
+```
+
+Playwright用Chromiumの導入が必要です。テストサーバーは`127.0.0.1:3101`だけで待ち受け、静的出力以外を配信せず、見つからないファイルは404を返します。OCRは合成画像で実Worker・WASM・学習データを使用します。保存確認は隔離されたブラウザ内のOPFSを使い、OSのフォルダ選択だけを置き換えます。利用者のフォルダや外部翻訳サーバーは使用しません。
+
+通常の`test:e2e`とは別実行です。現行CIにこのブラウザ検査を追加した意味ではありません。実フォルダの権限・容量不足、OSフォント、公開先での配信確認は別途必要です。
+
 ## 配置する
 
 検査済みの `.output/public` の内容を静的ホスティングへ配置します。`build:static` 自体はアップロードを行いません。
