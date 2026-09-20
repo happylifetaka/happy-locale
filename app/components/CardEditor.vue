@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RuntimeLoadedImage } from '~/composables/useProjectRuntime'
+import type { DiscoveryWorkspaceOptions } from '~/features/cards/useDiscoveryWorkspace'
 import type {
   OCRProvider,
 } from '~/services/ocr/types'
@@ -25,6 +26,7 @@ import { useProjectSession } from '~/composables/useProjectSession'
 import { useRegionCandidates } from '~/composables/useRegionCandidates'
 import { useTranslationReuse } from '~/composables/useTranslationReuse'
 import { useTranslationReview } from '~/composables/useTranslationReview'
+import AssetDiscoveryDialog from '~/features/cards/AssetDiscoveryDialog.vue'
 import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTranslation } from '~/features/cards/cardEditingContext'
 import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
 import { useCandidateReview } from '~/features/cards/useCandidateReview'
@@ -103,7 +105,7 @@ const { loadImage } = useEditorImageLoading({
 /** 各機能が所有する保存・読込・追加・切替状態をエディター単位で集約する。 */
 const activity = useProjectActivity()
 const projectBusy = activity.busy
-useDiscoveryImageIdentity({
+const discoveryIdentity = useDiscoveryImageIdentity({
   store: projectStore,
   runtime: projectRuntime,
   currentImageId,
@@ -511,6 +513,21 @@ const candidateReview = useCandidateReview({
 })
 const { discardRegionCandidates, confirmRegionCandidates } = candidateReview
 
+const discoveryOpen = ref(false)
+const discoveryOptions: DiscoveryWorkspaceOptions = {
+  store: projectStore,
+  runtime: projectRuntime,
+  identity: discoveryIdentity,
+  editor,
+  currentImageId,
+  ocrRunning,
+  busy: computed(() => projectBusy.value || translationRunning.value || assetCreationRunning.value || isDemo.value),
+  pendingDeletionIds: pendingCardDeletionIds,
+  provider: ocrProvider,
+  createAsset: createSourceIconAsset,
+  selectCard: selectProjectCard,
+}
+
 useEditorHistoryShortcuts({
   enabled: () => !projectBusy.value && currentView.value === 'card',
   undo: editor.undo,
@@ -733,6 +750,7 @@ provideCardTranslation({
       :save-status="saveStatus"
       :current-view="currentView"
       :diagnostic-count="diagnostics.length"
+      :discovery-available="!isDemo && Boolean(image)"
       @open-project="openProject"
       @save-project="saveProject"
       @import-csv="importCsv"
@@ -744,6 +762,13 @@ provideCardTranslation({
       @open-translation-settings="translationSettingsOpen = true"
       @open-glossary="glossaryOpen = true"
       @open-diagnostics="diagnosticsOpen = true"
+      @open-discovery="discoveryOpen = true"
+    />
+    <AssetDiscoveryDialog
+      v-if="discoveryOpen"
+      :options="discoveryOptions"
+      :request-thumbnail="requestCardThumbnail"
+      @close="discoveryOpen = false"
     />
     <GlossaryDialog
       :open="glossaryOpen"

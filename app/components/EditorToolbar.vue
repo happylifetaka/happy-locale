@@ -12,6 +12,7 @@ const props = defineProps<{
   saveStatus: 'none' | 'saved' | 'unsaved'
   currentView: 'card' | 'assets' | 'print'
   diagnosticCount: number
+  discoveryAvailable?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -26,6 +27,7 @@ const emit = defineEmits<{
   openTranslationSettings: []
   openGlossary: []
   openDiagnostics: []
+  openDiscovery: []
 }>()
 
 /** 翻訳CSVを選ぶための入力要素。 */
@@ -211,6 +213,9 @@ function pickCsv(event: Event) {
           @click="$emit('openTranslationSettings')"
         >
           翻訳設定
+        </button>
+        <button v-if="hasOpenProject" type="button" :disabled="!discoveryAvailable" @click="$emit('openDiscovery')">
+          アイコン候補を収集・確認
         </button>
         <button type="button" @click="$emit('openDiagnostics')">
           診断ログ（{{ diagnosticCount }}件）
