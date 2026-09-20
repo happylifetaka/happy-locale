@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer'
+import { createHash } from 'node:crypto'
 // Development-only, opt-in private-image probe. Never served or bundled with the app.
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -66,7 +67,9 @@ try {
     const source = path.resolve(path.dirname(projectPath), card.imagePath)
     if (!source.startsWith(`${path.dirname(projectPath)}${path.sep}`))
       throw new Error('Card path escapes its project.')
-    const encoded = (await readFile(source)).toString('base64')
+    const sourceBytes = await readFile(source)
+    const imageDigest = createHash('sha256').update(sourceBytes).digest('hex')
+    const encoded = sourceBytes.toString('base64')
     const result = await evaluateStable(async ({ encoded }) => {
       const load = p => import(/* @vite-ignore */ `/_nuxt/${p}`)
       const { detectRegions } = await load('services/ocr/detect-regions.ts')
@@ -113,7 +116,7 @@ try {
     const { image, samples, ...report } = result
     const name = `${String(index).padStart(2, '0')}-${path.basename(card.imagePath, path.extname(card.imagePath))}`
     await writeFile(path.join(output, `${name}.png`), Buffer.from(image, 'base64'), { flag: 'wx' })
-    reports.push({ index, cardId: card.id, imagePath: card.imagePath, file: `${name}.png`, navigationRetries, ...report })
+    reports.push({ index, cardId: card.id, imageDigest, imagePath: card.imagePath, file: `${name}.png`, navigationRetries, ...report })
     fingerprints.push(...samples.map((fingerprint, i) => ({ id: `${String(index).padStart(2, '0')}:${i + 1}`, fingerprint })))
     // Save partial progress too; OCR of a later card must not lose completed evidence.
     await writeFile(path.join(output, 'report.json'), JSON.stringify(reports, null, 2))
