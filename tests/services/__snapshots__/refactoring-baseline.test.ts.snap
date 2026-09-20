@@ -1,0 +1,343 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`pre-refactoring behavior contracts > freezes complete candidate output including geometry, ordering, lines and selection 1`] = `
+[
+  {
+    "confidence": 95,
+    "height": 32,
+    "id": "candidate_1",
+    "lines": [
+      {
+        "confidence": 95,
+        "height": 20,
+        "text": "Synthetic Card",
+        "width": 120,
+        "x": 20,
+        "y": 10,
+      },
+    ],
+    "selected": true,
+    "text": "Synthetic Card",
+    "width": 132,
+    "x": 14,
+    "y": 4,
+  },
+  {
+    "confidence": 93,
+    "height": 20,
+    "id": "candidate_2",
+    "lines": [
+      {
+        "confidence": 93,
+        "height": 16,
+        "text": "CASTLE",
+        "width": 60,
+        "x": 40,
+        "y": 60,
+      },
+    ],
+    "selected": true,
+    "text": "CASTLE",
+    "width": 64,
+    "x": 38,
+    "y": 58,
+  },
+  {
+    "confidence": 85,
+    "height": 46,
+    "id": "candidate_3",
+    "lines": [
+      {
+        "confidence": 90,
+        "height": 14,
+        "text": "Choose an ally.",
+        "width": 130,
+        "x": 15,
+        "y": 85,
+      },
+      {
+        "confidence": 80,
+        "height": 14,
+        "text": "Draw two cards.",
+        "width": 130,
+        "x": 15,
+        "y": 105,
+      },
+    ],
+    "selected": true,
+    "text": "Choose an ally.
+Draw two cards.",
+    "width": 142,
+    "x": 9,
+    "y": 79,
+  },
+  {
+    "confidence": 34,
+    "height": 24,
+    "id": "candidate_4",
+    "lines": [
+      {
+        "confidence": 34,
+        "height": 12,
+        "text": "noise text",
+        "width": 50,
+        "x": 15,
+        "y": 150,
+      },
+    ],
+    "selected": false,
+    "text": "noise text",
+    "width": 62,
+    "x": 9,
+    "y": 144,
+  },
+]
+`;
+
+exports[`pre-refactoring behavior contracts > freezes serialized candidate data and restores it without any runtime resources 1`] = `
+"{
+  "version": 3,
+  "name": "Synthetic regression project",
+  "activeCardId": "synthetic-1",
+  "cards": [
+    {
+      "id": "synthetic-1",
+      "imagePath": "images/synthetic-1.png",
+      "imageName": "synthetic.png",
+      "imageWidth": 200,
+      "imageHeight": 240,
+      "regions": [],
+      "printArea": null,
+      "sourceDpi": {
+        "x": 300,
+        "y": 300
+      },
+      "ocrCandidates": [
+        {
+          "text": "Synthetic Card",
+          "x": 14,
+          "y": 4,
+          "width": 132,
+          "height": 32,
+          "confidence": 95,
+          "id": "candidate_1",
+          "selected": true,
+          "lines": [
+            {
+              "text": "Synthetic Card",
+              "x": 20,
+              "y": 10,
+              "width": 120,
+              "height": 20,
+              "confidence": 95
+            }
+          ]
+        },
+        {
+          "text": "CASTLE",
+          "x": 38,
+          "y": 58,
+          "width": 64,
+          "height": 20,
+          "confidence": 93,
+          "id": "candidate_2",
+          "selected": true,
+          "lines": [
+            {
+              "text": "CASTLE",
+              "x": 40,
+              "y": 60,
+              "width": 60,
+              "height": 16,
+              "confidence": 93
+            }
+          ]
+        },
+        {
+          "text": "Choose an ally.\\nDraw two cards.",
+          "x": 9,
+          "y": 79,
+          "width": 142,
+          "height": 46,
+          "confidence": 85,
+          "id": "candidate_3",
+          "selected": true,
+          "lines": [
+            {
+              "text": "Choose an ally.",
+              "x": 15,
+              "y": 85,
+              "width": 130,
+              "height": 14,
+              "confidence": 90
+            },
+            {
+              "text": "Draw two cards.",
+              "x": 15,
+              "y": 105,
+              "width": 130,
+              "height": 14,
+              "confidence": 80
+            }
+          ]
+        },
+        {
+          "text": "noise text",
+          "x": 9,
+          "y": 144,
+          "width": 62,
+          "height": 24,
+          "confidence": 34,
+          "id": "candidate_4",
+          "selected": false,
+          "lines": [
+            {
+              "text": "noise text",
+              "x": 15,
+              "y": 150,
+              "width": 50,
+              "height": 12,
+              "confidence": 34
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "assets": [],
+  "fonts": [],
+  "ocrDictionary": [],
+  "glossary": [],
+  "printSettings": {
+    "columns": 3,
+    "marginMm": 10,
+    "gapMm": 4,
+    "cutMarks": true
+  }
+}
+"
+`;
+
+exports[`pre-refactoring behavior contracts > freezes serialized candidate data and restores it without any runtime resources 2`] = `
+"{
+  "version": 3,
+  "name": "Synthetic regression project",
+  "activeCardId": "synthetic-1",
+  "cards": [
+    {
+      "id": "synthetic-1",
+      "imagePath": "images/synthetic-1.png",
+      "imageName": "synthetic.png",
+      "imageWidth": 200,
+      "imageHeight": 240,
+      "printArea": null,
+      "sourceDpi": {
+        "x": 300,
+        "y": 300
+      },
+      "ocrCandidates": [
+        {
+          "text": "Synthetic Card",
+          "x": 14,
+          "y": 4,
+          "width": 132,
+          "height": 32,
+          "confidence": 95,
+          "id": "candidate_1",
+          "selected": true,
+          "lines": [
+            {
+              "text": "Synthetic Card",
+              "x": 20,
+              "y": 10,
+              "width": 120,
+              "height": 20,
+              "confidence": 95
+            }
+          ]
+        },
+        {
+          "text": "CASTLE",
+          "x": 38,
+          "y": 58,
+          "width": 64,
+          "height": 20,
+          "confidence": 93,
+          "id": "candidate_2",
+          "selected": true,
+          "lines": [
+            {
+              "text": "CASTLE",
+              "x": 40,
+              "y": 60,
+              "width": 60,
+              "height": 16,
+              "confidence": 93
+            }
+          ]
+        },
+        {
+          "text": "Choose an ally.\\nDraw two cards.",
+          "x": 9,
+          "y": 79,
+          "width": 142,
+          "height": 46,
+          "confidence": 85,
+          "id": "candidate_3",
+          "selected": true,
+          "lines": [
+            {
+              "text": "Choose an ally.",
+              "x": 15,
+              "y": 85,
+              "width": 130,
+              "height": 14,
+              "confidence": 90
+            },
+            {
+              "text": "Draw two cards.",
+              "x": 15,
+              "y": 105,
+              "width": 130,
+              "height": 14,
+              "confidence": 80
+            }
+          ]
+        },
+        {
+          "text": "noise text",
+          "x": 9,
+          "y": 144,
+          "width": 62,
+          "height": 24,
+          "confidence": 34,
+          "id": "candidate_4",
+          "selected": false,
+          "lines": [
+            {
+              "text": "noise text",
+              "x": 15,
+              "y": 150,
+              "width": 50,
+              "height": 12,
+              "confidence": 34
+            }
+          ]
+        }
+      ],
+      "regions": []
+    }
+  ],
+  "assets": [],
+  "fonts": [],
+  "ocrDictionary": [],
+  "glossary": [],
+  "printSettings": {
+    "columns": 3,
+    "marginMm": 10,
+    "gapMm": 4,
+    "cutMarks": true
+  }
+}
+"
+`;
