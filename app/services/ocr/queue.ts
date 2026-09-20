@@ -1,4 +1,4 @@
-import type { RegionCandidate } from './types'
+import type { RegionCandidate } from '~/types/ocr'
 
 export type OCRQueueCardState
   = | { status: 'queued' }

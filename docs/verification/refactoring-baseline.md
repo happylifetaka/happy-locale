@@ -139,3 +139,16 @@ P3で追加監査する既存の非同期境界: DPI読取後の文書同一性�
 - 型検査・対象Lint・`git diff --check`成功。Chromiumの実ローカルOCR1件＋カード画面7件、計8件成功。合成文字3領域を認識し、Canvas/bitmap入力の全候補が一致、外部HTTPリクエストなし。
 - `NUXT_APP_BASE_URL=/happy-locale-public/`の`build:static`成功、静的出力62ファイルの検査成功（既定倍率の経路）。
 - 私有37画像の再解析・目視確認、保存候補型と候補生成の内部段階分割、残るルール分離は未実施。
+
+## P2-b: 候補生成の段階分割と保存候補型の独立
+
+公開関数`createRegionCandidates`・`splitRegionCandidate`・`cloneRegionCandidates`と既存import先を維持し、内部をnormalize/filter/headings/grouping/geometryへ分割した。行の補正・フィルタ→横結合→縦結合→枠生成・余白分離の順序と数値は維持。補正済み行の参照をWeakSetで引き継ぎ、狭い余白の判定も維持する。
+
+保存用`RegionCandidate`・`OCRTextBlock`は`types/ocr.ts`へ移し、編集文書・Store・候補UI・保存検証はProviderの型定義を経由せず参照する。Provider側の互換exportは残し、保存version・JSONのフィールドは変更しない。
+
+- 新規5件で、正規化・低信頼度選択・補正済み行の同一性・見出しをまたぐ結合の禁止・余白のみの重なり解消・互換型を確認。関連6ファイル93件成功。
+- 直前コミットの関数本体とTypeScript ASTの整形出力を照合し、分割対象14関数の本体一致を確認。窓口の接続部分はP0 snapshotと段階テストで確認。
+- 全体106ファイル708件、型検査、対象Lint、`git diff --check`成功。P0 snapshotは変更なし。
+- 段階分割後のChromium実OCR E2E1件成功。Canvasとbitmapの候補が一致し、合成見出し・本文の3領域を検出。外部HTTP送信なし。
+- サブパス指定`build:static`成功、静的出力62ファイルの検査成功。
+- 条件の設定化・内部ポリシー整理は未完了。私有37画像の再解析や手動検証は実施していない。

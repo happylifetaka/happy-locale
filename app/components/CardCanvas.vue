@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { RegionCandidate } from '~/services/ocr/types'
 import type {
   CardProject,
   ExclusionArea,
@@ -8,6 +7,7 @@ import type {
   RegionDraft,
   TextRegion,
 } from '~/types/editor'
+import type { RegionCandidate } from '~/types/ocr'
 import { useEditorToolsStore } from '~/stores/editor-tools'
 import {
   createAutomaticTextMask,

@@ -1,4 +1,4 @@
-import type { OCRTextBlock } from './types'
+import type { OCRTextBlock } from '~/types/ocr'
 import { DEFAULT_REGION_DETECTION_SETTINGS } from './detection-settings'
 
 export interface PixelRegion { x: number, y: number, width: number, height: number, area: number }

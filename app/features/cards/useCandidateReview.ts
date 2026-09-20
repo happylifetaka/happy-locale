@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
 import type { OCRQueueCardState } from '~/services/ocr/queue'
-import type { RegionCandidate } from '~/services/ocr/types'
 import type { FolderProjectCard, RegionDraft, TextRegion } from '~/types/editor'
+import type { RegionCandidate } from '~/types/ocr'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { resolveSampleCandidates } from '~/services/project/sample'
 

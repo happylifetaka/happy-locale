@@ -1,4 +1,3 @@
-import type { RegionCandidate } from '~/services/ocr/types'
 import type {
   CardProject,
   FolderProjectDocument,
@@ -7,6 +6,7 @@ import type {
   ImageAsset,
   OCRDictionaryEntry,
 } from '~/types/editor'
+import type { RegionCandidate } from '~/types/ocr'
 import { defineStore } from 'pinia'
 import { computed, shallowRef } from 'vue'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'

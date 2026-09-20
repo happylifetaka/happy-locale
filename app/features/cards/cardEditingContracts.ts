@@ -1,8 +1,9 @@
 import type { Ref } from 'vue'
 import type { InspectorDetailTab, InspectorTab } from '~/components/EditorInspectorPanel.vue'
 import type { OCRCorrectionChange } from '~/services/ocr/correction-types'
-import type { OCRLayout, RegionCandidate } from '~/services/ocr/types'
+import type { OCRLayout } from '~/services/ocr/types'
 import type { AssetCreationDraft, CardProject, FontReference, GlossaryEntry, ImageAsset, MaskStroke, OCRDictionaryEntry, RegionDraft, TextRegion } from '~/types/editor'
+import type { RegionCandidate } from '~/types/ocr'
 import type { MergeOptions } from '~/utils/merge-regions'
 import type { SplitAxis, SplitText } from '~/utils/split-region'
 

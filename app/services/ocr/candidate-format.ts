@@ -1,4 +1,4 @@
-import type { OCRTextBlock, RegionCandidate } from './types'
+import type { OCRTextBlock, RegionCandidate } from '~/types/ocr'
 import { FILE_LIMITS } from '~/utils/file-limits'
 
 /** 保存した未確定候補を検証する。不正な項目を黙って捨てて検証結果を欠落させない。 */

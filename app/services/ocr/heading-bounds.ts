@@ -1,4 +1,4 @@
-import type { OCRTextBlock } from './types'
+import type { OCRTextBlock } from '~/types/ocr'
 
 /** 帯の中央から文字の高さを測り、彩色された両端の装飾を除く。 */
 export function headingLetterBounds(data: Uint8ClampedArray, width: number, height: number): { left: number, right: number, top: number, bottom: number } | null {

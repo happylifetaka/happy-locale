@@ -18,6 +18,8 @@
 
 単体・一括とも[共通検出サービス](../../app/services/ocr/detect-regions.ts)が同じ順序で実行する。参照: [内部設定](../../app/services/ocr/detection-settings.ts)、[補正パイプライン](../../app/services/ocr/region-image.ts)、[候補生成](../../app/services/ocr/candidates.ts)。
 
+候補生成の内部配置は、[行補正と縮尺復元](../../app/services/ocr/candidates/normalize.ts)、[フィルター・初期選択](../../app/services/ocr/candidates/filter.ts)、[見出し補正](../../app/services/ocr/candidates/headings.ts)、[行結合](../../app/services/ocr/candidates/grouping.ts)、[枠・余白の調整](../../app/services/ocr/candidates/geometry.ts)に分離した。以下の判定順・条件値は変えていない。
+
 以下で輝度は `0.299R + 0.587G + 0.114B`、彩度は `max(R,G,B) - min(R,G,B)` を指す。いずれもRGBの0〜255を使用し、HSVの彩度ではない。画素解析のpxと、最終候補の原画像座標のpxは区別する。
 
 ## 2. 全体OCRの前提・前処理

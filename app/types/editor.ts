@@ -1,4 +1,4 @@
-import type { RegionCandidate } from '../services/ocr/types'
+import type { RegionCandidate } from './ocr'
 
 export type TextAlign = 'left' | 'center' | 'right'
 export type VerticalAlign = 'top' | 'middle' | 'bottom'

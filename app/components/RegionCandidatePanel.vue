@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { RegionCandidate } from '~/services/ocr/types'
+import type { RegionCandidate } from '~/types/ocr'
 
 defineProps<{
   hasImage: boolean
