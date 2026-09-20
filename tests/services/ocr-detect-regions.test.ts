@@ -90,6 +90,22 @@ it('does not allocate work for an already stale target', async () => {
   expect(provider.recognize).not.toHaveBeenCalled()
 })
 
+it('optionally exposes independent original measurements, not refined or resized candidate coordinates', async () => {
+  const { options } = setup()
+  const raw = baselineOCR()
+  vi.mocked(enhanceRegionDetection).mockImplementationOnce(async (_image, _width, _height, _scale, result) => {
+    result.blocks[0]!.x = 999
+    return { result, labelBounds: undefined, refineTextBounds: undefined }
+  })
+  const result = await detectRegions({ ...options, includeMeasurements: true })
+  expect(result?.measurements).toEqual({
+    coordinates: 'image',
+    lines: raw.blocks.map(b => ({ ...b, x: b.x / 2, y: b.y / 2, width: b.width / 2, height: b.height / 2 })),
+    words: (raw.words ?? []).map(b => ({ ...b, x: b.x / 2, y: b.y / 2, width: b.width / 2, height: b.height / 2 })),
+  })
+  expect((await detectRegions(options))?.measurements).toBeUndefined()
+})
+
 it('forwards heading policies and candidate settings through the complete detection pipeline', async () => {
   const { options, image } = setup()
   const settings = {

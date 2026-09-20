@@ -1,5 +1,6 @@
 import type { RegionDetectionSettings } from './detection-settings'
 import type { OCRProgress, OCRProvider, RegionCandidate } from './types'
+import type { MeasuredOCRText } from '~/types/ocr'
 import { createRegionCandidates } from './candidates'
 import { DEFAULT_REGION_DETECTION_SETTINGS } from './detection-settings'
 import { refineHeadingImageBounds } from './heading-bounds'
@@ -21,11 +22,14 @@ export interface DetectRegionsOptions {
   onProgress?: (progress: OCRProgress) => void
   onRefinement?: () => void
   onEnhancementError?: (error: unknown) => void
+  /** 実行中のアイコン抽出用。既定の出力・保存候補には実測座標を追加しない。 */
+  includeMeasurements?: boolean
 }
 
 export interface RegionDetectionResult {
   candidates: RegionCandidate[]
   detectedLines: number
+  measurements?: MeasuredOCRText
 }
 
 /** 1画像の前処理→OCR→画像補正→候補化。Storeを更新せず、渡された画像・Providerを解放しない。 */
@@ -42,6 +46,7 @@ export async function detectRegions({
   onProgress,
   onRefinement,
   onEnhancementError,
+  includeMeasurements = false,
 }: DetectRegionsOptions): Promise<RegionDetectionResult | null> {
   if (!isCurrent())
     return null
@@ -66,6 +71,13 @@ export async function detectRegions({
     })
     if (!isCurrent())
       return null
+    const measurements: MeasuredOCRText | undefined = includeMeasurements
+      ? {
+          coordinates: 'image',
+          lines: result.blocks.map(b => ({ ...b, x: b.x / scale, y: b.y / scale, width: b.width / scale, height: b.height / scale })),
+          words: (result.words ?? []).map(b => ({ ...b, x: b.x / scale, y: b.y / scale, width: b.width / scale, height: b.height / scale })),
+        }
+      : undefined
     onRefinement?.()
     const enhanced = await enhanceRegionDetection(
       image,
@@ -91,7 +103,7 @@ export async function detectRegions({
       imageHeight,
       padding,
     })
-    return { candidates, detectedLines: result.blocks.length }
+    return { candidates, detectedLines: result.blocks.length, ...(measurements ? { measurements } : {}) }
   }
   catch (error) {
     if (!isCurrent())
