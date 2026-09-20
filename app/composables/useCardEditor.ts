@@ -3,6 +3,7 @@ import type { MergeOptions } from '~/utils/merge-regions'
 import type { SplitAxis, SplitText } from '~/utils/split-region'
 import { computed, ref } from 'vue'
 import { useKeyedHistory } from '~/composables/useHistory'
+import { rebaseRegionBounds } from '~/services/asset-discovery/region-comparison'
 import { renameCardAssetTokens } from '~/services/project/cards'
 import { reconcileInlineAssetStyles } from '~/utils/inline-assets'
 import { mergeTextRegions } from '~/utils/merge-regions'
@@ -242,6 +243,26 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
     publishProject()
   }
 
+  /** 再検出の枠修正を全件検証して一つの履歴へ確定する。文字列と相対座標の意味は変えない。 */
+  function applyRegionBounds(changes: readonly { id: string, bounds: RegionDraft }[]) {
+    if (!changes.length)
+      return
+    const current = history.state.value
+    const byId = new Map(changes.map(change => [change.id, change.bounds]))
+    const existing = new Set(current.regions.map(region => region.id))
+    if (byId.size !== changes.length || changes.some(change => !existing.has(change.id)))
+      throw new Error('枠を変更する領域を一つずつ選び直してください。')
+    // 履歴のcommit・Storeへの通知より前に、関連データの切欠けを含む全選択を検証する。
+    const regions = current.regions.map((region) => {
+      const bounds = byId.get(region.id)
+      return bounds ? { ...region, ...rebaseRegionBounds(region, bounds, current.imageWidth, current.imageHeight) } : region
+    })
+    if (JSON.stringify(regions) === JSON.stringify(current.regions))
+      return
+    history.commit({ ...current, regions })
+    publishProject()
+  }
+
   /** 雛形の領域へ新しいIDを与えて現在のカードに追加する。 */
   function appendTemplateRegions(regions: readonly TextRegion[]) {
     if (!regions.length)
@@ -377,6 +398,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
     addRegion,
     addRegions,
     updateRegion,
+    applyRegionBounds,
     appendTemplateRegions,
     splitRegion,
     mergeRegions,
