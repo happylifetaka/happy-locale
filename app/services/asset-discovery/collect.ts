@@ -15,7 +15,7 @@ import { containsBounds } from './review'
 import { DEFAULT_ICON_DISCOVERY_SETTINGS } from './types'
 
 export type DiscoveryCard = Pick<FolderProjectCard, 'id' | 'imageWidth' | 'imageHeight' | 'regions' | 'ocrCandidates'>
-export const ICON_DETECTOR_REVISION = 'components-v1'
+export const ICON_DETECTOR_REVISION = 'components-v2'
 export const ICON_OCR_LIMITS = Object.freeze({ owners: 256, areas: 32, pixels: 4_000_000, lines: 1000, words: 10000 })
 
 export interface CardIconProposal {

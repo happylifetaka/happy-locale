@@ -104,17 +104,23 @@ export function extractIconCandidates(
     }
     result.examinedPixels += pixelCount
     result.searchedAreas.push(area)
-    const edge: number[][] = [[], [], []]
-    for (let x = area.x; x < area.x + area.width; x += 3) {
-      for (const y of [area.y, area.y + area.height - 1]) {
+    // 上下端だけでは、隣の文字行・装飾帯を背景と取り違える。
+    // 内部を均等にサンプルし、画像寸法によらず最大4096点に制限する。
+    const samples: number[][] = [[], [], []]
+    const columns = Math.min(64, Math.ceil(area.width / 3))
+    const rows = Math.min(64, Math.ceil(area.height / 3))
+    for (let row = 0; row < rows; row++) {
+      const y = area.y + Math.floor((row + 0.5) * area.height / rows)
+      for (let column = 0; column < columns; column++) {
+        const x = area.x + Math.floor((column + 0.5) * area.width / columns)
         const offset = (y * width + x) * 4
         if (data[offset + 3]! < 128)
           continue
         for (let channel = 0; channel < 3; channel++)
-          edge[channel]!.push(data[offset + channel]!)
+          samples[channel]!.push(data[offset + channel]!)
       }
     }
-    const background = edge.map(channel => median(channel, 0))
+    const background = samples.map(channel => median(channel, 0))
     const backgroundLight = background[0]! * 0.299 + background[1]! * 0.587 + background[2]! * 0.114
     const colored = new Uint8Array(pixelCount)
     const contrast = new Uint8Array(pixelCount)

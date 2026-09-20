@@ -58,6 +58,23 @@ describe('icon discovery from measured text and pixels', () => {
       .toEqual([{ x: 123, y: 131, width: 34, height: 38 }])
   })
 
+  it.each([
+    { background: [25, 30, 35, 255], foreground: [210, 210, 207, 255] },
+    { background: [225, 225, 220, 255], foreground: [35, 35, 40, 255] },
+  ])('estimates the background from the search interior when both edges cross text or decoration: %j', ({ background, foreground }) => {
+    const s = scene()
+    s.rect(0, 0, s.width, s.height, background)
+    s.rect(20, 140, 8, 20, foreground)
+    s.rect(70, 140, 8, 20, foreground)
+    // Both sampled edges intersect a neighboring row or decorative band.
+    s.rect(4, 124, 212, 2, foreground)
+    s.rect(4, 174, 212, 2, foreground)
+    s.rect(125, 133, 30, 34, foreground)
+    s.rect(129, 137, 22, 26, [30, 180, 40, 255])
+    expect(extractIconCandidates(s.data, s.width, s.height, s.measured).icons.map(icon => icon.bounds))
+      .toEqual([{ x: 123, y: 131, width: 34, height: 38 }])
+  })
+
   it('deduplicates overlapping line searches without merging adjacent distinct icons', () => {
     const s = scene()
     s.rect(130, 136, 20, 28, [230, 35, 45, 255])
