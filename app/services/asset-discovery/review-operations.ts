@@ -181,3 +181,21 @@ export function linkReviewAsset(state: AssetDiscoveryState, ids: readonly string
   })
   return parseAssetDiscovery(next, context)
 }
+
+export interface OccurrenceAssetChoice { occurrenceId: string, assetId: string }
+
+/** 出現箇所ごとに異なる登録先を一括採用する。全件を検証し、一件でも不正なら反映しない。 */
+export function linkReviewAssetChoices(state: AssetDiscoveryState, choices: readonly OccurrenceAssetChoice[], context: DiscoveryReviewContext): AssetDiscoveryState {
+  const next = parseAssetDiscovery(state, context)
+  const assignments = new Map(choices.map(choice => [choice.occurrenceId, choice.assetId]))
+  const existing = new Map(next.occurrences.map(item => [item.id, item]))
+  if (!choices.length || assignments.size !== choices.length
+    || choices.some(choice => !existing.has(choice.occurrenceId) || existing.get(choice.occurrenceId)!.decision === 'excluded' || !context.assetIds.has(choice.assetId))) {
+    throw new Error('関連付ける候補とアセットを一つずつ選び直してください。')
+  }
+  next.occurrences = next.occurrences.map((item) => {
+    const assetId = assignments.get(item.id)
+    return assetId === undefined ? item : reviseOccurrence(item, item.bounds, assetId)
+  })
+  return parseAssetDiscovery(next, context)
+}

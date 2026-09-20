@@ -1,6 +1,6 @@
 import type { DiscoveryReviewContext, OccurrenceReviewChange } from '~/services/asset-discovery/review-operations'
 import { expect, it } from 'vitest'
-import { addManualOccurrence, editReviewGroup, linkReviewAsset, moveReviewOccurrences, reviewOccurrence } from '~/services/asset-discovery/review-operations'
+import { addManualOccurrence, editReviewGroup, linkReviewAsset, linkReviewAssetChoices, moveReviewOccurrences, reviewOccurrence } from '~/services/asset-discovery/review-operations'
 import { discoveryProject } from '../fixtures/asset-discovery'
 
 function fixture() {
@@ -210,5 +210,25 @@ it('validates every selected assignment before committing and leaves same-asset 
     expect(() => linkReviewAsset(state, ids, 'asset-2', undefined, context)).toThrow('一つずつ')
   expect(() => linkReviewAsset(state, ['occurrence-1', 'occurrence-3'], 'asset-2', 'group-1', context)).toThrow('グループ')
   expect(() => linkReviewAsset(state, ['occurrence-1'], 'missing', 'group-1', context)).toThrow('アセット参照')
+  expect(state).toEqual(before)
+})
+
+it('applies per-occurrence choices without propagating assignments or clearing unchanged approvals', () => {
+  const { state, context } = groupedFixture()
+  const before = structuredClone(state)
+  const next = linkReviewAssetChoices(state, [{ occurrenceId: 'occurrence-1', assetId: 'asset-2' }, { occurrenceId: 'occurrence-2', assetId: 'asset-1' }], context)
+  expect(next.occurrences[0]).toMatchObject({ assetId: 'asset-2', approval: null, decision: 'pending' })
+  expect(next.occurrences.slice(1)).toEqual(before.occurrences.slice(1))
+  expect(next.groups).toEqual(before.groups)
+  expect(state).toEqual(before)
+})
+
+it('rejects an invalid member of a mixed assignment set atomically, including excluded occurrences', () => {
+  const { state, context } = groupedFixture()
+  const before = structuredClone(state)
+  const valid = { occurrenceId: 'occurrence-1', assetId: 'asset-2' }
+  for (const invalid of [valid, { occurrenceId: 'missing', assetId: 'asset-1' }, { occurrenceId: 'occurrence-2', assetId: 'missing' }, { occurrenceId: 'occurrence-3', assetId: 'asset-1' }])
+    expect(() => linkReviewAssetChoices(state, [valid, invalid], context)).toThrow('選び直し')
+  expect(() => linkReviewAssetChoices(state, [], context)).toThrow('選び直し')
   expect(state).toEqual(before)
 })

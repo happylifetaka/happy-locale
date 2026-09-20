@@ -1,6 +1,6 @@
 import type { CardIconProposal } from '~/services/asset-discovery/collect'
 import type { IconProposalChoice, IconProposalReview } from '~/services/asset-discovery/proposal-review'
-import type { DiscoveryReviewContext, OccurrenceReviewChange, ReviewGroupDestination } from '~/services/asset-discovery/review-operations'
+import type { DiscoveryReviewContext, OccurrenceAssetChoice, OccurrenceReviewChange, ReviewGroupDestination } from '~/services/asset-discovery/review-operations'
 import type { useProjectStore } from '~/stores/project'
 import type { AssetDiscoveryState, IconCandidateGroup } from '~/types/asset-discovery'
 import type { RegionDraft } from '~/types/editor'
@@ -8,7 +8,7 @@ import { computed, onScopeDispose, readonly, ref, shallowRef, watch } from 'vue'
 import { parseAssetDiscovery } from '~/services/asset-discovery/format'
 import { adoptIconProposal, compareIconProposal } from '~/services/asset-discovery/proposal-review'
 import { occurrenceIsApproved } from '~/services/asset-discovery/review'
-import { addManualOccurrence, editReviewGroup, linkReviewAsset, moveReviewOccurrences, reviewOccurrence } from '~/services/asset-discovery/review-operations'
+import { addManualOccurrence, editReviewGroup, linkReviewAsset, linkReviewAssetChoices, moveReviewOccurrences, reviewOccurrence } from '~/services/asset-discovery/review-operations'
 
 interface DiscoveryReviewOptions {
   store: Pick<ReturnType<typeof useProjectStore>, 'assetDiscovery' | 'setAssetDiscovery'>
@@ -203,6 +203,9 @@ export function useDiscoveryReview(options: DiscoveryReviewOptions) {
     /** 明示選択した出現箇所と任意のグループ提案だけを関連付ける。登録自体・承認は履歴に混ぜない。 */
     linkAsset(ids: readonly string[], assetId: string | null, groupId?: string) {
       apply((state, ctx) => linkReviewAsset(state, ids, assetId, groupId, ctx))
+    },
+    linkAssetChoices(choices: readonly OccurrenceAssetChoice[]) {
+      apply((state, ctx) => linkReviewAssetChoices(state, choices, ctx))
     },
     move(ids: readonly string[], destination: ReviewGroupDestination) {
       apply((state, ctx) => moveReviewOccurrences(state, ids, destination, ctx))
