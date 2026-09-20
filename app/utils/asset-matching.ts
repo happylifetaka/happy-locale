@@ -77,9 +77,14 @@ export function fingerprintImage(image: CanvasImageSource, bounds?: { x: number,
   const scale = Math.min(1, 256 / Math.max(rect.width, rect.height))
   canvas.width = Math.max(1, Math.round(rect.width * scale))
   canvas.height = Math.max(1, Math.round(rect.height * scale))
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context)
-    return null
-  context.drawImage(image, rect.x, rect.y, rect.width, rect.height, 0, 0, canvas.width, canvas.height)
-  return assetFingerprint(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height)
+  try {
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (!context)
+      return null
+    context.drawImage(image, rect.x, rect.y, rect.width, rect.height, 0, 0, canvas.width, canvas.height)
+    return assetFingerprint(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height)
+  }
+  finally {
+    canvas.width = canvas.height = 1
+  }
 }

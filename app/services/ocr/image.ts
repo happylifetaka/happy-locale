@@ -122,34 +122,41 @@ export async function prepareRegionForOCR(
   const canvas = document.createElement('canvas')
   canvas.width = Math.ceil(sourceWidth * scale + padding * 2)
   canvas.height = Math.ceil(sourceHeight * scale + padding * 2)
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context)
-    throw new Error('OCR用Canvasを初期化できませんでした。')
+  try {
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (!context)
+      throw new Error('OCR用Canvasを初期化できませんでした。')
 
-  context.fillStyle = '#ffffff'
-  context.fillRect(0, 0, canvas.width, canvas.height)
-  context.imageSmoothingEnabled = true
-  context.imageSmoothingQuality = 'high'
-  context.drawImage(
-    image,
-    region.x,
-    region.y,
-    sourceWidth,
-    sourceHeight,
-    padding,
-    padding,
-    sourceWidth * scale,
-    sourceHeight * scale,
-  )
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.imageSmoothingEnabled = true
+    context.imageSmoothingQuality = 'high'
+    context.drawImage(
+      image,
+      region.x,
+      region.y,
+      sourceWidth,
+      sourceHeight,
+      padding,
+      padding,
+      sourceWidth * scale,
+      sourceHeight * scale,
+    )
 
-  const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-  maskOCRAreas(imageData.data, canvas.width, canvas.height, (options.exclusions ?? []).map(area => ({
-    x: padding + area.x * scale,
-    y: padding + area.y * scale,
-    width: area.width * scale,
-    height: area.height * scale,
-  })), { x: padding, y: padding, width: sourceWidth * scale, height: sourceHeight * scale }, Math.ceil(scale * 2))
-  contrastStretch(imageData.data)
-  context.putImageData(imageData, 0, 0)
-  return canvasToBlob(canvas)
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+    maskOCRAreas(imageData.data, canvas.width, canvas.height, (options.exclusions ?? []).map(area => ({
+      x: padding + area.x * scale,
+      y: padding + area.y * scale,
+      width: area.width * scale,
+      height: area.height * scale,
+    })), { x: padding, y: padding, width: sourceWidth * scale, height: sourceHeight * scale }, Math.ceil(scale * 2))
+    contrastStretch(imageData.data)
+    context.putImageData(imageData, 0, 0)
+    // PNG化が終わるまでは画素を保持し、その後は一括OCRでも積み残さない。
+    return await canvasToBlob(canvas)
+  }
+  finally {
+    canvas.width = 1
+    canvas.height = 1
+  }
 }

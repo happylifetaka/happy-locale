@@ -1,5 +1,44 @@
-import { expect, it } from 'vitest'
-import { maskOCRAreas } from '~/services/ocr/image'
+import { afterEach, expect, it, vi } from 'vitest'
+import { maskOCRAreas, prepareRegionForOCR } from '~/services/ocr/image'
+
+afterEach(() => vi.unstubAllGlobals())
+
+it.each(['success', 'empty-blob', 'context', 'pixels'] as const)('releases the temporary OCR canvas after %s, but not before PNG encoding completes', async (mode) => {
+  let finish: BlobCallback | undefined
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext: () => mode === 'context'
+      ? null
+      : {
+          fillRect: vi.fn(),
+          drawImage: vi.fn(),
+          getImageData: () => {
+            if (mode === 'pixels')
+              throw new Error('pixel read failed')
+            return { data: new Uint8ClampedArray(canvas.width * canvas.height * 4) }
+          },
+          putImageData: vi.fn(),
+        },
+    toBlob: (callback: BlobCallback) => { finish = callback },
+  }
+  vi.stubGlobal('document', { createElement: () => canvas })
+  const task = prepareRegionForOCR({} as ImageBitmap, { x: 0, y: 0, width: 20, height: 10 }, { scale: 2, padding: 0 })
+  if (mode === 'success' || mode === 'empty-blob') {
+    expect([canvas.width, canvas.height]).toEqual([40, 20])
+    const png = new Blob(['png'])
+    finish!(mode === 'success' ? png : null)
+    if (mode === 'success')
+      await expect(task).resolves.toBe(png)
+    else
+      await expect(task).rejects.toThrow('OCR用画像')
+  }
+  else {
+    await expect(task).rejects.toThrow()
+    expect(finish).toBeUndefined()
+  }
+  expect([canvas.width, canvas.height]).toEqual([1, 1])
+})
 
 it.each([30, 230])('masks icons with the surrounding background (%i), preserving nearby punctuation and numbers', (background) => {
   const width = 20

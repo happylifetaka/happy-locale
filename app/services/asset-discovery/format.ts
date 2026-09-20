@@ -43,6 +43,8 @@ export function parseAssetDiscovery(value: unknown, context: DiscoveryFormatCont
       return fail('候補ID・画像・判定・アセット参照')
     }
     occurrenceIds.add(item.id)
+    if (item.detectionReason !== undefined && item.detectionReason !== 'colored-component' && item.detectionReason !== 'contrast-component')
+      return fail('抽出理由')
     const card = cards.get(item.cardId)
     if (!card)
       return fail('カード参照')
@@ -100,6 +102,7 @@ export function parseAssetDiscovery(value: unknown, context: DiscoveryFormatCont
       detectedBounds,
       origin: item.origin,
       detectorRevision: item.detectorRevision,
+      ...(item.detectionReason !== undefined ? { detectionReason: item.detectionReason } : {}),
       decision: item.decision,
       assetId: item.assetId,
       approval,

@@ -11,6 +11,8 @@ export interface IconOccurrence {
   detectedBounds: RegionDraft | null
   origin: 'detected' | 'manual'
   detectorRevision: string
+  /** 自動抽出の根拠。導入前の候補・手動追加では省略可能。 */
+  detectionReason?: 'colored-component' | 'contrast-component'
   decision: 'pending' | 'accepted' | 'excluded'
   assetId: string | null
   approval: IconOccurrenceApproval | null
