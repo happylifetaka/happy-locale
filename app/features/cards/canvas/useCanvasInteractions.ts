@@ -3,7 +3,7 @@ import type { Point, ResizeHandle } from './geometry'
 import type { CanvasDrafts } from './renderer'
 import type { CardProject, ExclusionArea, MaskStroke, RegionDraft, TextRegion } from '~/types/editor'
 import type { RegionCandidate } from '~/types/ocr'
-import { computed, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import { printAreaPointerCompletion, usablePrintArea } from '~/utils/print-area'
 import { changedBounds, resizeHandleAtPoint as geometryResizeHandleAtPoint, imagePoint, lastBoundsAtPoint, normalizedBounds, pointInsideBounds, relativePoint, roundedBounds } from './geometry'
 
@@ -53,8 +53,21 @@ export function useCanvasInteractions(
   const draft = ref<RegionDraft | null>(null)
   /** カード上で描いている途中の消去・復元マスク。 */
   const draftMaskStroke = ref<MaskStroke | null>(null)
-  /** 現在のマスク描画を開始したポインターの識別子。 */
-  const activeMaskPointerId = ref<number | null>(null)
+  /** どのモードでも同時に一つのポインターだけを受け付ける。 */
+  let activePointerId: number | null = null
+  let captureElement: HTMLCanvasElement | null = null
+  let disposed = false
+  let target: {
+    image: HTMLImageElement | null
+    project: CardProject
+    regionId: string | null
+    candidates: RegionCandidate[]
+    printArea: RegionDraft | null
+    printAreaEditing: boolean
+    maskEditing: boolean
+    exclusionEditing: boolean
+    zoom: number
+  } | null = null
   interface ExclusionInteraction {
     kind: 'create' | 'move' | 'resize'
     start: { x: number, y: number }
@@ -137,12 +150,9 @@ export function useCanvasInteractions(
   }
 
   /** 印刷範囲・候補・マスク・保護領域などのモードから、このドラッグで扱う対象を決める。 */
-  function onPointerDown(event: PointerEvent) {
-    if (!props.image || event.button !== 0)
-      return
+  function startInteraction(event: PointerEvent) {
     const candidatePoint = pointFromEvent(event)
     if (props.printAreaEditing) {
-      canvas.value?.setPointerCapture(event.pointerId)
       const pendingClickSelection = printAreaInteraction.value
       if (
         pendingClickSelection
@@ -204,7 +214,6 @@ export function useCanvasInteractions(
         return
       }
       actions.selectRegionCandidate(candidate.id)
-      canvas.value?.setPointerCapture(event.pointerId)
       candidateInteraction.value = {
         kind: handle ? 'resize' : 'move',
         id: candidate.id,
@@ -220,7 +229,6 @@ export function useCanvasInteractions(
       draftCandidate.value = { ...candidateInteraction.value.original }
       return
     }
-    canvas.value?.setPointerCapture(event.pointerId)
     const selected = selectedRegion()
     if (editorTools.maskEditing && selected?.backgroundMode === 'manual') {
       const point = pointFromEvent(event)
@@ -236,7 +244,6 @@ export function useCanvasInteractions(
           },
         ],
       }
-      activeMaskPointerId.value = event.pointerId
       return
     }
     const point = pointFromEvent(event)
@@ -317,11 +324,10 @@ export function useCanvasInteractions(
       actions.addMaskStroke(props.selectedRegionId, draftMaskStroke.value)
     }
     draftMaskStroke.value = null
-    activeMaskPointerId.value = null
   }
 
   /** 現在の編集モードに応じてドラッグ中の範囲やマスクを更新する。 */
-  function onPointerMove(event: PointerEvent) {
+  function updateDraft(event: PointerEvent) {
     if (printAreaInteraction.value) {
       const interaction = printAreaInteraction.value
       draftPrintArea.value = interaction.original.width === 0
@@ -337,7 +343,7 @@ export function useCanvasInteractions(
       )
       return
     }
-    if (draftMaskStroke.value && event.pointerId === activeMaskPointerId.value) {
+    if (draftMaskStroke.value && event.pointerId === activePointerId) {
       const selected = props.project.regions.find(
         region => region.id === props.selectedRegionId,
       )
@@ -389,7 +395,7 @@ export function useCanvasInteractions(
   }
 
   /** 操作対象ごとの確定条件を判定し、確定した範囲やマスクを親へ通知する。 */
-  function onPointerUp(event: PointerEvent) {
+  function commitInteraction(event: PointerEvent) {
     if (printAreaInteraction.value) {
       const bounds = draftPrintArea.value
       const completion = printAreaPointerCompletion(
@@ -423,7 +429,7 @@ export function useCanvasInteractions(
       draftCandidate.value = null
       return
     }
-    if (draftMaskStroke.value && event.pointerId === activeMaskPointerId.value) {
+    if (draftMaskStroke.value && event.pointerId === activePointerId) {
       commitDraftMaskStroke()
       return
     }
@@ -476,11 +482,10 @@ export function useCanvasInteractions(
   }
 
   /** 中断されたドラッグの仮状態を捨て、途中の範囲やマスクが確定されるのを防ぐ。 */
-  function onPointerCancel() {
+  function clearDrafts() {
     dragStart.value = null
     draft.value = null
     draftMaskStroke.value = null
-    activeMaskPointerId.value = null
     exclusionInteraction.value = null
     draftExclusion.value = null
     regionInteraction.value = null
@@ -491,21 +496,141 @@ export function useCanvasInteractions(
     draftPrintArea.value = null
   }
 
-  // 印刷範囲編集を離れたら、そのドラッグ状態を解除する。
-  watch(
-    () => props.printAreaEditing,
-    (editing) => {
-      if (!editing)
-        clearPrintAreaInteraction()
-    },
-  )
+  function targetIsCurrent() {
+    return !disposed && target !== null
+      && target.image === props.image && target.project === props.project
+      && target.regionId === props.selectedRegionId && target.candidates === props.regionCandidates
+      && (!candidateInteraction.value || props.selectedCandidateId === candidateInteraction.value.id)
+      && (!exclusionInteraction.value?.original || props.selectedExclusionId === exclusionInteraction.value.original.id)
+      && target.printAreaEditing === props.printAreaEditing
+      && (!target.printAreaEditing || target.printArea === props.printArea)
+      && target.maskEditing === editorTools.maskEditing && target.exclusionEditing === editorTools.exclusionEditing
+      && target.zoom === props.zoom
+  }
 
-  /** 描画中のマスクのポインター捕捉を失ったら、そのストロークを確定する。 */
-  function onLostPointerCapture(event: PointerEvent) {
-    if (draftMaskStroke.value && event.pointerId === activeMaskPointerId.value) {
-      commitDraftMaskStroke()
+  /** 解除に伴うlostpointercaptureが再確定を起こさないよう、所有を先に解く。 */
+  function releasePointer() {
+    const id = activePointerId
+    const element = captureElement
+    activePointerId = null
+    captureElement = null
+    if (id !== null && element?.hasPointerCapture?.(id))
+      element.releasePointerCapture(id)
+  }
+
+  function cancelInteraction() {
+    clearDrafts()
+    target = null
+    releasePointer()
+  }
+
+  function hasInteraction() {
+    return dragStart.value || regionInteraction.value || candidateInteraction.value
+      || exclusionInteraction.value || draftMaskStroke.value || printAreaInteraction.value
+  }
+
+  function onPointerDown(event: PointerEvent) {
+    if (disposed || !props.image || !canvas.value || event.button !== 0)
+      return
+    if (target && !targetIsCurrent())
+      cancelInteraction()
+    if (activePointerId !== null)
+      return
+    activePointerId = event.pointerId
+    startInteraction(event)
+    if (!hasInteraction()) {
+      target = null
+      releasePointer()
+      return
+    }
+    target = {
+      image: props.image,
+      project: props.project,
+      regionId: props.selectedRegionId,
+      candidates: props.regionCandidates,
+      printArea: props.printArea,
+      printAreaEditing: props.printAreaEditing,
+      maskEditing: editorTools.maskEditing,
+      exclusionEditing: editorTools.exclusionEditing,
+      zoom: props.zoom,
+    }
+    captureElement = canvas.value
+    captureElement.setPointerCapture?.(event.pointerId)
+  }
+
+  function onPointerMove(event: PointerEvent) {
+    if (!target)
+      return
+    if (!targetIsCurrent()) {
+      cancelInteraction()
+      return
+    }
+    // 印刷範囲の2クリック選択では、最初のrelease後もホバーで終点を示す。
+    if (activePointerId !== null && event.pointerId !== activePointerId)
+      return
+    if (activePointerId === null && !printAreaInteraction.value)
+      return
+    updateDraft(event)
+  }
+
+  function onPointerUp(event: PointerEvent) {
+    if (activePointerId === null || event.pointerId !== activePointerId)
+      return
+    if (!targetIsCurrent()) {
+      cancelInteraction()
+      return
+    }
+    try {
+      commitInteraction(event)
+    }
+    finally {
+      // continueだけは仮の印刷範囲を残す。通常の捕捉解除では消さない。
+      if (!printAreaInteraction.value) {
+        clearDrafts()
+        target = null
+      }
+      releasePointer()
     }
   }
+
+  function onPointerCancel(event?: PointerEvent) {
+    if (event && activePointerId !== null && event.pointerId !== activePointerId)
+      return
+    cancelInteraction()
+  }
+
+  /** ブラシは既存どおり一筆を確定し、それ以外の捕捉喪失は仮状態を捨てる。 */
+  function onLostPointerCapture(event: PointerEvent) {
+    if (activePointerId === null || event.pointerId !== activePointerId)
+      return
+    try {
+      if (targetIsCurrent() && draftMaskStroke.value)
+        commitDraftMaskStroke()
+    }
+    finally {
+      cancelInteraction()
+    }
+  }
+
+  watch(
+    () => [props.image, props.project, props.selectedRegionId, props.regionCandidates, props.printArea, props.printAreaEditing, props.zoom, editorTools.maskEditing, editorTools.exclusionEditing],
+    () => {
+      if (target && !targetIsCurrent())
+        cancelInteraction()
+    },
+  )
+  watch(() => props.selectedCandidateId, (id) => {
+    if (candidateInteraction.value && id !== candidateInteraction.value.id)
+      cancelInteraction()
+  })
+  watch(() => props.selectedExclusionId, (id) => {
+    if (exclusionInteraction.value?.original && id !== exclusionInteraction.value.original.id)
+      cancelInteraction()
+  })
+  onScopeDispose(() => {
+    disposed = true
+    cancelInteraction()
+  })
 
   const drafts = computed<CanvasDrafts>(() => ({
     region: draftRegion.value,

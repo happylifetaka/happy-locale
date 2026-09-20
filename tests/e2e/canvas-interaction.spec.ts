@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 
-async function dragImagePoints(page: Page, start: [number, number], end: [number, number]) {
+async function dragImagePoints(page: Page, start: [number, number], end: [number, number], release = true) {
   const canvas = page.getByLabel('カード編集キャンバス')
   const layout = await canvas.evaluate((element: HTMLCanvasElement) => {
     const bounds = element.getBoundingClientRect()
@@ -10,7 +10,8 @@ async function dragImagePoints(page: Page, start: [number, number], end: [number
   await page.mouse.move(layout.x + start[0] * layout.scaleX, layout.y + start[1] * layout.scaleY)
   await page.mouse.down()
   await page.mouse.move(layout.x + end[0] * layout.scaleX, layout.y + end[1] * layout.scaleY, { steps: 12 })
-  await page.mouse.up()
+  if (release)
+    await page.mouse.up()
 }
 
 for (const zoom of [50, 100, 150]) {
@@ -39,3 +40,65 @@ for (const zoom of [50, 100, 150]) {
     await expect(undo).toBeDisabled()
   })
 }
+
+for (const interruption of ['pointercancel', 'lostpointercapture'] as const) {
+  test(`discards ${interruption} geometry without adding history and accepts the next gesture`, async ({ page }) => {
+    await page.goto('/cards?demo=1')
+    const canvas = page.getByLabel('カード編集キャンバス')
+    await expect(canvas).toBeVisible()
+    await dragImagePoints(page, [60, 180], [220, 280])
+    await page.locator('#inspector-tab-region').click()
+    const coordinates = page.locator('.region-coordinates dd')
+    await expect(coordinates).toHaveText(['60', '180', '160', '100'])
+    const pixels = () => canvas.evaluate((element: HTMLCanvasElement) => element.toDataURL())
+    await page.evaluate(() => document.fonts.ready)
+    const before = await pixels()
+    await canvas.evaluate((element) => {
+      element.addEventListener('pointerdown', (event) => {
+        element.setAttribute('data-test-pointer-id', String((event as PointerEvent).pointerId))
+      }, { once: true })
+    })
+    await dragImagePoints(page, [110, 220], [140, 240], false)
+    await expect.poll(pixels).not.toBe(before)
+    await canvas.evaluate((element, interruption) => {
+      const id = Number(element.getAttribute('data-test-pointer-id'))
+      if (interruption === 'pointercancel')
+        element.dispatchEvent(new PointerEvent('pointercancel', { pointerId: id, bubbles: true }))
+      else element.releasePointerCapture(id)
+    }, interruption)
+    await page.mouse.move(10, 10)
+    await page.mouse.up()
+    await expect.poll(pixels).toBe(before)
+    await expect(coordinates).toHaveText(['60', '180', '160', '100'])
+    await dragImagePoints(page, [110, 220], [130, 240])
+    await expect(coordinates).toHaveText(['80', '200', '160', '100'])
+    const undo = page.getByRole('button', { name: '元に戻す', exact: true })
+    await undo.click()
+    await expect(coordinates).toHaveText(['60', '180', '160', '100'])
+    await undo.click()
+    await page.locator('#inspector-tab-list').click()
+    await expect(page.locator('.region-list-item')).toHaveCount(0)
+    await expect(undo).toBeDisabled()
+  })
+}
+
+test('keeps print-area two-click selection across native capture release, then moves and resizes it', async ({ page }) => {
+  await page.goto('/cards?demo=1')
+  await expect(page.getByLabel('カード編集キャンバス')).toBeVisible()
+  await page.locator('#inspector-tab-print').click()
+  await page.getByRole('button', { name: '範囲を解除', exact: true }).click()
+  const inspector = page.locator('.print-area-inspector')
+  await dragImagePoints(page, [60, 180], [60, 180])
+  await expect(inspector.getByLabel('幅', { exact: true })).toHaveCount(0)
+  await dragImagePoints(page, [220, 280], [220, 280])
+  await expect(inspector.getByLabel('x', { exact: true })).toHaveValue('60')
+  await expect(inspector.getByLabel('y', { exact: true })).toHaveValue('180')
+  await expect(inspector.getByLabel('幅', { exact: true })).toHaveValue('160')
+  await expect(inspector.getByLabel('高さ', { exact: true })).toHaveValue('100')
+  await dragImagePoints(page, [110, 220], [130, 240])
+  await expect(inspector.getByLabel('x', { exact: true })).toHaveValue('80')
+  await expect(inspector.getByLabel('y', { exact: true })).toHaveValue('200')
+  await dragImagePoints(page, [240, 300], [270, 320])
+  await expect(inspector.getByLabel('幅', { exact: true })).toHaveValue('190')
+  await expect(inspector.getByLabel('高さ', { exact: true })).toHaveValue('120')
+})

@@ -24,7 +24,10 @@ function setup() {
   canvas.width = 320
   canvas.height = 240
   canvas.getBoundingClientRect = () => ({ left: 20, top: 30, width: 160, height: 120 } as DOMRect)
-  canvas.setPointerCapture = vi.fn()
+  const captured = new Set<number>()
+  canvas.setPointerCapture = vi.fn(id => captured.add(id))
+  canvas.hasPointerCapture = vi.fn(id => captured.has(id))
+  canvas.releasePointerCapture = vi.fn(id => captured.delete(id))
   const tools = reactive<CanvasInteractionTools>({ maskEditing: false, exclusionEditing: false, maskBrushSize: 20, maskBrushMode: 'paint' })
   const actions = {
     addRegion: vi.fn(),
@@ -33,8 +36,8 @@ function setup() {
     addMaskStroke: vi.fn(),
     addExclusion: vi.fn(),
     updateExclusion: vi.fn(),
-    selectExclusion: vi.fn(),
-    selectRegionCandidate: vi.fn(),
+    selectExclusion: vi.fn((id: string | null) => { input.selectedExclusionId = id }),
+    selectRegionCandidate: vi.fn((id: string | null) => { input.selectedCandidateId = id }),
     updateRegionCandidateBounds: vi.fn(),
     updatePrintArea: vi.fn(),
   }
@@ -48,6 +51,116 @@ function setup() {
 function pointer(x: number, y: number, pointerId = 1, button = 0) {
   return new PointerEvent('pointermove', { clientX: 20 + x / 2, clientY: 30 + y / 2, pointerId, button })
 }
+
+type Mode = 'newRegion' | 'region' | 'exclusion' | 'maskStroke' | 'candidate' | 'printArea'
+function beginMode(mode: Mode) {
+  const state = setup()
+  state.input.selectedRegionId = mode === 'newRegion' ? null : 'region'
+  state.tools.exclusionEditing = mode === 'exclusion'
+  state.tools.maskEditing = mode === 'maskStroke'
+  state.input.printAreaEditing = mode === 'printArea'
+  if (mode === 'candidate')
+    state.input.regionCandidates = [{ id: 'candidate', x: 40, y: 100, width: 200, height: 100, text: 'Synthetic', confidence: 90, selected: true, lines: [] }]
+  state.interaction.onPointerDown(pointer(90, 130))
+  state.interaction.onPointerMove(pointer(130, 170))
+  return state
+}
+
+function expectNoWrites(actions: ReturnType<typeof setup>['actions']) {
+  for (const [name, action] of Object.entries(actions)) {
+    if (!name.startsWith('select'))
+      expect(action).not.toHaveBeenCalled()
+  }
+}
+
+it.each(['newRegion', 'region', 'exclusion', 'candidate', 'printArea'] as const)('clears a lost %s capture without committing on later movement/release', (mode) => {
+  const { interaction, actions, canvas } = beginMode(mode)
+  interaction.onLostPointerCapture(pointer(130, 170))
+  interaction.onPointerMove(pointer(140, 180))
+  interaction.onPointerUp(pointer(140, 180))
+  expect(interaction.drafts.value[mode]).toBeNull()
+  expect(canvas.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(1)
+  expectNoWrites(actions)
+})
+
+it.each(['newRegion', 'region', 'exclusion', 'maskStroke', 'candidate', 'printArea'] as const)('releases and discards %s on scope disposal and ignores delayed events', (mode) => {
+  const { interaction, actions, canvas, scope } = beginMode(mode)
+  scope.stop()
+  interaction.onLostPointerCapture(pointer(130, 170))
+  interaction.onPointerMove(pointer(140, 180))
+  interaction.onPointerUp(pointer(140, 180))
+  interaction.onPointerDown(pointer(90, 130))
+  interaction.onPointerMove(pointer(140, 180))
+  interaction.onPointerUp(pointer(140, 180))
+  expect(interaction.drafts.value[mode]).toBeNull()
+  expect(canvas.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(1)
+  expectNoWrites(actions)
+})
+
+it.each(['image', 'project', 'selection', 'mode', 'zoom', 'candidates'] as const)('rejects a stale %s before watchers flush and does not apply the old region gesture', (change) => {
+  const { interaction, input, tools, actions, canvas } = beginMode('region')
+  if (change === 'image')
+    input.image = new Image()
+  if (change === 'project')
+    input.project = { ...input.project }
+  if (change === 'selection')
+    input.selectedRegionId = null
+  if (change === 'mode')
+    tools.maskEditing = true
+  if (change === 'zoom')
+    input.zoom = 100
+  if (change === 'candidates')
+    input.regionCandidates = [...input.regionCandidates]
+  interaction.onPointerUp(pointer(130, 170))
+  expect(interaction.drafts.value.region).toBeNull()
+  expect(canvas.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(1)
+  expectNoWrites(actions)
+})
+
+it('discards a stale brush on capture loss instead of applying it to another card with the same region ID', async () => {
+  const { interaction, input, actions } = beginMode('maskStroke')
+  input.project = { ...input.project, regions: [canvasRegion()] }
+  interaction.onLostPointerCapture(pointer(130, 170))
+  expectNoWrites(actions)
+  const pending = beginMode('printArea')
+  pending.input.printAreaEditing = false
+  await nextTick()
+  expect(pending.interaction.drafts.value.printArea).toBeNull()
+  expect(pending.canvas.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(1)
+})
+
+it('ignores secondary pointer down, movement, cancellation, release and capture loss', () => {
+  const { interaction, actions, canvas } = beginMode('region')
+  const draft = { ...interaction.drafts.value.region }
+  interaction.onPointerDown(pointer(20, 20, 2))
+  interaction.onPointerMove(pointer(200, 200, 2))
+  interaction.onPointerCancel(pointer(200, 200, 2))
+  interaction.onPointerUp(pointer(200, 200, 2))
+  interaction.onLostPointerCapture(pointer(200, 200, 2))
+  expect(interaction.drafts.value.region).toEqual(draft)
+  expect(canvas.setPointerCapture).toHaveBeenCalledExactlyOnceWith(1)
+  expectNoWrites(actions)
+  interaction.onPointerUp(pointer(130, 170))
+  expect(actions.updateRegionBounds).toHaveBeenCalledExactlyOnceWith('region', draft)
+})
+
+it('rejects a changed candidate/exclusion selection immediately and releases normal captures only once', () => {
+  const candidate = beginMode('candidate')
+  candidate.input.selectedCandidateId = null
+  candidate.interaction.onPointerUp(pointer(130, 170))
+  expectNoWrites(candidate.actions)
+  const exclusion = setup()
+  exclusion.interaction.onPointerDown(pointer(225, 170))
+  exclusion.interaction.onPointerMove(pointer(240, 180))
+  exclusion.input.selectedExclusionId = null
+  exclusion.interaction.onPointerUp(pointer(240, 180))
+  expectNoWrites(exclusion.actions)
+  const normal = beginMode('region')
+  normal.interaction.onPointerUp(pointer(130, 170))
+  normal.interaction.onLostPointerCapture(pointer(130, 170))
+  expect(normal.actions.updateRegionBounds).toHaveBeenCalledOnce()
+  expect(normal.canvas.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(1)
+})
 
 it('creates a region only once on release and samples the committed image coordinates', () => {
   const { interaction, actions, color } = setup()
