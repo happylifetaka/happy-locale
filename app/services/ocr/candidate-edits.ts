@@ -11,6 +11,7 @@ export interface CandidateEdit {
   id: string
   before: RegionCandidate | null
   after: RegionCandidate | null
+  beforeIndex?: number
 }
 
 export function cardEditingSignature(project: CardProject): string {
@@ -43,6 +44,14 @@ export function candidateEdits(before: readonly RegionCandidate[], after: readon
     : [{ id: item.id, before: previous.get(item.id) ?? null, after: item }])
 }
 
+/** 領域へ採用した候補だけを消費する。残る候補の内容・順序は変えない。 */
+export function consumedCandidateEdits(before: readonly RegionCandidate[], after: readonly RegionCandidate[]): CandidateEdit[] {
+  const remaining = new Set(after.map(item => item.id))
+  if (regionCandidatesSignature(before.filter(item => remaining.has(item.id))) !== regionCandidatesSignature(after))
+    throw new Error('領域の採用では残す候補の内容・順序を変更できません。')
+  return before.flatMap((item, index) => remaining.has(item.id) ? [] : [{ id: item.id, before: item, after: null, beforeIndex: index }])
+}
+
 /** 後から行った別候補の調整は保持する。同じ候補への編集があれば全体を止める。 */
 export function applyCandidateEdits(current: readonly RegionCandidate[], edits: readonly CandidateEdit[], direction: 'forward' | 'backward'): RegionCandidate[] {
   const byId = new Map(current.map(item => [item.id, item]))
@@ -54,8 +63,11 @@ export function applyCandidateEdits(current: readonly RegionCandidate[], edits: 
       throw new Error('適用後に対象のOCR候補が変更されました。候補を確認し、再比較してください。')
     replacements.set(edit.id, next)
   }
-  return structuredClone([
-    ...current.flatMap(item => replacements.has(item.id) ? replacements.get(item.id) ? [replacements.get(item.id)!] : [] : [item]),
-    ...[...replacements].flatMap(([id, item]) => !byId.has(id) && item ? [item] : []),
-  ])
+  const result = current.flatMap(item => replacements.has(item.id) ? replacements.get(item.id) ? [replacements.get(item.id)!] : [] : [item])
+  for (const edit of edits) {
+    const item = replacements.get(edit.id)
+    if (!byId.has(edit.id) && item)
+      result.splice(direction === 'backward' ? edit.beforeIndex ?? result.length : result.length, 0, item)
+  }
+  return structuredClone(result)
 }

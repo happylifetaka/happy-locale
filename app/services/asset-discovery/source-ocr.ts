@@ -113,7 +113,7 @@ export function sourceIconPositionPatch(context: SourceIconOCRContext, draft: So
   return { sourceIcons: structuredClone(draft.region.sourceIcons ?? []) }
 }
 
-function checkedText(result: OCRResult, draft: SourceIconOCRDraft, assets: ImageAsset[]): string {
+export function checkedSourceIconText(result: OCRResult, region: Readonly<TextRegion>, assets: ImageAsset[]): string {
   if (!result.words?.length || !result.words.some(word => word.text.trim())
     || result.words.some(word => ![word.x, word.y, word.width, word.height].every(Number.isFinite) || word.width <= 0 || word.height <= 0)) {
     throw new Error('単語の位置を認識できませんでした。OCR結果とアイコンの位置を手動で確認してください。')
@@ -122,9 +122,9 @@ function checkedText(result: OCRResult, draft: SourceIconOCRDraft, assets: Image
     throw new Error('OCR結果が処理上限を超えています。対象領域を小さくしてやり直してください。')
   if (result.confidence !== null && (!Number.isFinite(result.confidence) || result.confidence < 0 || result.confidence > 100))
     throw new Error('OCR結果の信頼度が不正です。やり直してください。')
-  const text = textWithSourceIcons(result, draft.region.sourceIcons ?? [], assets, 3, 12)
+  const text = textWithSourceIcons(result, region.sourceIcons ?? [], assets, 3, 12)
   const tokens = [...text.matchAll(/\[icon:[^[\]\r\n]+\]/gu)].map(match => match[0]).sort()
-  const expected = (draft.region.sourceIcons ?? []).map(icon => `[icon:${assets.find(asset => asset.id === icon.assetId)!.name}]`).sort()
+  const expected = (region.sourceIcons ?? []).map(icon => `[icon:${assets.find(asset => asset.id === icon.assetId)!.name}]`).sort()
   if (text.length > FILE_LIMITS.projectStringLength || /\[\s*icon\b/iu.test(text.replace(/\[icon:[^[\]\r\n]+\]/gu, '')) || JSON.stringify(tokens) !== JSON.stringify(expected))
     throw new Error('OCR結果のアイコン記法・個数を確認してください。原文へはまだ反映していません。')
   return text
@@ -172,7 +172,7 @@ export async function recognizeSourceIconOCR(draft: SourceIconOCRDraft, { image,
     } })
     if (!isCurrent())
       return null
-    const originalText = checkedText(result, draft, drafts.get(draft)!.assets)
+    const originalText = checkedSourceIconText(result, draft.region, drafts.get(draft)!.assets)
     const preview = Object.freeze({ draft, originalText, confidence: result.confidence })
     previews.add(preview)
     return preview

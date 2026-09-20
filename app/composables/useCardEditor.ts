@@ -6,9 +6,12 @@ import type { SplitAxis, SplitText } from '~/utils/split-region'
 import { computed, ref } from 'vue'
 import { useKeyedHistory } from '~/composables/useHistory'
 import { rebaseRegionBounds } from '~/services/asset-discovery/region-comparison'
-import { applyCandidateEdits, candidateEdits } from '~/services/ocr/candidate-edits'
+import { containsBounds, sameBounds } from '~/services/asset-discovery/review'
+import { applyCandidateEdits, candidateEdits, consumedCandidateEdits } from '~/services/ocr/candidate-edits'
 import { parseRegionCandidates } from '~/services/ocr/candidate-format'
 import { renameCardAssetTokens } from '~/services/project/cards'
+import { normalizeRegion } from '~/services/project/format/regions'
+import { FILE_LIMITS } from '~/utils/file-limits'
 import { reconcileInlineAssetStyles } from '~/utils/inline-assets'
 import { mergeTextRegions } from '~/utils/merge-regions'
 import { splitTextRegion } from '~/utils/split-region'
@@ -315,6 +318,52 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
     history.commit({ ...current, regions }, edits, (next, effect) => publishCandidateTransition(next, effect!, 'forward'))
   }
 
+  /** 確認したアイコン位置と原文、新規領域を候補消費と同じ履歴で反映する。 */
+  function applyIconAnalysis(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], expectedCardId: string | null) {
+    const current = history.state.value
+    if (expectedCardId !== activeCardId || JSON.stringify(current) !== JSON.stringify(before))
+      throw new Error('解析後にカード・領域が変更されました。もう一度解析してください。')
+    if (new Set(proposals.map(region => region.id)).size !== proposals.length)
+      throw new Error('適用する領域が重複しています。')
+    const updates = new Map<string, TextRegion>()
+    const additions: TextRegion[] = []
+    for (const proposed of proposals) {
+      const region = structuredClone(proposed)
+      if (!normalizeRegion(region, 0) || !containsBounds({ x: 0, y: 0, width: current.imageWidth, height: current.imageHeight }, region)
+        || region.originalText.length > FILE_LIMITS.projectStringLength
+        || new Set((region.sourceIcons ?? []).map(icon => icon.id)).size !== (region.sourceIcons ?? []).length
+        || region.sourceIcons?.some(icon => !icon.assetId || !containsBounds({ x: 0, y: 0, width: region.width, height: region.height }, icon))) {
+        throw new Error('反映する領域・アイコンの範囲が不正です。')
+      }
+      const existing = current.regions.find(item => item.id === region.id)
+      if (existing) {
+        if (!sameBounds(existing, region))
+          throw new Error('既存領域の枠はこの操作では変更できません。')
+        updates.set(region.id, { ...existing, sourceIcons: region.sourceIcons ?? [], originalText: region.originalText, translationStatus: region.originalText !== existing.originalText && existing.translationStatus === 'reviewed' ? statusForTranslation(existing.translatedText) : existing.translationStatus })
+      }
+      else {
+        additions.push(region)
+      }
+    }
+    if (current.regions.length + additions.length > FILE_LIMITS.projectRegionsPerCard)
+      throw new Error('領域数の上限を超えます。')
+    const next = { ...current, regions: [...current.regions.map(region => updates.get(region.id) ?? region), ...additions] }
+    parseRegionCandidates(beforeCandidates, current.imageWidth, current.imageHeight)
+    parseRegionCandidates(afterCandidates, current.imageWidth, current.imageHeight)
+    const edits = consumedCandidateEdits(beforeCandidates, afterCandidates)
+    if (candidates && JSON.stringify(candidates.read(activeCardId).candidates) !== JSON.stringify(beforeCandidates))
+      throw new Error('解析後に領域候補が変更されました。もう一度解析してください。')
+    if (!edits.length && JSON.stringify(next) === JSON.stringify(current))
+      return
+    if (edits.length || candidates) {
+      history.commit(next, edits, (value, effect) => publishCandidateTransition(value, effect!, 'forward'))
+    }
+    else {
+      history.commit(next)
+      publishProject()
+    }
+  }
+
   /** 雛形の領域へ新しいIDを与えて現在のカードに追加する。 */
   function appendTemplateRegions(regions: readonly TextRegion[]) {
     if (!regions.length)
@@ -466,6 +515,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
     updateRegion,
     applyRegionBounds,
     applyRegionDetection,
+    applyIconAnalysis,
     appendTemplateRegions,
     splitRegion,
     mergeRegions,
