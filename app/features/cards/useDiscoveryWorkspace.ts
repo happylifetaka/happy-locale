@@ -37,6 +37,7 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
   const notice = ref('')
   const selectedId = ref<string | null>(null)
   const creation = shallowRef<AssetCreationDraft | null>(null)
+  const creationGroupId = ref<string | null>(null)
   const comparison = shallowRef<IconProposalReview | null>(null)
   const pending = shallowRef(new Map<string, CardIconProposal>())
   const digestCache = createImageDigestCache()
@@ -194,29 +195,36 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
     })
     return applied
   }
-  async function prepareRegistration() {
-    if (working.value || !selected.value)
+  async function prepareRegistration(groupId: string) {
+    if (working.value)
       return
+    const generation = runtime.projectGeneration.value
     await run(async () => {
+      const group = groups.value.find(group => group.id === groupId)
+      if (!group)
+        throw new Error('登録するグループを選んでください。')
+      await select(group.representativeId)
+      if (disposed || generation !== runtime.projectGeneration.value || selected.value?.id !== group.representativeId || !groups.value.some(current => current.id === groupId && current.representativeId === group.representativeId))
+        throw new Error('グループの代表候補を選び直してください。')
       await verify()
       const item = selected.value!
       if (item.cardId !== currentImageId.value || item.decision === 'excluded' || item.imageDigest !== imageDigest())
         throw new Error('元画像と候補を確認し、除外している場合は未確認に戻してください。')
-      const group = groups.value.find(group => group.memberIds.includes(item.id))
       creation.value = { editingAssetId: null, name: group?.name || `asset_${store.assets.length + 1}`, sourceRect: { ...item.bounds }, removeBackground: true, backgroundColor: null, backgroundThreshold: 48, edgeFeather: 12, manualMaskStrokes: [] }
+      creationGroupId.value = groupId
     })
   }
   async function register() {
     const draft = creation.value
     const id = selected.value?.id
-    if (!draft || !id || working.value)
+    const groupId = creationGroupId.value
+    if (!draft || !id || !groupId || working.value)
       return
     await run(async () => {
       await verify()
-      const group = groups.value.find(group => group.representativeId === id)
-      const result = await registration.register(id, draft, { groupId: group?.id, isCurrent: () => creation.value === draft && selectedId.value === id })
+      const result = await registration.register(id, draft, { groupId, linkGroupMembers: true, isCurrent: () => creation.value === draft && selectedId.value === id && creationGroupId.value === groupId })
       if (result) {
-        notice.value = result.warning ?? 'アセットを登録し、この候補だけに関連付けました。承認・原文への適用は別操作です。'
+        notice.value = result.warning ?? 'アセットを登録し、グループ全体に関連付けました。個別の承認・原文への適用は別操作です。'
         creation.value = null
       }
     })
@@ -253,6 +261,10 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
   }, { flush: 'sync' })
   watch(() => [currentImageId.value, runtime.cardSourceFile.value, selected.value], () => {
     creation.value = null
+  }, { flush: 'sync' })
+  watch(creation, (draft) => {
+    if (!draft)
+      creationGroupId.value = null
   }, { flush: 'sync' })
   onScopeDispose(() => {
     disposed = true

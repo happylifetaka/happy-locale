@@ -4,6 +4,7 @@ import type { IconProposalChoice } from '~/services/asset-discovery/proposal-rev
 import type { IconOccurrence } from '~/types/asset-discovery'
 import { computed, onMounted, ref, useId, watch } from 'vue'
 import AssetCreationPanel from '~/components/AssetCreationPanel.vue'
+import { groupAssetState } from '~/services/asset-discovery/group-asset'
 import DiscoveryBoundsEditor from './DiscoveryBoundsEditor.vue'
 import { useDiscoveryWorkspace } from './useDiscoveryWorkspace'
 
@@ -28,6 +29,11 @@ const groupLabels = computed(() => new Map(model.groups.value.map((group, index)
 const groupLabel = (id: string) => groupLabels.value.get(id) ?? ''
 const visibleGroups = computed(() => model.groups.value.slice(groupPage.value * groupPageSize, (groupPage.value + 1) * groupPageSize))
 const activeGroup = computed(() => model.groups.value.find(group => group.id === groupId.value))
+const groupAsset = ref('')
+const assignment = computed(() => activeGroup.value ? groupAssetState({ groups: model.groups.value, occurrences: model.occurrences.value }, activeGroup.value) : null)
+watch(() => [activeGroup.value?.id, assignment.value?.assetId, assignment.value?.needsSync], () => {
+  groupAsset.value = assignment.value?.assetId ?? ''
+}, { immediate: true })
 const filtered = computed(() => model.occurrences.value.filter(item => groupId.value === 'all' || (groupId.value === 'ungrouped' ? !model.groups.value.some(group => group.memberIds.includes(item.id)) : model.groups.value.find(group => group.id === groupId.value)?.memberIds.includes(item.id))))
 const visible = computed(() => filtered.value.slice(occurrencePage.value * 24, (occurrencePage.value + 1) * 24))
 const checkedCount = computed(() => filtered.value.filter(item => checked.value.includes(item.id)).length)
@@ -36,6 +42,7 @@ function checkAll(event: Event) {
   checked.value = (event.target as HTMLInputElement).checked ? filtered.value.map(item => item.id) : []
 }
 const selectedGroup = computed(() => model.groups.value.find(group => group.memberIds.includes(model.selectedId.value ?? '')))
+const selectedGroupAssignment = computed(() => selectedGroup.value ? groupAssetState({ groups: model.groups.value, occurrences: model.occurrences.value }, selectedGroup.value) : null)
 const currentSelection = computed(() => model.selected.value?.cardId === props.options.currentImageId.value ? model.selected.value : undefined)
 const currentImage = computed(() => props.options.runtime.cardImage.value)
 const editableCard = computed(() => model.activeCard.value)
@@ -67,7 +74,7 @@ function moveChecked() {
   if (!destination.value)
     return
   action(() => {
-    model.review.move(checked.value, destination.value === 'new' ? { kind: 'new', id: crypto.randomUUID(), name: newGroupName.value } : destination.value === 'ungrouped' ? { kind: 'ungrouped' } : { kind: 'existing', id: destination.value })
+    model.review.moveWithGroupAsset(checked.value, destination.value === 'new' ? { kind: 'new', id: crypto.randomUUID(), name: newGroupName.value } : destination.value === 'ungrouped' ? { kind: 'ungrouped' } : { kind: 'existing', id: destination.value })
     checked.value = []
   })
 }
@@ -90,6 +97,7 @@ watch(groupId, () => {
   occurrencePage.value = 0
   checked.value = []
   destination.value = ''
+  model.creation.value = null
 })
 watch(() => model.comparison.value, () => {
   diffIds.value = []
@@ -225,6 +233,22 @@ onMounted(() => dialog.value?.showModal())
           <legend>選択中のグループ</legend>
           <label>グループ名<input :key="activeGroup.id + activeGroup.name" :value="groupLabel(activeGroup.id)" @change="action(() => model.review.editGroup(activeGroup!.id, { name: ($event.target as HTMLInputElement).value.trim() }))"></label>
           <small>変更した名前はプロジェクト保存で保存されます。</small>
+          <label>グループに関連付けるアセット
+            <select v-model="groupAsset" aria-label="グループに関連付けるアセット">
+              <option value="">未割当</option>
+              <option v-for="asset in assets" :key="asset.id" :value="asset.id">{{ asset.name }}</option>
+            </select>
+          </label>
+          <p v-if="assignment?.needsSync" role="status">
+            既存の個別割当がグループと揃っていません。アセットを選んでグループ全体へ関連付けてください。
+          </p>
+          <button type="button" @click="action(() => model.review.linkGroupAsset(activeGroup!.id, groupAsset || null))">
+            グループ全体に関連付け
+          </button>
+          <button type="button" :disabled="Boolean(model.creation.value) || representative(activeGroup.representativeId)?.decision === 'excluded'" @click="model.prepareRegistration(activeGroup!.id)">
+            代表候補からグループ用アセットを登録
+          </button>
+          <small>全{{ activeGroup.memberIds.length }}候補に同じアセットを使います。割当変更で承認は解除されます。個別の承認は別操作です。</small>
         </fieldset>
         <div class="group-list" tabindex="0" aria-label="グループ一覧（スクロールできます）">
           <button v-for="group in visibleGroups" :key="group.id" type="button" :aria-pressed="groupId === group.id" @click="groupId = group.id">
@@ -257,6 +281,7 @@ onMounted(() => dialog.value?.showModal())
           <button type="button" :disabled="!checked.length || !destination" @click="moveChecked">
             選択{{ checked.length }}件を移動
           </button>
+          <small>移動すると移動先グループのアセットに揃います。未分類・新しいグループでは割当を解除します。</small>
         </fieldset>
         <label class="select-all">
           <input type="checkbox" :checked="allChecked" :indeterminate="checkedCount > 0 && !allChecked" :disabled="model.working.value || !filtered.length" @change="checkAll">
@@ -291,16 +316,14 @@ onMounted(() => dialog.value?.showModal())
             <button type="button" @click="action(() => model.review.change(currentSelection!.id, { kind: 'decision', decision: currentSelection!.decision === 'excluded' ? 'pending' : 'excluded' }))">
               {{ currentSelection.decision === 'excluded' ? '未確認に戻す' : '誤検出として除外' }}
             </button>
-            <label>関連付けるアセット
-              <select :value="currentSelection.assetId ?? ''" @change="action(() => model.review.linkAsset([currentSelection!.id], ($event.target as HTMLSelectElement).value || null))">
-                <option value="">未割当</option><option v-for="asset in assets" :key="asset.id" :value="asset.id">{{ asset.name }}</option>
-              </select>
-            </label>
-            <button type="button" :disabled="!currentSelection.assetId || currentSelection.decision === 'excluded'" @click="model.approve">
+            <p v-if="selectedGroup">
+              アセットは「{{ groupLabel(selectedGroup.id) }}」で設定します。
+            </p>
+            <p v-else>
+              アセットを使うには、先にこの候補をグループに分類してください。
+            </p>
+            <button type="button" :disabled="!selectedGroupAssignment || selectedGroupAssignment.needsSync || !currentSelection.assetId || currentSelection.decision === 'excluded'" @click="model.approve">
               この出現箇所を承認
-            </button>
-            <button type="button" :disabled="currentSelection.decision === 'excluded'" @click="model.prepareRegistration">
-              この候補から新規アセット登録
             </button>
             <template v-if="selectedGroup">
               <button type="button" @click="groupId = selectedGroup!.id">

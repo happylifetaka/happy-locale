@@ -2,6 +2,7 @@ import type { DiscoveryCard } from './collect'
 import type { AssetDiscoveryState, IconCandidateGroup, IconOccurrence } from '~/types/asset-discovery'
 import type { RegionDraft } from '~/types/editor'
 import { parseAssetDiscovery } from './format'
+import { groupAssetState } from './group-asset'
 import { approveOccurrence, containsBounds, reviseOccurrence } from './review'
 import { splitIconBounds } from './split'
 
@@ -198,6 +199,24 @@ export function linkReviewAsset(state: AssetDiscoveryState, ids: readonly string
 }
 
 export interface OccurrenceAssetChoice { occurrenceId: string, assetId: string }
+
+/** UIで指定した一つのアセットを全メンバーへ関連付ける。承認は別操作。 */
+export function linkReviewGroupAsset(state: AssetDiscoveryState, groupId: string, assetId: string | null, context: DiscoveryReviewContext): AssetDiscoveryState {
+  const group = state.groups.find(group => group.id === groupId)
+  if (!group)
+    throw new Error('関連付けるグループが見つかりません。')
+  return linkReviewAsset(state, group.memberIds, assetId, groupId, context)
+}
+
+/** グループ移動では移動先のアセットを引き継ぎ、未分類／新規グループでは解除する。 */
+export function moveReviewOccurrencesWithAsset(state: AssetDiscoveryState, ids: readonly string[], destination: ReviewGroupDestination, context: DiscoveryReviewContext): AssetDiscoveryState {
+  const target = destination.kind === 'existing' ? state.groups.find(group => group.id === destination.id) : undefined
+  const assignment = target ? groupAssetState(state, target) : { assetId: null, needsSync: false }
+  if (assignment.needsSync)
+    throw new Error('移動先グループのアセット割当が揃っていません。先にグループ全体へ関連付けてください。')
+  const next = moveReviewOccurrences(state, ids, destination, context)
+  return linkReviewAsset(next, ids, assignment.assetId, undefined, context)
+}
 
 /** 出現箇所ごとに異なる登録先を一括採用する。全件を検証し、一件でも不正なら反映しない。 */
 export function linkReviewAssetChoices(state: AssetDiscoveryState, choices: readonly OccurrenceAssetChoice[], context: DiscoveryReviewContext): AssetDiscoveryState {

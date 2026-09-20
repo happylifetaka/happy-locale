@@ -96,6 +96,20 @@ it('marks edits unsaved, preserves history on saving, and restores the original 
   expect(store.assetDiscovery!.groups[0]!.name).toBe('New name')
 })
 
+it('persists group assignment and restores group and member assignment with one undo', () => {
+  const { store, review, cardId } = fixture()
+  const second = review.add(cardId, { x: 80, y: 60, width: 20, height: 20 })
+  review.moveWithGroupAsset([second], { kind: 'existing', id: 'group-1' })
+  expect(store.assetDiscovery!.occurrences[1]!.assetId).toBe('asset-1')
+  const before = structuredClone(store.assetDiscovery)
+  review.linkGroupAsset('group-1', null)
+  expect(store.assetDiscovery!.occurrences.every(item => item.assetId === null)).toBe(true)
+  expect(review.undo()).toBe(true)
+  expect(store.assetDiscovery).toEqual(before)
+  expect(review.redo()).toBe(true)
+  expect(parseFolderProject(serializeFolderProject(store.document!)).assetDiscovery).toEqual(store.assetDiscovery)
+})
+
 it.each([false, true])('splits one occurrence with one atomic undo/redo and retains shared assets (draft=%s)', (draft) => {
   const { store, review } = fixture({ draft })
   const before = structuredClone(store.assetDiscovery)

@@ -97,6 +97,22 @@ it('registers the representative PNG through the existing pipeline, links only t
   expect(s.store.activeCard.regions).toEqual(regions)
 })
 
+it('links all group members when explicitly registering through the group UI, with one review undo', async () => {
+  const s = setup()
+  const before = structuredClone(s.store.assetDiscovery)
+  const regions = structuredClone(s.store.activeCard.regions)
+  const task = s.registration.register('occurrence-1', s.draft, { groupId: 'group-1', linkGroupMembers: true })
+  s.callbacks[0]!.finish(new Blob(['group PNG'], { type: 'image/png' }))
+  const result = (await task)!
+  expect(result.linked).toBe(true)
+  expect(s.store.assetDiscovery!.occurrences.every(item => item.assetId === result.asset.id && item.decision === 'pending' && item.approval === null)).toBe(true)
+  expect(s.store.assetDiscovery!.groups[0]!.proposedAssetId).toBe(result.asset.id)
+  expect(s.review.undo()).toBe(true)
+  expect(s.store.assetDiscovery).toEqual(before)
+  expect(s.store.assets).toContainEqual(result.asset)
+  expect(s.store.activeCard.regions).toEqual(regions)
+})
+
 it('rejects a second registration while its PNG is pending', async () => {
   const s = setup()
   const first = s.registration.register('occurrence-1', s.draft)

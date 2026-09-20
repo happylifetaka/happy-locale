@@ -46,7 +46,7 @@ export function useDiscoveryAssetRegistration({ store, runtime, currentImageId, 
   async function register(
     occurrenceId: string,
     draft: AssetCreationDraft,
-    options: { groupId?: string, isCurrent?: () => boolean } = {},
+    options: { groupId?: string, linkGroupMembers?: boolean, isCurrent?: () => boolean } = {},
   ): Promise<DiscoveryRegistrationResult | null> {
     if (disposed || busy() || pending.value)
       return null
@@ -64,6 +64,8 @@ export function useDiscoveryAssetRegistration({ store, runtime, currentImageId, 
     if (occurrence.decision === 'excluded')
       throw new Error('除外した候補は未確認に戻してから登録してください。')
     const groupId = options.groupId
+    if (options.linkGroupMembers && !groupId)
+      throw new Error('登録するグループを選んでください。')
     if (groupId && state!.groups.find(group => group.id === groupId)?.representativeId !== occurrenceId)
       throw new Error('グループの代表候補を選び直してください。')
     if (draft.editingAssetId !== null || !containsBounds({ x: 0, y: 0, width: source.naturalWidth, height: source.naturalHeight }, draft.sourceRect)
@@ -92,8 +94,9 @@ export function useDiscoveryAssetRegistration({ store, runtime, currentImageId, 
         return { asset, linked: false, warning: 'アセットは登録済みですが、対象が変わったため候補への関連付けはしていません。' }
       request.linking = true
       try {
-        // 代表の登録先だけを関連付ける。他のメンバーは承認・登録先とも変更しない。
-        review.linkAsset([occurrenceId], asset.id, groupId)
+        // グループUIでは全メンバーへ同じ登録先を反映する。個別の承認はしない。
+        const ids = options.linkGroupMembers ? state!.groups.find(group => group.id === groupId)!.memberIds : [occurrenceId]
+        review.linkAsset(ids, asset.id, groupId)
         return { asset, linked: true }
       }
       catch (error) {

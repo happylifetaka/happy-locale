@@ -8,7 +8,7 @@ import { computed, onScopeDispose, readonly, ref, shallowRef, watch } from 'vue'
 import { parseAssetDiscovery } from '~/services/asset-discovery/format'
 import { adoptIconProposal, compareIconProposal } from '~/services/asset-discovery/proposal-review'
 import { occurrenceIsApproved } from '~/services/asset-discovery/review'
-import { addManualOccurrence, editReviewGroup, linkReviewAsset, linkReviewAssetChoices, moveReviewOccurrences, reviewOccurrence, splitReviewOccurrence } from '~/services/asset-discovery/review-operations'
+import { addManualOccurrence, editReviewGroup, linkReviewAsset, linkReviewAssetChoices, linkReviewGroupAsset, moveReviewOccurrences, moveReviewOccurrencesWithAsset, reviewOccurrence, splitReviewOccurrence } from '~/services/asset-discovery/review-operations'
 
 interface DiscoveryReviewOptions {
   store: Pick<ReturnType<typeof useProjectStore>, 'assetDiscovery' | 'setAssetDiscovery'>
@@ -209,6 +209,12 @@ export function useDiscoveryReview(options: DiscoveryReviewOptions) {
     },
     linkAssetChoices(choices: readonly OccurrenceAssetChoice[]) {
       apply((state, ctx) => linkReviewAssetChoices(state, choices, ctx))
+    },
+    linkGroupAsset(groupId: string, assetId: string | null) {
+      apply((state, ctx) => linkReviewGroupAsset(state, groupId, assetId, ctx))
+    },
+    moveWithGroupAsset(ids: readonly string[], destination: ReviewGroupDestination) {
+      apply((state, ctx) => moveReviewOccurrencesWithAsset(state, ids, destination, ctx))
     },
     move(ids: readonly string[], destination: ReviewGroupDestination) {
       apply((state, ctx) => moveReviewOccurrences(state, ids, destination, ctx))
