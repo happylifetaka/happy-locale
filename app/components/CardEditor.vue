@@ -29,9 +29,9 @@ import { useTranslationReuse } from '~/composables/useTranslationReuse'
 import { useTranslationReview } from '~/composables/useTranslationReview'
 import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTranslation } from '~/features/cards/cardEditingContext'
 import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
+import { useCandidateReview } from '~/features/cards/useCandidateReview'
 import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
 import { useProjectActivity } from '~/features/cards/useProjectActivity'
-import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import {
@@ -39,7 +39,6 @@ import {
 import {
   supportsFolderProjects,
 } from '~/services/project/folder'
-import { resolveSampleCandidates } from '~/services/project/sample'
 import { useProjectStore } from '~/stores/project'
 import { readImageDpi } from '~/utils/image-dpi'
 import { historyShortcut } from '~/utils/keyboard'
@@ -460,6 +459,26 @@ const {
   applyPrintAreaToUnconfiguredCards,
 } = useEditorPrintSettings({ projectStore, activeCardId, setMessage })
 
+const candidateReview = useCandidateReview({
+  currentImageId,
+  activeProjectCard,
+  regionCandidates,
+  selectedCandidateId,
+  regionCandidateEditHistory,
+  cardPreviewMode,
+  batchOCRResults,
+  batchOCRStates,
+  editor,
+  updateBatchOCRResult,
+  finishBatchOCRReview,
+  clearRegionCandidates,
+  switchInspectorTab,
+  backgroundColorForBounds: bounds => canvasApi.value?.backgroundColorForBounds(bounds) ?? '#ffffff',
+  setMessage,
+  logDiagnostic,
+})
+const { discardRegionCandidates, confirmRegionCandidates } = candidateReview
+
 /** エラーや補足データを診断ログ用の文字列へ変換する。 */
 function diagnosticDetails(value: unknown): string | undefined {
   if (value === undefined)
@@ -540,95 +559,13 @@ function setMessage(value: string) {
   }, 4000)
 }
 
-/** 調整中の候補と選択状態をカード別に退避し、別カードの確認から戻れるようにする。 */
+/** 初期化時に相互参照する操作は、実行時に同じレビューインスタンスへ渡す。 */
 function persistDisplayedBatchCandidates() {
-  updateBatchOCRResult(currentImageId.value, regionCandidates.value)
+  candidateReview.persistDisplayedBatchCandidates()
 }
 
-/** 指定カードに退避した領域候補を確認画面へ戻す。 */
 function showBatchOCRCandidates(cardId: string) {
-  const candidates = batchOCRResults.value.get(cardId)
-  if (!candidates)
-    return false
-  regionCandidates.value = cloneRegionCandidates(candidates)
-  selectedCandidateId.value = null
-  regionCandidateEditHistory.value = []
-  editor.selectedRegionId.value = null
-  cardPreviewMode.value = 'original'
-  switchInspectorTab('ocr')
-  return true
-}
-
-/** 領域候補を追加せず破棄し、一括OCRの確認状態を進める。 */
-function discardRegionCandidates() {
-  const reviewedCardId = batchOCRStates.value.get(currentImageId.value)?.status
-    === 'review'
-    ? currentImageId.value
-    : null
-  logDiagnostic('領域候補を破棄しました', {
-    candidates: regionCandidates.value.length,
-    selected: regionCandidates.value.filter(candidate => candidate.selected)
-      .length,
-    history: regionCandidateEditHistory.value.length,
-  })
-  clearRegionCandidates()
-  if (reviewedCardId)
-    finishBatchOCRReview(reviewedCardId)
-}
-
-/** 選んだ候補だけを編集領域へ確定する。サンプルでは用意済みの原文と設定を対応付ける。 */
-function confirmRegionCandidates() {
-  const selected = regionCandidates.value.filter(candidate => candidate.selected)
-  if (selected.length === 0) {
-    setMessage('追加する領域候補を選択してください。')
-    return
-  }
-  let sampleCandidates: TextRegion[] | null = null
-  try {
-    if (activeProjectCard.value)
-      sampleCandidates = resolveSampleCandidates(activeProjectCard.value, selected)
-  }
-  catch (error) {
-    setMessage(error instanceof Error ? error.message : 'デモ候補を表示し直してください。')
-    return
-  }
-  if (sampleCandidates) {
-    const reviewedCardId = batchOCRStates.value.get(currentImageId.value)?.status === 'review' ? currentImageId.value : null
-    editor.appendTemplateRegions(sampleCandidates)
-    clearRegionCandidates()
-    switchInspectorTab('text')
-    setMessage('原文・アイコン・ルビ設定を追加しました。「未翻訳をまとめて取得」で日本語訳を一括確認できます。')
-    if (reviewedCardId)
-      finishBatchOCRReview(reviewedCardId)
-    return
-  }
-  editor.addRegions(
-    selected.map(candidate => ({
-      bounds: {
-        x: candidate.x,
-        y: candidate.y,
-        width: candidate.width,
-        height: candidate.height,
-      },
-      backgroundColor:
-        canvasApi.value?.backgroundColorForBounds(candidate) ?? '#ffffff',
-      originalText: candidate.text,
-    })),
-  )
-  const count = selected.length
-  const reviewedCardId = batchOCRStates.value.get(currentImageId.value)?.status
-    === 'review'
-    ? currentImageId.value
-    : null
-  logDiagnostic('領域候補を通常領域へ追加しました', {
-    added: count,
-    discarded: regionCandidates.value.length - count,
-    history: regionCandidateEditHistory.value.length,
-  })
-  clearRegionCandidates()
-  setMessage(`${count}件の領域を追加しました。`)
-  if (reviewedCardId)
-    finishBatchOCRReview(reviewedCardId)
+  return candidateReview.showBatchOCRCandidates(cardId)
 }
 
 /** 読み込み済みカード画像を表示用runtimeへ採用する。 */

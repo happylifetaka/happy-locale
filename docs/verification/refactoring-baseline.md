@@ -85,3 +85,14 @@ mise exec -- pnpm exec playwright test --config playwright.performance.config.ts
 | SPA遷移で画面を離れた後 | 1 | 0 | 0 | 22,336,788 bytes |
 
 既存問題: Tesseract 7の`src/worker/browser/spawnWorker.js`はWorker用Blob URLを生成し、今回の計測ではterminate後も1件残る。アプリ画像URLは解放されている。テストではWorker由来URLを区別して1件の残存を明示的に固定した。P5で対応した際はこの基準を0へ更新する。これを「全資源の解放成功」とは扱わない。JS heapにはNuxt/Viteのキャッシュや履歴等も含まれるため、単一試行の増減だけでリークとは断定しない。
+
+## P1-a: 候補レビュー操作の抽出
+
+`app/features/cards/useCandidateReview.ts`へ復元・退避・確定・破棄を移した。既存の判定順・メッセージ・履歴・次カードへの進行順は維持する。親画面には生成と相互参照用の遅延委譲を残し、初期化前に別のレビューインスタンスを生成しない。
+
+- 新しい単体4件で、作業コピーの深い独立、カードID参照、選択済みだけの確定とUndo、空選択・デモ解決エラー時の保持、破棄後の進行順を確認。
+- 関連5ファイル27件成功。候補保存・一括OCR・候補編集・P0 snapshotを含む。
+- Chromiumでカード画面7件と翻訳レビュー1件、計8件成功。
+- 型検査・対象ESLint・`git diff --check`成功。
+- `NUXT_APP_BASE_URL=/happy-locale-public/`で`build:static`成功、静的出力62ファイルの検査成功。
+- 実フォルダの手動操作とP1全体の残項目は未完了。OCRアルゴリズム・保存形式・プロファイルUIは変更していない。
