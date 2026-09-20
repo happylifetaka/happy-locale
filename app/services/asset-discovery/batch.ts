@@ -7,7 +7,7 @@ import { ASSET_DISCOVERY_LIMITS } from './format'
 import { proposeIconGroups } from './group'
 import { DEFAULT_ICON_DISCOVERY_SETTINGS } from './types'
 
-interface IconDiscoveryBatchOptions {
+export interface IconDiscoveryBatchOptions {
   cards: readonly DiscoveryCard[]
   provider: OCRProvider
   loadFile: (card: DiscoveryCard) => Promise<File>
@@ -16,17 +16,17 @@ interface IconDiscoveryBatchOptions {
   cancelled: () => boolean
   onCard: (proposal: CardIconProposal) => void
   onError: (cardId: string, message: string) => void
-  /** 既存候補を含むプロジェクト上限から、呼出元が空き件数を渡す。 */
-  availableCandidates: number
+  /** この実行で保持する提案の上限。既存候補との差分も含み、保存時の空き件数とは別。 */
+  maximumProposedCandidates: number
   settings?: Readonly<IconDiscoverySettings>
 }
 
 /** 一枚ずつ解析し、完了した提案だけ渡す。Store更新・既存候補の置換・自動承認は行わない。 */
 export async function collectIconDiscoveryBatch(options: IconDiscoveryBatchOptions) {
-  const { provider, loadFile, isCurrent, cardIsCurrent, cancelled, onCard, onError, availableCandidates } = options
-  if (!Number.isSafeInteger(availableCandidates) || availableCandidates < 0 || availableCandidates > ASSET_DISCOVERY_LIMITS.project
+  const { provider, loadFile, isCurrent, cardIsCurrent, cancelled, onCard, onError, maximumProposedCandidates } = options
+  if (!Number.isSafeInteger(maximumProposedCandidates) || maximumProposedCandidates < 0 || maximumProposedCandidates > ASSET_DISCOVERY_LIMITS.project
     || options.cards.length > 10000 || new Set(options.cards.map(card => card.id)).size !== options.cards.length) {
-    throw new Error('アイコン収集の対象・空き件数が不正です。')
+    throw new Error('アイコン収集の対象・提案件数上限が不正です。')
   }
   const cards = structuredClone(options.cards)
   const settings = { ...(options.settings ?? DEFAULT_ICON_DISCOVERY_SETTINGS) }
@@ -34,7 +34,7 @@ export async function collectIconDiscoveryBatch(options: IconDiscoveryBatchOptio
   const failures: Array<{ cardId: string, message: string }> = []
   const staleCardIds: string[] = []
   const digestCache = createImageDigestCache()
-  let remaining = availableCandidates
+  let remaining = maximumProposedCandidates
   let limitReached = false
   try {
     for (const card of cards) {

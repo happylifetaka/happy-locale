@@ -23,7 +23,7 @@ function options() {
     cancelled: () => false,
     onCard: vi.fn(),
     onError: vi.fn(),
-    availableCandidates: 2000,
+    maximumProposedCandidates: 2000,
   }
 }
 
@@ -106,9 +106,9 @@ it('takes immutable card snapshots and does not report late errors after the pro
   expect(input.onError).not.toHaveBeenCalled()
 })
 
-it('respects project free slots and never starts a card when no slots remain', async () => {
+it('respects the temporary proposal budget and never starts a card when no slots remain', async () => {
   const input = options()
-  input.availableCandidates = 1
+  input.maximumProposedCandidates = 1
   const output = await collectIconDiscoveryBatch(input)
   expect(vi.mocked(collectCardIconCandidates).mock.calls[0]![0].settings!.maximumCandidates).toBe(1)
   expect(output.limitReached).toBe(true)
