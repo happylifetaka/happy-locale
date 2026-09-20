@@ -162,6 +162,7 @@ export async function recognizeSourceIconOCR(draft: SourceIconOCRDraft, { image,
   try {
     if (!isCurrent())
       return null
+    assertImageDimensions(Math.max(1, Math.round(draft.region.width)) * 3 + 24, Math.max(1, Math.round(draft.region.height)) * 3 + 24, '再OCR画像')
     const blob = await prepareRegionForOCR(image, draft.region, { scale: 3, padding: 12, exclusions: [...draft.region.exclusionAreas, ...(draft.region.sourceIcons ?? [])] })
     if (!isCurrent())
       return null

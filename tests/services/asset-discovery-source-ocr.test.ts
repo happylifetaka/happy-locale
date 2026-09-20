@@ -162,6 +162,16 @@ describe('approved icon OCR working copy', () => {
 })
 
 describe('source OCR and explicit application', () => {
+  it('rejects an oversized scaled OCR image before allocating its Canvas', async () => {
+    const s = setup()
+    s.context.card.imageWidth = 20000
+    s.context.card.regions[0]!.width = 12000
+    s.context.occurrences[0]!.imageSize.width = 20000
+    await expect(recognizeSourceIconOCR(s.prepare(), s.options)).rejects.toThrow('再OCR画像')
+    expect(prepareRegionForOCR).not.toHaveBeenCalled()
+    expect(s.provider.recognize).not.toHaveBeenCalled()
+  })
+
   it('masks working icons plus exclusions and reconstructs local word positions without string replacement', async () => {
     const s = setup()
     const before = JSON.stringify(s.editor.project.value)

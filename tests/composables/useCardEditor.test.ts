@@ -12,6 +12,26 @@ function card(imageName: string): CardProject {
 }
 
 describe('card editor project synchronization', () => {
+  it('rejects a guarded edit for another card before changing state, history, or persistence', () => {
+    const onChange = vi.fn()
+    const editor = useCardEditor(onChange)
+    editor.loadSavedProject(card('same.png'), 'actual-card')
+    editor.addRegion({ x: 1, y: 2, width: 30, height: 20 }, '#ffffff')
+    const before = editor.project.value
+    editor.loadSavedProject(before, 'actual-card')
+    onChange.mockClear()
+    const id = editor.project.value.regions[0]!.id
+    expect(() => editor.updateRegion(id, { originalText: 'Wrong card' }, 'other-card')).toThrow('編集中のカード')
+    expect(() => editor.updateRegion(id, { originalText: 'Wrong draft' }, null)).toThrow('編集中のカード')
+    expect(editor.project.value).toEqual(before)
+    expect(editor.canUndo.value).toBe(false)
+    expect(onChange).not.toHaveBeenCalled()
+    editor.updateRegion(id, { originalText: 'Correct' }, 'actual-card')
+    expect(onChange).toHaveBeenCalledOnce()
+    editor.undo()
+    expect(editor.project.value).toEqual(before)
+  })
+
   it('applies a batch of translations in one undo step and leaves other translations intact', () => {
     const editor = useCardEditor()
     editor.loadSavedProject(card('demo.png'), 'demo')

@@ -195,7 +195,9 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
   }
 
   /** 指定領域の変更を履歴へ確定し、文字列変更時の書式も調整する。 */
-  function updateRegion(id: string, patch: Partial<TextRegion>) {
+  function updateRegion(id: string, patch: Partial<TextRegion>, expectedCardId: string | null = activeCardId) {
+    if (expectedCardId !== activeCardId)
+      throw new Error('編集中のカードが変わりました。対象を選び直してください。')
     history.commit({
       ...history.state.value,
       regions: history.state.value.regions.map(region =>

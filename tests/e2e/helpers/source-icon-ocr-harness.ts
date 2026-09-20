@@ -1,10 +1,11 @@
-import type { SourceIconOCRContext } from '../../../app/services/asset-discovery/source-ocr'
 import type { TextRegion } from '../../../app/types/editor'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
+import { effectScope } from 'vue'
 import { useCardEditor } from '../../../app/composables/useCardEditor'
+import { useProjectRuntime } from '../../../app/composables/useProjectRuntime'
+import { useDiscoverySourceOCR } from '../../../app/features/cards/useDiscoverySourceOCR'
 import { createImageDigestCache } from '../../../app/services/asset-discovery/digest'
 import { approveOccurrence } from '../../../app/services/asset-discovery/review'
-import { prepareSourceIconOCR, recognizeSourceIconOCR, sourceIconOCRPatch } from '../../../app/services/asset-discovery/source-ocr'
 import { TesseractOCRProvider } from '../../../app/services/ocr/tesseract'
 import { serializeFolderProject } from '../../../app/services/project/format'
 import { useProjectStore } from '../../../app/stores/project'
@@ -15,6 +16,8 @@ import { baselineProject } from '../../fixtures/refactoring-baseline'
 export async function runSourceIconOCRScenario() {
   const previousPinia = getActivePinia()
   const store = useProjectStore(createPinia())
+  const runtime = useProjectRuntime()
+  const effect = effectScope()
   const digest = createImageDigestCache()
   const provider = new TesseractOCRProvider('/')
   const source = document.createElement('canvas')
@@ -42,6 +45,9 @@ export async function runSourceIconOCRScenario() {
     const assetPNG = await png(asset)
     const imageDigest = await digest.digest(file)
     const assetDigest = await digest.digest(assetPNG)
+    runtime.cardSourceFile.value = file
+    runtime.assetFiles.value = new Map([['gem', new Blob(['old saved PNG'])]])
+    runtime.setPendingAssetWrite('gem', assetPNG)
     bitmap = await createImageBitmap(file)
     const project = baselineProject()
     project.cards[0]!.imageWidth = source.width
@@ -69,10 +75,24 @@ export async function runSourceIconOCRScenario() {
     }, imageDigest, assetDigest)
     store.setAssetDiscovery({ occurrences: [occurrence], groups: [] })
     editor.loadSavedProject(editor.project.value, project.activeCardId)
-    const scope = { session: Symbol('source-ocr-test'), revision: 0 }
-    let active = true
-    const context = (): SourceIconOCRContext => ({ card: store.document!.cards[0]!, occurrences: store.document!.assetDiscovery!.occurrences, assets: store.document!.assets, imageDigest, assetDigests: new Map([['gem', assetDigest]]) })
-    const current = () => active ? { context: context(), scope } : null
+    let cancelAfterOCR = false
+    let missingWords = false
+    let progressCount = 0
+    const controller = effect.run(() => useDiscoverySourceOCR({
+      store,
+      runtime,
+      editor,
+      target: () => ({ card: store.document!.cards[0]!, regionId, editorCardId: project.activeCardId }),
+      onProgress: () => progressCount++,
+      getProvider: async () => ({ recognize: async (image, options) => {
+        if (missingWords)
+          return { text: 'No coordinates', confidence: 90, blocks: [] }
+        const result = await provider.recognize(image, options)
+        if (cancelAfterOCR)
+          controller.cancel()
+        return result
+      } }),
+    }))!
     const saved = () => serializeFolderProject(store.snapshot()!)
     const rendered = (regions: readonly TextRegion[] = editor.project.value.regions) => {
       renderCard(output.getContext('2d')!, bitmap!, 600, 240, regions, store.document!.assets, new Map([['gem', asset]]))
@@ -81,15 +101,15 @@ export async function runSourceIconOCRScenario() {
     const before = saved()
     const assetsBefore = JSON.stringify(store.document!.assets)
     const beforeImage = rendered()
-    const draft = prepareSourceIconOCR(context(), regionId, ['synthetic-icon'], scope)
-    let progressCount = 0
-    const preview = await recognizeSourceIconOCR(draft, { image: bitmap, provider, current, onProgress: () => progressCount++ })
+    const draft = await controller.prepare(['synthetic-icon'])
+    if (!draft)
+      throw new Error('Unexpectedly cancelled source preparation')
+    const preview = await controller.recognize(draft)
     if (!preview)
       throw new Error('Unexpectedly cancelled source OCR')
     const previewDidNotWrite = saved() === before && rendered() === beforeImage && !editor.canUndo.value
-    const patch = sourceIconOCRPatch(context(), preview, scope)
-    const proposedImage = rendered([{ ...editor.project.value.regions[0]!, ...patch }])
-    editor.updateRegion(regionId, patch)
+    const proposedImage = rendered([{ ...editor.project.value.regions[0]!, sourceIcons: preview.draft.region.sourceIcons, originalText: preview.originalText }])
+    controller.apply(preview)
     const after = saved()
     const afterImage = rendered()
     const applied = store.snapshot()!
@@ -98,19 +118,15 @@ export async function runSourceIconOCRScenario() {
     editor.redo()
     const redoRestoredAll = saved() === after && rendered() === afterImage
 
-    const cancelledDraft = prepareSourceIconOCR(context(), regionId, ['synthetic-icon'], scope)
-    const cancelled = await recognizeSourceIconOCR(cancelledDraft, { image: bitmap, current, provider: {
-      recognize: async (image, options) => {
-        const result = await provider.recognize(image, options)
-        active = false
-        return result
-      },
-    } })
-    const cancelledWithoutWrite = cancelled === null && saved() === after && rendered() === afterImage
-    active = true
+    const cancelledDraft = (await controller.prepare(['synthetic-icon']))!
+    cancelAfterOCR = true
+    const cancelled = await controller.recognize(cancelledDraft)
+    const cancelledWithoutWrite = cancelled === null && controller.draft.value === null && controller.preview.value === null && !controller.running.value && saved() === after && rendered() === afterImage
+    cancelAfterOCR = false
+    missingWords = true
     let missingWordsRefused = false
     try {
-      await recognizeSourceIconOCR(prepareSourceIconOCR(context(), regionId, ['synthetic-icon'], scope), { image: bitmap, current, provider: { recognize: async () => ({ text: 'No coordinates', confidence: 90, blocks: [] }) } })
+      await controller.recognize((await controller.prepare(['synthetic-icon']))!)
     }
     catch {
       missingWordsRefused = true
@@ -134,6 +150,8 @@ export async function runSourceIconOCRScenario() {
     }
   }
   finally {
+    effect.stop()
+    runtime.dispose()
     bitmap?.close()
     source.width = source.height = asset.width = asset.height = output.width = output.height = 1
     digest.clear()
