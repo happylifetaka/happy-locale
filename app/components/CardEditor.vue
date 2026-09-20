@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { DiagnosticEntry } from './DiagnosticsDialog.vue'
 import type { RuntimeLoadedImage } from '~/composables/useProjectRuntime'
 import type { OpenedFolderProject } from '~/composables/useProjectSession'
 import type {
@@ -31,17 +30,17 @@ import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTr
 import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
 import { useCandidateReview } from '~/features/cards/useCandidateReview'
 import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
+import { useEditorDiagnostics } from '~/features/cards/useEditorDiagnostics'
+import { useEditorHistoryShortcuts } from '~/features/cards/useEditorHistoryShortcuts'
+import { useEditorNotifications } from '~/features/cards/useEditorNotifications'
 import { useProjectActivity } from '~/features/cards/useProjectActivity'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
-import {
-} from '~/services/project/cards'
 import {
   supportsFolderProjects,
 } from '~/services/project/folder'
 import { useProjectStore } from '~/stores/project'
 import { readImageDpi } from '~/utils/image-dpi'
-import { historyShortcut } from '~/utils/keyboard'
 import { fitsImage } from '~/utils/layout-template'
 import { savedProjectSignature } from '~/utils/project-save'
 import DiagnosticsDialog from './DiagnosticsDialog.vue'
@@ -88,6 +87,9 @@ const lastSavedProjectSignature = ref<string | null>(null)
 /** 現在編集中のカード画像を識別するID。 */
 const currentImageId = ref<string>(crypto.randomUUID())
 let editorDisposed = false
+/** 通知と診断はエディター単位で所有し、保存データへ混ぜない。 */
+const { message, setMessage } = useEditorNotifications()
+const { diagnostics, logDiagnostic, clearDiagnostics } = useEditorDiagnostics()
 /** 画像の検証・デコード・未採用資源の解放。 */
 const { loadImage } = useEditorImageLoading({
   isActive: () => !editorDisposed,
@@ -119,8 +121,6 @@ const assetEditing = ref(false)
 const currentView = ref<'card' | 'assets' | 'print'>('card')
 /** 配置雛形ダイアログの保存・適用モード。nullなら閉じている。 */
 const layoutTemplateMode = ref<'capture' | 'apply' | null>(null)
-/** 操作結果や失敗理由を画面へ通知するメッセージ。 */
-const message = ref('')
 /** 単一・全体・一括OCRで共有する実行状態。 */
 const ocrRunning = ref(false)
 /** カード画面の表示状態・選択・領域操作は同一の窓口を使う。 */
@@ -140,8 +140,6 @@ const { canvasApi, inspectorTab, switchInspectorTab, maskEditing, exclusionEditi
 const assetZoom = ref(100)
 /** ブラウザがフォルダへの読み書きに対応しているか。 */
 const folderProjectsSupported = ref(false)
-/** 操作経過とエラーを記録した診断ログ。 */
-const diagnostics = ref<DiagnosticEntry[]>([])
 /** 診断ログの表示欄を開いているか。 */
 const diagnosticsOpen = ref(false)
 /** ブラウザ内で英語OCRを実行するWorkerの管理窓口。 */
@@ -479,57 +477,14 @@ const candidateReview = useCandidateReview({
 })
 const { discardRegionCandidates, confirmRegionCandidates } = candidateReview
 
-/** エラーや補足データを診断ログ用の文字列へ変換する。 */
-function diagnosticDetails(value: unknown): string | undefined {
-  if (value === undefined)
-    return undefined
-  if (value instanceof Error)
-    return `${value.name}: ${value.message}`
-  try {
-    return JSON.stringify(value)
-  }
-  catch {
-    return String(value)
-  }
-}
+useEditorHistoryShortcuts({
+  enabled: () => !projectBusy.value && currentView.value === 'card',
+  undo: editor.undo,
+  redo: editor.redo,
+})
 
-/** 操作名・詳細・重要度を診断ログへ追加する。 */
-function logDiagnostic(
-  message: string,
-  details?: unknown,
-  level: 'info' | 'error' = 'info',
-) {
-  const entry: DiagnosticEntry = {
-    time: new Date().toLocaleTimeString('ja-JP'),
-    message,
-    details: diagnosticDetails(details),
-    level,
-  }
-  diagnostics.value = [...diagnostics.value.slice(-49), entry]
-  const logger = level === 'error' ? console.error : console.warn
-  logger(`[HappyLocale] ${message}`, details ?? '')
-}
-
-/** ダイアログ表示中や入力欄の履歴操作を除外してから、カードのUndo／Redoへ渡す。 */
-function handleEditorKeydown(event: KeyboardEvent) {
-  if (projectBusy.value)
-    return
-  if (currentView.value !== 'card')
-    return
-  const modalOpen = Boolean(document.querySelector('dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]'))
-  const shortcut = historyShortcut(event, modalOpen)
-  if (!shortcut)
-    return
-  event.preventDefault()
-  if (shortcut === 'undo')
-    editor.undo()
-  else
-    editor.redo()
-}
-
-// キーボード操作とブラウザ機能の確認を開始し、必要ならサンプルを開く。
+// ブラウザ機能を確認し、必要ならサンプルを開く。
 onMounted(() => {
-  window.addEventListener('keydown', handleEditorKeydown)
   folderProjectsSupported.value = supportsFolderProjects()
   logDiagnostic('アプリを初期化しました', {
     folderProjectsSupported: folderProjectsSupported.value,
@@ -539,25 +494,15 @@ onMounted(() => {
     void openProject(true)
 })
 
-// 画面終了時にタイマー・イベント・画像・フォント・OCRのリソースを解放する。
+// 通知・キーイベントは各composableが解放し、ここでは共有runtimeとOCRを終了する。
 onBeforeUnmount(() => {
   editorDisposed = true
-  window.removeEventListener('keydown', handleEditorKeydown)
   projectRuntime.dispose()
   projectStore.clearProject()
   void ocrProvider.dispose?.().catch(error =>
     logDiagnostic('OCR Workerの終了に失敗しました', error, 'error'),
   )
 })
-
-/** 画面の操作結果メッセージを更新する。 */
-function setMessage(value: string) {
-  message.value = value
-  window.setTimeout(() => {
-    if (message.value === value)
-      message.value = ''
-  }, 4000)
-}
 
 /** 初期化時に相互参照する操作は、実行時に同じレビューインスタンスへ渡す。 */
 function persistDisplayedBatchCandidates() {
@@ -1161,7 +1106,7 @@ provideCardTranslation({
       v-if="diagnosticsOpen"
       :entries="diagnostics"
       @close="diagnosticsOpen = false"
-      @clear="diagnostics = []"
+      @clear="clearDiagnostics"
     />
     <DataPrivacyFooter />
   </div>

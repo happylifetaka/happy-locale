@@ -1,6 +1,6 @@
 # HappyLocale アーキテクチャ
 
-最終更新: 2026-09-17
+最終更新: 2026-09-20
 
 この文書は現在の実装を説明します。Pinia移行時の設計背景は[アーカイブの設計記録](archive/DESIGN.md)、今後の機能計画は[ロードマップ](ROADMAP.md)を参照してください。
 
@@ -58,6 +58,8 @@ PDF編集はversion付きの専用サイドカーJSONへ解析結果、翻訳、
 `cardEditingContext.ts`は編集・描画資源・OCR・翻訳の用途別に型付きのprovide/injectを定義します。親で作った同じインスタンスを共有し、保存・資源解放などのAPIは子へ公開しません。原文アイコン確認の`useSourceIcons`はWorkspaceで生成し、その配下だけへ共有します。
 
 `useCandidateReview`は候補の作業コピーの復元・退避・確定・破棄を担当します。候補検出・編集履歴の所有は`useRegionCandidates`、カード別候補の保存と次カードへのレビュー進行は既存のStore・一括OCR側に残します。Canvasは背景色を取得する関数だけを渡し、レビュー操作はWorker・Canvas資源・フォルダI/Oを所有しません。
+
+診断は`useEditorDiagnostics`が画面ごとに直近50件を保持し、表示用の型は`types/diagnostics.ts`で共有します。`useEditorNotifications`は既存の通知期限を維持し、スコープ終了時にタイマーを全解除します。`useEditorHistoryShortcuts`はマウント中だけキーイベントを購読し、処理中・別画面・入力欄・モーダルの履歴操作を横取りしません。これらの状態は保存文書へ含めません。
 
 PDF専用UIとcomposable、その単体テストは`app/features/pdf/`へまとめています。複数機能が使う部品・サービス・型は共通配置に残し、親画面との接続テストとE2Eは`tests/`へ置きます。既存のカード操作別composableは`app/composables/`にあり、すべての機能をコロケーション済みという意味ではありません。
 

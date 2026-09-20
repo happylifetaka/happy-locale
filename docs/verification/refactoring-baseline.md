@@ -96,3 +96,13 @@ mise exec -- pnpm exec playwright test --config playwright.performance.config.ts
 - 型検査・対象ESLint・`git diff --check`成功。
 - `NUXT_APP_BASE_URL=/happy-locale-public/`で`build:static`成功、静的出力62ファイルの検査成功。
 - 実フォルダの手動操作とP1全体の残項目は未完了。OCRアルゴリズム・保存形式・プロファイルUIは変更していない。
+
+## P1-b: 診断・通知・ショートカットの抽出
+
+診断ログの直近50件・詳細文字列化・consoleへの出力を`useEditorDiagnostics`へ、通知を`useEditorNotifications`へ、カードのUndo/Redoキー購読を`useEditorHistoryShortcuts`へ移した。診断の型はVueコンポーネントから独立させた。
+
+- 表示中の通知は従来通り、各通知から4秒後に同じ文言なら消える。同文言の連続通知で期限を延長する変更は行っていない。
+- 通知タイマーはスコープ終了時に全解除し、終了後の遅延通知は受け付けない。キーイベントもアンマウント時に解除する。
+- 新規8件でログの独立・上限・文字列化、通知期限・破棄、キー購読・入力欄・モーダルを確認。既存の親画面接続・純粋キー判定と合わせて6ファイル30件成功。
+- 型検査・対象ESLint・`git diff --check`成功。Chromiumのカード画面E2E7件成功。
+- 保存形式・OCR結果・公開UIは変更していない。今回は静的生成・実フォルダ手動操作は再実行していない。
