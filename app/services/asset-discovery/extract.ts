@@ -3,6 +3,7 @@ import type { PixelRegion } from '~/services/ocr/pixel-regions'
 import type { RegionDraft } from '~/types/editor'
 import type { OCRTextBlock } from '~/types/ocr'
 import { pixelComponents } from '~/services/ocr/pixel-regions'
+import { avoidAdjacentText } from './adjacent-text'
 import { clipBounds, intersectionArea, validBounds } from './geometry'
 import { chooseIconOutline } from './outline'
 import { DEFAULT_ICON_DISCOVERY_SETTINGS } from './types'
@@ -161,6 +162,13 @@ export function extractIconCandidates(
     const center = glyphs.length >= 4
       ? median(glyphs.map(c => area.y + c.y + c.height / 2), line.y + line.height / 2)
       : median(parts.map(word => word.y + word.height / 2), line.y + line.height / 2)
+    // 数字とアイコンが一つのOCR単語でも、本文高・基準位置に合う独立した字形は残す。
+    // OCR文字列だけでアイコンを除外せず、枠の外側に大部分がある字形に限って後段で使う。
+    const textWords = measured.words.slice(0, 10000).filter(word => validBounds(word) && (word.confidence ?? 0) >= 65 && /[a-z0-9]/iu.test(word.text))
+    const adjacentGlyphs = contrastParts.filter(c => c.height >= typical * 0.65 && c.height <= typical * 1.25
+      && c.width <= typical * 1.25 && Math.abs(area.y + c.y + c.height / 2 - center) <= typical * 0.35)
+      .map(c => ({ x: c.x + area.x, y: c.y + area.y, width: c.width, height: c.height }))
+      .filter(c => textWords.some(word => intersectionArea(c, word) / (c.width * c.height) >= 0.8))
     const outline = [
       pixelComponents(closeGaps(contrast.map((pixel, p) => pixel || colored[p]!), area.width, area.height), area.width, area.height),
       pixelComponents(closeGaps(outer, area.width, area.height), area.width, area.height),
@@ -173,6 +181,7 @@ export function extractIconCandidates(
         if (!sizedIcon(component, typical, reason === 'colored-component'))
           continue
         let bounds: RegionDraft = { ...component, x: component.x + area.x, y: component.y + area.y }
+        const seed = bounds
         if (bounds.y + bounds.height <= center - typical * 0.4 || bounds.y >= center + typical * 0.4)
           continue
         // 色の付いた中心だけでなく、その中心を囲む明暗輪郭が孤立していれば回収する。
@@ -186,7 +195,9 @@ export function extractIconCandidates(
         // 高信頼度の通常単語を切り抜きに含めない。単一の誤認識記号はここで除外しない。
         if (protectedWords.some(word => intersectionArea(bounds, word) / (bounds.width * bounds.height) > 0.2))
           continue
-        const candidate: DiscoveredIcon = { bounds: padded(bounds, Math.max(1, typical * 0.06), width, height), reason, lineIndex }
+        // 薄い外周による補完は必須範囲として保ち、文字回避でその輪郭まで削らない。
+        const protectedSeed = enclosing && enclosing === enclosingOptions[1] ? bounds : seed
+        const candidate: DiscoveredIcon = { bounds: avoidAdjacentText(padded(bounds, Math.max(1, typical * 0.06), width, height), protectedSeed, adjacentGlyphs), reason, lineIndex }
         const duplicate = result.icons.find(icon => intersectionArea(icon.bounds, candidate.bounds)
           / Math.min(icon.bounds.width * icon.bounds.height, candidate.bounds.width * candidate.bounds.height) >= 0.3)
         if (duplicate) {

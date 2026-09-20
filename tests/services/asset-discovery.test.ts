@@ -77,6 +77,38 @@ describe('icon discovery from measured text and pixels', () => {
       .toEqual([{ x: 123, y: 128, width: 56, height: 46 }])
   })
 
+  it.each(['left', 'right', 'both'] as const)('avoids an adjacent number on the %s without cutting the icon seed', (side) => {
+    const s = scene()
+    s.rect(140, 133, 30, 34, [180, 180, 180, 255])
+    s.rect(144, 137, 22, 26, [30, 180, 40, 255])
+    // A small colored fragment above the number is joined to the outline by gap closing.
+    // The number itself is a separate component; the inflated rectangle still covers its edge.
+    if (side !== 'right') {
+      s.rect(136, 135, 3, 5, [30, 180, 40, 255])
+      s.rect(127, 146, 10, 16, [230, 230, 230, 255])
+    }
+    if (side !== 'left') {
+      s.rect(172, 135, 3, 5, [30, 180, 40, 255])
+      s.rect(173, 146, 10, 16, [230, 230, 230, 255])
+    }
+    s.measured.words.push({ x: 127, y: 133, width: 56, height: 34, text: '2O2', confidence: 90 })
+    const original = s.data.slice()
+    const result = extractIconCandidates(s.data, s.width, s.height, s.measured)
+    expect(result.icons.map(icon => icon.bounds)).toEqual([{ x: 138, y: 131, width: 34, height: 38 }])
+    expect(s.data).toEqual(original)
+  })
+
+  it('does not trim adjacent components without reliable OCR evidence of text', () => {
+    const s = scene()
+    s.rect(140, 133, 30, 34, [180, 180, 180, 255])
+    s.rect(144, 137, 22, 26, [30, 180, 40, 255])
+    s.rect(136, 135, 3, 5, [30, 180, 40, 255])
+    s.rect(127, 146, 10, 16, [230, 230, 230, 255])
+    s.measured.words.push({ x: 127, y: 133, width: 56, height: 34, text: '2O2', confidence: 20 })
+    expect(extractIconCandidates(s.data, s.width, s.height, s.measured).icons.map(icon => icon.bounds))
+      .toEqual([{ x: 134, y: 131, width: 38, height: 38 }])
+  })
+
   it.each([
     { background: [25, 30, 35, 255], foreground: [210, 210, 207, 255] },
     { background: [225, 225, 220, 255], foreground: [35, 35, 40, 255] },
