@@ -70,6 +70,23 @@ export function invalidateDiscoveryImage(state: AssetDiscoveryState, cardId: str
   }
 }
 
+/** 読めた実バイトだけで承認を検証する。未読込は不在と見なさず、旧画像の所属も再確認へ戻す。 */
+export function reconcileDiscoveryContent(
+  state: AssetDiscoveryState,
+  imageDigests: ReadonlyMap<string, string | null>,
+  assetDigests: ReadonlyMap<string, string | null>,
+): AssetDiscoveryState {
+  const occurrences = reconcileApprovals(state.occurrences, imageDigests, assetDigests).map((occurrence) => {
+    const digest = imageDigests.get(occurrence.cardId)
+    if (digest !== undefined && digest !== occurrence.imageDigest && occurrence.owner)
+      return { ...occurrence, owner: null }
+    return occurrence
+  })
+  return occurrences.every((occurrence, index) => occurrence === state.occurrences[index])
+    ? state
+    : { ...state, occurrences }
+}
+
 interface RegionOwner extends RegionDraft { id: string, kind: 'candidate' | 'region' }
 
 /** 新しい領域へ勝手に再所属させず、消えた／はみ出した参照だけ解除する。 */

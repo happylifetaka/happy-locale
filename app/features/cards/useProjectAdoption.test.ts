@@ -21,6 +21,7 @@ function setup(demo = false) {
     projectRuntime: {
       setDirectory: vi.fn(),
       replaceAssetImages: vi.fn(),
+      replaceAssetFiles: vi.fn(),
       clearPendingAssetWrites: vi.fn(),
       replaceLoadedFonts: vi.fn(),
     },
@@ -106,6 +107,7 @@ it('adopts a fully prepared project before publishing the loaded card and defers
   expect(options.clearLoadedCardImage).not.toHaveBeenCalled()
   expect(options.applyLoadedImage).toHaveBeenCalledWith(loaded)
   expect(options.projectRuntime.replaceAssetImages).toHaveBeenCalledWith(images)
+  expect(options.projectRuntime.replaceAssetFiles).toHaveBeenCalledWith(opened.assetFiles)
   expectTransientStateReset(options)
   expect(options.lastSavedProjectSignature.value).toBe('old-signature')
   expect(options.showBatchOCRCandidates).not.toHaveBeenCalled()

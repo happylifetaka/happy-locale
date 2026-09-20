@@ -9,7 +9,7 @@ import { nextTick } from 'vue'
 interface ProjectAdoptionOptions {
   editor: Pick<ReturnType<typeof useCardEditor>, 'loadImageProject' | 'loadSavedProject'>
   projectStore: Pick<ReturnType<typeof useProjectStore>, 'clearProject' | 'replaceProject'>
-  projectRuntime: Pick<ReturnType<typeof useProjectRuntime>, 'setDirectory' | 'replaceAssetImages' | 'clearPendingAssetWrites' | 'replaceLoadedFonts'>
+  projectRuntime: Pick<ReturnType<typeof useProjectRuntime>, 'setDirectory' | 'replaceAssetImages' | 'replaceAssetFiles' | 'clearPendingAssetWrites' | 'replaceLoadedFonts'>
   currentImageId: Ref<string>
   currentView: Ref<'card' | 'assets' | 'print'>
   pendingCardDeletionIds: Ref<Set<string>>
@@ -101,6 +101,7 @@ export function useProjectAdoption({
     cardPendingDeletionConfirmation.value = null
     clearAssetSourceImage()
     projectRuntime.replaceAssetImages(images)
+    projectRuntime.replaceAssetFiles(opened.assetFiles)
     applyLoadedImage(loaded)
     projectRuntime.clearPendingAssetWrites()
     projectRuntime.replaceLoadedFonts(new Map())

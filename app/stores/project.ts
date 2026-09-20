@@ -11,7 +11,7 @@ import type { RegionCandidate } from '~/types/ocr'
 import { defineStore } from 'pinia'
 import { computed, shallowRef } from 'vue'
 import { parseAssetDiscovery } from '~/services/asset-discovery/format'
-import { invalidateDiscoveryImage, reconcileOccurrenceOwners, removeDiscoveryAssets } from '~/services/asset-discovery/review'
+import { invalidateDiscoveryImage, reconcileDiscoveryContent, reconcileOccurrenceOwners, removeDiscoveryAssets } from '~/services/asset-discovery/review'
 import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { finalizeProjectCardDeletions, reconcileProjectDiscoveryOwners, updateProjectCard } from '~/services/project/cards'
 
@@ -221,6 +221,18 @@ export const useProjectStore = defineStore('project', () => {
       draftAssetDiscovery.value = invalidateDiscoveryImage(draftAssetDiscovery.value, cardId)
   }
 
+  /** runtimeで実際に読み終えた内容ハッシュを適用する。画像そのものはStoreに持ち込まない。 */
+  function reconcileAssetDiscoveryContent(imageDigests: ReadonlyMap<string, string | null>, assetDigests: ReadonlyMap<string, string | null>) {
+    const current = assetDiscovery.value
+    if (!current)
+      return false
+    const next = reconcileDiscoveryContent(current, imageDigests, assetDigests)
+    if (next === current)
+      return false
+    setAssetDiscovery(next)
+    return true
+  }
+
   /** 共有フォントの保存用参照を更新する。 */
   function setFonts(nextFonts: FontReference[]) {
     updateSharedState('fonts', nextFonts)
@@ -313,6 +325,7 @@ export const useProjectStore = defineStore('project', () => {
     setAssetDiscovery,
     reconcileDiscoveryOwners,
     invalidateAssetDiscoveryImage,
+    reconcileAssetDiscoveryContent,
     snapshot,
   }
 })

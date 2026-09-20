@@ -29,6 +29,7 @@ import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTr
 import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
 import { useCandidateReview } from '~/features/cards/useCandidateReview'
 import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
+import { useDiscoveryImageIdentity } from '~/features/cards/useDiscoveryImageIdentity'
 import { useEditorDiagnostics } from '~/features/cards/useEditorDiagnostics'
 import { useEditorHistoryShortcuts } from '~/features/cards/useEditorHistoryShortcuts'
 import { useEditorImageAdoption } from '~/features/cards/useEditorImageAdoption'
@@ -99,6 +100,13 @@ const { loadImage } = useEditorImageLoading({
 /** 各機能が所有する保存・読込・追加・切替状態をエディター単位で集約する。 */
 const activity = useProjectActivity()
 const projectBusy = activity.busy
+useDiscoveryImageIdentity({
+  store: projectStore,
+  runtime: projectRuntime,
+  currentImageId,
+  busy: projectBusy,
+  logDiagnostic,
+})
 /** サムネイルの要求・再生成・保存。URLの所有はruntimeに残す。 */
 const {
   setCardThumbnail,
