@@ -1,8 +1,11 @@
+import type { HeadingPixelSettings } from './heading-settings'
 import type { OCRTextBlock } from '~/types/ocr'
+import { headingPixelSettings } from './heading-settings'
 
 /** 帯の中央から文字の高さを測り、彩色された両端の装飾を除く。 */
-export function headingLetterBounds(data: Uint8ClampedArray, width: number, height: number): { left: number, right: number, top: number, bottom: number } | null {
-  if (width < 20 || height < 8 || data.length !== width * height * 4)
+export function headingLetterBounds(data: Uint8ClampedArray, width: number, height: number, overrides?: Partial<HeadingPixelSettings>): { left: number, right: number, top: number, bottom: number } | null {
+  const settings = headingPixelSettings(overrides)
+  if (settings.policy === 'none' || width < 20 || height < 8 || data.length !== width * height * 4)
     return null
   const left = Math.floor(width * 0.25)
   const right = Math.ceil(width * 0.75)
@@ -11,7 +14,7 @@ export function headingLetterBounds(data: Uint8ClampedArray, width: number, heig
     const r = data[i]!
     const g = data[i + 1]!
     const b = data[i + 2]!
-    return r * 0.299 + g * 0.587 + b * 0.114 < 110 && Math.max(r, g, b) - Math.min(r, g, b) <= 60
+    return r * 0.299 + g * 0.587 + b * 0.114 < settings.maximumInkLuminance && Math.max(r, g, b) - Math.min(r, g, b) <= settings.maximumInkSaturation
   }
   const bands: { top: number, bottom: number }[] = []
   for (let y = 0; y < height; y++) {
@@ -21,7 +24,7 @@ export function headingLetterBounds(data: Uint8ClampedArray, width: number, heig
       if (isInk(x, y))
         ink++
       const i = (y * width + x) * 4
-      if (data[i]! * 0.299 + data[i + 1]! * 0.587 + data[i + 2]! * 0.114 >= 150)
+      if (data[i]! * 0.299 + data[i + 1]! * 0.587 + data[i + 2]! * 0.114 >= settings.minimumBackgroundLuminance)
         light++
     }
     if (ink < (right - left) * 0.12 || ink > (right - left) * 0.75 || light < (right - left) * 0.25)
@@ -44,7 +47,7 @@ export function headingLetterBounds(data: Uint8ClampedArray, width: number, heig
     let light = 0
     for (let y = 0; y < height; y++) {
       const i = (y * width + x) * 4
-      if (data[i]! * 0.299 + data[i + 1]! * 0.587 + data[i + 2]! * 0.114 >= 150)
+      if (data[i]! * 0.299 + data[i + 1]! * 0.587 + data[i + 2]! * 0.114 >= settings.minimumBackgroundLuminance)
         light++
     }
     for (let y = band.top; y < band.bottom; y++) {
@@ -65,15 +68,16 @@ export function headingLetterBounds(data: Uint8ClampedArray, width: number, heig
 }
 
 /** 明るい帯の黒文字について、文字行と離れた上下の罫線だけを除く。曖昧なら元の枠を使う。 */
-export function headingInkRows(data: Uint8ClampedArray, width: number, height: number): { top: number, bottom: number } | null {
-  if (width < 10 || height < 8 || data.length !== width * height * 4)
+export function headingInkRows(data: Uint8ClampedArray, width: number, height: number, overrides?: Partial<HeadingPixelSettings>): { top: number, bottom: number } | null {
+  const settings = headingPixelSettings(overrides)
+  if (settings.policy === 'none' || width < 10 || height < 8 || data.length !== width * height * 4)
     return null
   const luminance = Array.from({ length: width * height }, (_, index) =>
     data[index * 4]! * 0.299 + data[index * 4 + 1]! * 0.587 + data[index * 4 + 2]! * 0.114)
   const sorted = [...luminance].sort((a, b) => a - b)
   const dark = sorted[Math.floor(sorted.length * 0.2)]!
   const light = sorted[Math.floor(sorted.length * 0.8)]!
-  if (light < 140 || light - dark < 60)
+  if (light < settings.minimumFallbackLuminance || light - dark < settings.minimumFallbackContrast)
     return null
   const threshold = dark + (light - dark) * 0.35
   const runs: { top: number, bottom: number }[] = []
@@ -102,8 +106,9 @@ export function headingInkRows(data: Uint8ClampedArray, width: number, height: n
 }
 
 /** 文字行内の暗い低彩度の画素を使い、端に孤立した小さい飾りを文字列から分離する。 */
-export function headingInkColumns(data: Uint8ClampedArray, width: number, height: number, rows: { top: number, bottom: number }): { left: number, right: number } | null {
-  if (data.length !== width * height * 4 || rows.top < 0 || rows.bottom > height || rows.bottom <= rows.top)
+export function headingInkColumns(data: Uint8ClampedArray, width: number, height: number, rows: { top: number, bottom: number }, overrides?: Partial<HeadingPixelSettings>): { left: number, right: number } | null {
+  const settings = headingPixelSettings(overrides)
+  if (settings.policy === 'none' || data.length !== width * height * 4 || rows.top < 0 || rows.bottom > height || rows.bottom <= rows.top)
     return null
   const lineHeight = rows.bottom - rows.top
   const groups: { left: number, right: number }[] = []
@@ -114,7 +119,7 @@ export function headingInkColumns(data: Uint8ClampedArray, width: number, height
       const r = data[offset]!
       const g = data[offset + 1]!
       const b = data[offset + 2]!
-      if (r * 0.299 + g * 0.587 + b * 0.114 < 110 && Math.max(r, g, b) - Math.min(r, g, b) <= 60)
+      if (r * 0.299 + g * 0.587 + b * 0.114 < settings.maximumInkLuminance && Math.max(r, g, b) - Math.min(r, g, b) <= settings.maximumInkSaturation)
         ink++
     }
     if (ink < Math.max(2, lineHeight * 0.15))
@@ -133,8 +138,8 @@ export function headingInkColumns(data: Uint8ClampedArray, width: number, height
 }
 
 /** 装飾を外せた見出しのみ、原画像の小さい切り抜きを使って文字の枠を補正する。 */
-export function refineHeadingImageBounds(image: CanvasImageSource, bounds: OCRTextBlock, scale: number): OCRTextBlock {
-  if (typeof document === 'undefined')
+export function refineHeadingImageBounds(image: CanvasImageSource, bounds: OCRTextBlock, scale: number, settings?: Partial<HeadingPixelSettings>): OCRTextBlock {
+  if (settings?.policy === 'none' || typeof document === 'undefined')
     return bounds
   const width = Math.ceil(bounds.width / scale)
   const height = Math.ceil(bounds.height / scale)
@@ -149,7 +154,7 @@ export function refineHeadingImageBounds(image: CanvasImageSource, bounds: OCRTe
   try {
     context.drawImage(image, bounds.x / scale, bounds.y / scale, bounds.width / scale, bounds.height / scale, 0, 0, width, height)
     const data = context.getImageData(0, 0, width, height).data
-    const letters = headingLetterBounds(data, width, height)
+    const letters = headingLetterBounds(data, width, height, settings)
     if (letters) {
       return {
         ...bounds,
@@ -159,11 +164,11 @@ export function refineHeadingImageBounds(image: CanvasImageSource, bounds: OCRTe
         height: (letters.bottom - letters.top) * bounds.height / height,
       }
     }
-    const rows = headingInkRows(data, width, height)
+    const rows = headingInkRows(data, width, height, settings)
     if (!rows)
       return bounds
     const ratio = bounds.height / height
-    const columns = headingInkColumns(data, width, height, rows)
+    const columns = headingInkColumns(data, width, height, rows, settings)
     return {
       ...bounds,
       y: bounds.y + rows.top * ratio,

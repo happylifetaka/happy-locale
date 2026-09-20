@@ -1,3 +1,4 @@
+import type { HeadingPixelSettings } from './heading-settings'
 import type { OCRProvider, OCRResult, OCRTextBlock } from './types'
 import { DEFAULT_REGION_DETECTION_SETTINGS } from './detection-settings'
 import { refineHeadingImageBounds } from './heading-bounds'
@@ -19,7 +20,7 @@ export async function enhanceRegionDetection(
   let result: OCRResult & { labelBlocks?: OCRTextBlock[] } = original
   if (analysis && isCurrent()) {
     try {
-      result = await recoverImageLabels(image, original, analysis.labels, provider, scale, isCurrent, settings.lightLabels)
+      result = await recoverImageLabels(image, original, analysis.labels, provider, scale, isCurrent, settings.lightLabels, settings.headingPixels)
     }
     catch (error) {
       if (isCurrent())
@@ -67,6 +68,7 @@ export async function recoverImageLabels(
   scale: number,
   isCurrent: () => boolean,
   settings = DEFAULT_REGION_DETECTION_SETTINGS.lightLabels,
+  headingSettings?: Partial<HeadingPixelSettings>,
 ): Promise<OCRResult & { labelBlocks?: OCRTextBlock[] }> {
   if (!settings.enabled)
     return result
@@ -79,7 +81,7 @@ export async function recoverImageLabels(
   for (const label of labels.filter(l => l.y >= firstText).slice(0, settings.maximumRequests)) {
     if (!isCurrent())
       return result
-    const crop = refineHeadingImageBounds(image, { ...label, text: '', confidence: null }, 1)
+    const crop = refineHeadingImageBounds(image, { ...label, text: '', confidence: null }, 1, headingSettings)
     const blob = await prepareRegionForOCR(image, crop, { scale, padding: 8 })
     if (!isCurrent())
       return result

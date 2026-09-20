@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { createRegionCandidates } from '~/services/ocr/candidates'
 import { detectRegions } from '~/services/ocr/detect-regions'
 import { DEFAULT_REGION_DETECTION_SETTINGS } from '~/services/ocr/detection-settings'
+import { refineHeadingImageBounds } from '~/services/ocr/heading-bounds'
 import { prepareRegionForOCR } from '~/services/ocr/image'
 import { enhanceRegionDetection } from '~/services/ocr/region-image'
 import { baselineOCR } from '../fixtures/refactoring-baseline'
@@ -87,6 +88,28 @@ it('does not allocate work for an already stale target', async () => {
   expect(await detectRegions({ ...options, isCurrent: () => false })).toBeNull()
   expect(prepareRegionForOCR).not.toHaveBeenCalled()
   expect(provider.recognize).not.toHaveBeenCalled()
+})
+
+it('forwards heading policies and candidate settings through the complete detection pipeline', async () => {
+  const { options, image } = setup()
+  const settings = {
+    ...DEFAULT_REGION_DETECTION_SETTINGS,
+    candidates: { initialSelectionConfidence: 100, lineGrouping: 'none' as const },
+    headingPixels: { policy: 'none' as const },
+  }
+  const result = await detectRegions({ ...options, settings })
+  const raw = baselineOCR()
+  expect(result?.candidates).toEqual(createRegionCandidates(raw.blocks, {
+    imageWidth: 200,
+    imageHeight: 240,
+    scale: 2,
+    padding: 6,
+    words: raw.words,
+    settings: settings.candidates,
+  }))
+  expect(result?.candidates.every(c => !c.selected)).toBe(true)
+  expect(refineHeadingImageBounds).toHaveBeenCalledWith(image, expect.any(Object), 2, settings.headingPixels)
+  expect((await detectRegions(options))?.candidates.some(c => c.selected)).toBe(true)
 })
 
 it.each(['prepare', 'recognize', 'enhance'] as const)('drops results when the target becomes stale during %s', async (stage) => {

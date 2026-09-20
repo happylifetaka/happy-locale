@@ -1,11 +1,19 @@
+import type { CandidateDetectionSettings } from './candidates/settings'
+import type { HeadingPixelSettings } from './heading-settings'
+import { DEFAULT_CANDIDATE_DETECTION_SETTINGS } from './candidates/settings'
+import { DEFAULT_HEADING_PIXEL_SETTINGS } from './heading-settings'
+
 /** Internal engine settings, not a persisted/importable game profile format. */
 export interface RegionDetectionSettings {
+  readonly candidates?: Partial<CandidateDetectionSettings>
+  readonly headingPixels?: Partial<HeadingPixelSettings>
   readonly textPixels: {
     readonly enabled: boolean
     readonly minimumLuminance: number
     readonly maximumSaturation: number
     readonly iconMinimumLuminance: number
     readonly iconMinimumSaturation: number
+    readonly coloredIconProtection?: 'ocr-signals' | 'always' | 'none'
   }
   readonly lightLabels: {
     readonly enabled: boolean
@@ -24,12 +32,15 @@ export interface RegionDetectionSettings {
 
 // Preserve existing behavior. No game names, vocabulary, images or fixed card coordinates.
 export const DEFAULT_REGION_DETECTION_SETTINGS: RegionDetectionSettings = Object.freeze({
+  candidates: DEFAULT_CANDIDATE_DETECTION_SETTINGS,
+  headingPixels: DEFAULT_HEADING_PIXEL_SETTINGS,
   textPixels: Object.freeze({
     enabled: true,
     minimumLuminance: 175,
     maximumSaturation: 100,
     iconMinimumLuminance: 65,
     iconMinimumSaturation: 95,
+    coloredIconProtection: 'ocr-signals',
   }),
   lightLabels: Object.freeze({
     enabled: true,

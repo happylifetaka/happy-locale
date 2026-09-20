@@ -163,7 +163,8 @@ export function createTextPixelRefiner(data: Uint8ClampedArray, width: number, h
       }
     }
     // 数字・記号を含む本文では行に隣接するアイコンも保持。横長の飾り線は除く。
-    if (/[0-9+*%@{}|]/u.test(block.text)) {
+    const iconProtection = settings.coloredIconProtection ?? 'ocr-signals'
+    if (iconProtection === 'always' || (iconProtection === 'ocr-signals' && /[0-9+*%@{}|]/u.test(block.text))) {
       for (const c of icons) {
         if (c.width < lineHeight * 0.25 || c.height < lineHeight * 0.35 || c.width > lineHeight * 2.5 || c.height > lineHeight * 2.5
           || c.area < lineHeight * lineHeight * 0.12 || c.y + c.height <= top || c.y >= bottom

@@ -9,16 +9,16 @@
 
 | 区分 | 現状 |
 | --- | --- |
-| 内部設定に分離済み | 文字画素補正・淡色帯再OCRの有効化、色の閾値、帯の形状条件、再OCR回数・採用信頼度 |
-| 候補生成の引数で変更可能 | 余白、候補の最低信頼度、最低英字数、記号比率、画像高に対する最低行高 |
-| コード内に固定 | 英字・大文字の判定、装飾誤読パターン、行結合、黒文字の画素補正、アイコン保護、重なり調整など |
+| 内部設定に分離済み | 画像補正・局所OCR、候補フィルター・初期選択・余白、装飾除去・ラベル分類・行結合の組込ポリシー、中央黒文字測定、色付き成分の保護トリガー |
+| 従来の候補生成引数も維持 | 通常余白、候補の最低信頼度、最低英字数、記号比率、画像高に対する最低行高。直接指定のフィルターは内部設定より優先 |
+| 組込ポリシー内の安全条件 | 英字・大文字の定義、装飾誤読パターン、結合の高さ比・重なり、黒文字の形状、OCR記号・句点保護など |
 | 未実装 | ゲーム別設定ファイル、設定UI、インポート、プロジェクトへの設定保存 |
 
 処理順は「全体OCR → 原画像から淡色帯を探索・局所OCR → 文字画素の補正準備 → 行ごとの装飾除去・枠補正 → 候補フィルター → 横結合 → 縦結合 → 余白追加・余白の重なり調整」。局所OCRで確定した見出しは、候補生成時に元の確定枠を優先し、明るい文字向け補正を重ねない。
 
 単体・一括とも[共通検出サービス](../../app/services/ocr/detect-regions.ts)が同じ順序で実行する。参照: [内部設定](../../app/services/ocr/detection-settings.ts)、[補正パイプライン](../../app/services/ocr/region-image.ts)、[候補生成](../../app/services/ocr/candidates.ts)。
 
-候補生成の内部配置は、[行補正と縮尺復元](../../app/services/ocr/candidates/normalize.ts)、[フィルター・初期選択](../../app/services/ocr/candidates/filter.ts)、[見出し補正](../../app/services/ocr/candidates/headings.ts)、[行結合](../../app/services/ocr/candidates/grouping.ts)、[枠・余白の調整](../../app/services/ocr/candidates/geometry.ts)に分離した。以下の判定順・条件値は変えていない。
+候補生成の内部配置は、[行補正と縮尺復元](../../app/services/ocr/candidates/normalize.ts)、[フィルター・初期選択](../../app/services/ocr/candidates/filter.ts)、[見出し補正](../../app/services/ocr/candidates/headings.ts)、[行結合](../../app/services/ocr/candidates/grouping.ts)、[枠・余白の調整](../../app/services/ocr/candidates/geometry.ts)に分離した。以下の判定順・数値は既定設定の場合。設定選択は処理の無効化・調整を可能にするが、既定値は変えていない。
 
 以下で輝度は `0.299R + 0.587G + 0.114B`、彩度は `max(R,G,B) - min(R,G,B)` を指す。いずれもRGBの0〜255を使用し、HSVの彩度ではない。画素解析のpxと、最終候補の原画像座標のpxは区別する。
 
@@ -43,6 +43,7 @@
 | `maximumSaturation` | 100 | 文字画素は彩度がこの値より小さい |
 | `iconMinimumLuminance` | 65 | 色付きアイコン画素は輝度がこの値より大きい |
 | `iconMinimumSaturation` | 95 | 色付きアイコン画素は彩度がこの値より大きい |
+| `coloredIconProtection` | `ocr-signals` | 数字・記号がある行のみ色付き成分を追加保護。`always`はトリガー不要、`none`はこの追加保護を停止。形状ガード・OCR記号座標保護は別 |
 
 ### 3.2 明るい帯の見出し
 
@@ -59,7 +60,35 @@
 | `maximumRequests` | 10 | 1画像の局所OCR回数上限 |
 | `minimumConfidence` | 50 | 局所OCRの採用語の平均信頼度の下限 |
 
-設定は内部API用。外部JSONの仕様や入力検証は未実装。これらを無効化しても、候補生成側の装飾除去や行結合まで無効になるわけではない。
+### 3.3 候補生成の組込ポリシーと調整値
+
+[候補設定](../../app/services/ocr/candidates/settings.ts)を`candidates`へ部分指定できる。
+
+| 設定キー | 既定値 | 用途 |
+| --- | --- | --- |
+| `minimumConfidence` / `minimumLatinLetters` | 0 / 3 | 候補フィルター。信頼度0以下は値に関係なく除外 |
+| `maximumNonAlphanumericRatio` / `minimumHeightRatio` | 0.5 / 0.01 | 記号率上限・原画像に対する行高下限 |
+| `initialSelectionConfidence` | 40 | この値を超えた候補を選択。不明は選択。結合前後で同じ閾値を使用 |
+| `headingDecorations` | `uppercase-latin` | 8節の装飾誤読除去と画像の裏付けによる補正。`none`で止める |
+| `labelClassification` | `uppercase-latin` | 10節のラベル・本文境界。`none`で区別しない |
+| `lineGrouping` | `layout` | 横・縦結合。`rows-only`は横のみ、`none`は結合しない |
+| `maximumRowGapRatio` / `maximumLineGapRatio` | 1.5 / 0.8 | 横間隔・通常の縦間隔（小さい行高に対する比） |
+| `maximumAlignedLineGapRatio` / `maximumAlignedLargeLineGapRatio` | 1.5 / 1.1 | 左揃え本文の縦間隔（小さい行高・大きい行高のそれぞれに対する比の小さい方） |
+| `refinedPadding` | 2 | 補正済み全行の候補余白上限（原画像px） |
+| `separatePadding` / `maximumPaddingGap` | true / 1 | 余白のみの上下重なり調整と隙間上限（原画像px）。内容は切らない |
+
+### 3.4 中央黒文字の画素測定
+
+[黒文字設定](../../app/services/ocr/heading-settings.ts)を`headingPixels`へ部分指定できる。既存見出し補正と局所OCR前の切り抜きで共用する。
+
+| 設定キー | 既定値 | 用途 |
+| --- | --- | --- |
+| `policy` | `centered-dark` | 7節の中央暗色文字測定。`none`ならCanvasを作らず元枠を使う |
+| `maximumInkLuminance` / `maximumInkSaturation` | 110 / 60 | 黒文字は輝度が未満、彩度が以下 |
+| `minimumBackgroundLuminance` | 150 | 中央測定の背景輝度下限 |
+| `minimumFallbackLuminance` / `minimumFallbackContrast` | 140 / 60 | 補助測定の明側輝度・明暗差の下限 |
+
+設定は信頼された内部API用。外部JSONの仕様や入力検証は未実装。ポリシーの停止は独立している。例: 画像補正を無効化しても単語による装飾除去は残り、装飾除去を止めても局所OCRや白文字補正は残る。
 
 ## 4. 明るい帯の探索・局所OCRに残る固定条件
 
@@ -105,7 +134,7 @@
 
 影響: アイコンを意味的に認識しているわけではない。灰色のアイコンや、OCRで特定の数字・記号が出なかった行では、色による保護が働かない場合がある。
 
-## 7. 明るい帯の黒文字を文字際へ絞る固定条件
+## 7. 明るい帯の黒文字を文字際へ絞る組込条件
 
 ### 7.1 中央の黒文字を測る方法
 
@@ -157,7 +186,7 @@
 
 影響: 「記号や数字に見える装飾」を除く規則なので、見出しに本物の記号・数字が含まれる形式では要検証。単語を削除する条件は、単なる枠の縮小とは区別が必要。
 
-参照: [trimHeadingDecorations / refineLabel](../../app/services/ocr/candidates.ts)。
+参照: [trimHeadingDecorations / refineLabel](../../app/services/ocr/candidates/headings.ts)。
 
 ## 9. 候補として残す条件・初期チェック
 
@@ -214,13 +243,14 @@
 - 追加OCRは同じローカルProviderを使用する。ゲーム専用画像や設定の外部送信は追加していない。
 - ゲーム判別、名前・種別・効果の意味認識、アイコンの意味認識、すべての誤検出の除去、すべての枠重なり解消を行う実装ではない。
 
-## 13. 今後、専用設定へ分離する候補（未実装）
+## 13. 今後の拡張範囲（未実装）
 
-- 言語・英字数フィルター・大文字ラベル判定。
-- 淡色帯の中央黒文字という前提と、その固定閾値。
-- 装飾を記号・数字として誤読したときの除去パターン。
-- 本文と種別の行結合条件、アイコン保護のトリガー。
-- 初期選択信頼度、通常余白・補正後余白。
+- 内部設定の外部入力検証、ローカルJSON読込、画面切替、保存・共有方針。
+- 英語以外のモデル・英大文字以外の局所見出しポリシー。
+- 左寄せ・暗い帯など、中央黒文字以外の画素測定ポリシー。
+- 現在の安全条件を維持する組込ルールとは異なる、装飾・行結合・アイコン保護の方式。
+
+初期チェック・余白・主要ポリシーの選択は3節の内部設定として実装済み。各誤読パターンの任意編集や任意コード実行は提供していない。
 
 ゲーム専用プロファイルを公開リポジトリへ同梱することを決めたものではない。専用設定の保管・共有方式は別途検討する。
 

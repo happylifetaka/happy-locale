@@ -1,19 +1,23 @@
 import type { CandidateGroup } from './options'
+import type { CandidateDetectionSettings } from './settings'
 import type { OCRTextBlock } from '~/types/ocr'
 import { isInitiallySelected } from './filter'
 import { groupBounds, horizontalOverlap } from './geometry'
+import { candidateDetectionSettings } from './settings'
 
 /** 大文字主体のラベルと通常の文章の境界。固有の見出し語には依存しない。 */
-function isUppercaseLabel(text: string): boolean {
+function isUppercaseLabel(text: string, settings: CandidateDetectionSettings): boolean {
+  if (settings.labelClassification === 'none')
+    return false
   const letters = text.match(/[a-z]/giu) ?? []
   return letters.length >= 3
     && letters.filter(letter => letter === letter.toUpperCase()).length / letters.length >= 0.8
 }
 
 /** 同じ行の断片だけを横結合する。離れた段組みはまとめない。 */
-function canJoinOnSameRow(a: OCRTextBlock, b: OCRTextBlock): boolean {
+function canJoinOnSameRow(a: OCRTextBlock, b: OCRTextBlock, settings: CandidateDetectionSettings): boolean {
   const gap = Math.max(a.x, b.x) - Math.min(a.x + a.width, b.x + b.width)
-  const proseFragments = !isUppercaseLabel(a.text) && !isUppercaseLabel(b.text)
+  const proseFragments = !isUppercaseLabel(a.text, settings) && !isUppercaseLabel(b.text, settings)
     && (a.text.match(/[a-z]+/giu)?.length ?? 0) >= 1
     && (b.text.match(/[a-z]+/giu)?.length ?? 0) >= 1
     && Math.max(a.text.match(/[a-z]+/giu)?.length ?? 0, b.text.match(/[a-z]+/giu)?.length ?? 0) >= 3
@@ -21,21 +25,21 @@ function canJoinOnSameRow(a: OCRTextBlock, b: OCRTextBlock): boolean {
     && Math.min(a.confidence ?? 0, b.confidence ?? 0) >= 25
   const rightFragment = a.x > b.x ? a : b
   const iconFragment = proseFragments && /^[^a-z]+/iu.test(rightFragment.text)
-  if (isInitiallySelected(a) !== isInitiallySelected(b) && !(proseFragments && (gap <= 0 || iconFragment)))
+  if (isInitiallySelected(a, settings.initialSelectionConfidence) !== isInitiallySelected(b, settings.initialSelectionConfidence) && !(proseFragments && (gap <= 0 || iconFragment)))
     return false
   const height = Math.min(a.height, b.height)
   const overlap = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
   return height / Math.max(a.height, b.height) >= 0.4
     && overlap >= height * 0.7
     && gap >= -(iconFragment ? Math.min(height * 1.5, Math.min(a.width, b.width) * 0.4) : height * (proseFragments ? 0.5 : 0.2))
-    && gap <= height * 1.5
+    && gap <= height * settings.maximumRowGapRatio
 }
 
 /** 行内の断片を先に復元し、その行が別候補の外接矩形に取り残されるのを防ぐ。 */
-function joinRowFragments(blocks: OCRTextBlock[]): OCRTextBlock[] {
+function joinRowFragments(blocks: OCRTextBlock[], settings: CandidateDetectionSettings): OCRTextBlock[] {
   const rows: OCRTextBlock[] = []
   for (const block of blocks) {
-    const index = rows.findLastIndex(row => canJoinOnSameRow(row, block))
+    const index = rows.findLastIndex(row => canJoinOnSameRow(row, block, settings))
     if (index < 0) {
       rows.push(block)
       continue
@@ -47,38 +51,41 @@ function joinRowFragments(blocks: OCRTextBlock[]): OCRTextBlock[] {
 }
 
 /** 位置と行間から隣接するOCR行を同じ領域へまとめられるか判定する。 */
-function canJoin(previous: OCRTextBlock, next: OCRTextBlock): boolean {
-  if (isInitiallySelected(previous) !== isInitiallySelected(next))
+function canJoin(previous: OCRTextBlock, next: OCRTextBlock, settings: CandidateDetectionSettings): boolean {
+  if (isInitiallySelected(previous, settings.initialSelectionConfidence) !== isInitiallySelected(next, settings.initialSelectionConfidence))
     return false
   const verticalGap = next.y - (previous.y + previous.height)
   // 大きな装飾・アイコンを巻き込んだ一行が、段落間の許容間隔を広げない。
   const lineHeight = Math.min(previous.height, next.height)
   const largerHeight = Math.max(previous.height, next.height)
-  const previousLabel = isUppercaseLabel(previous.text)
+  const previousLabel = isUppercaseLabel(previous.text, settings)
   // 左揃え本文はアイコンや小文字だけの行で行高が変わる。従来の上限内で余裕を残す。
   const alignedBody = !previousLabel && Math.abs(previous.x - next.x) <= lineHeight * 0.5
     && lineHeight / largerHeight >= 0.4
     && (previous.confidence === null || previous.confidence >= 70)
     && (next.confidence === null || next.confidence >= 70)
   const maximumGap = alignedBody
-    ? Math.min(lineHeight * 1.5, largerHeight * 1.1)
-    : lineHeight * 0.8
+    ? Math.min(lineHeight * settings.maximumAlignedLineGapRatio, largerHeight * settings.maximumAlignedLargeLineGapRatio)
+    : lineHeight * settings.maximumLineGapRatio
   return (
     verticalGap >= -lineHeight * 0.35
     && verticalGap <= maximumGap
     && horizontalOverlap(previous, next) >= 0.2
-    && previousLabel === isUppercaseLabel(next.text)
+    && previousLabel === isUppercaseLabel(next.text, settings)
     && (!previousLabel || lineHeight / largerHeight >= 0.72)
   )
 }
 
 /** 行内断片を復元してから、他の見出しをまたがずに隣接行を結合する。 */
-export function groupCandidateLines(blocks: OCRTextBlock[]): CandidateGroup[] {
+export function groupCandidateLines(blocks: OCRTextBlock[], overrides?: Partial<CandidateDetectionSettings>): CandidateGroup[] {
+  const settings = candidateDetectionSettings(overrides)
+  if (settings.lineGrouping === 'none')
+    return blocks.map(block => ({ lines: [block] }))
   const groups: CandidateGroup[] = []
-  for (const block of joinRowFragments(blocks)) {
+  for (const block of joinRowFragments(blocks, settings)) {
     const group = groups.findLast((candidate) => {
       const previous = candidate.lines.at(-1)!
-      if (!canJoin(previous, block))
+      if (settings.lineGrouping === 'rows-only' || !canJoin(previous, block, settings))
         return false
       // 他の見出し等を飛び越えて過去の本文グループに接続しない。
       return !groups.some(other => other !== candidate && other.lines.some(line =>

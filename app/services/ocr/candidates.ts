@@ -40,7 +40,7 @@ export function createRegionCandidates(
   options: RegionCandidateOptions,
 ): RegionCandidate[] {
   const { lines, trimmedLines } = normalizeCandidateBlocks(blocks, options)
-  const groups = groupCandidateLines(lines)
+  const groups = groupCandidateLines(lines, options.settings)
   return createCandidateBounds(groups, trimmedLines, options)
 }
 

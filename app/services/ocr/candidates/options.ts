@@ -1,6 +1,8 @@
+import type { CandidateDetectionSettings } from './settings'
 import type { OCRTextBlock } from '~/types/ocr'
 
 export interface RegionCandidateOptions {
+  settings?: Partial<CandidateDetectionSettings>
   scale?: number
   imageWidth: number
   imageHeight: number

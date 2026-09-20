@@ -81,10 +81,11 @@ export async function detectRegions({
     if (!isCurrent())
       return null
     const candidates = createRegionCandidates(enhanced.result.blocks, {
+      settings: settings.candidates,
       words: enhanced.result.words,
       labelBounds: enhanced.labelBounds,
       refineTextBounds: enhanced.refineTextBounds,
-      refineHeadingBounds: bounds => refineHeadingImageBounds(image, bounds, scale),
+      refineHeadingBounds: bounds => refineHeadingImageBounds(image, bounds, scale, settings.headingPixels),
       scale,
       imageWidth,
       imageHeight,

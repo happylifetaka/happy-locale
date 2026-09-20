@@ -48,6 +48,15 @@ describe('pixel regions', () => {
     expect(createTextPixelRefiner(data, 200, 240, 1, [], { ...DEFAULT_REGION_DETECTION_SETTINGS.textPixels, enabled: false })(block)).toBe(block)
     expect(createTextPixelRefiner(data, 200, 240, 1, [], { ...DEFAULT_REGION_DETECTION_SETTINGS.textPixels, minimumLuminance: 250 })(block)).toBe(block)
     expect(refine(block)).toMatchObject({ x: 28, y: 41, width: 142, height: 31, text: block.text, confidence: 90 })
+    const noSignal = { ...block, text: 'Choose an ally' }
+    // Without the icon the period is outside the allowed punctuation gap as well.
+    const unprotected = { x: 28, y: 48, width: 109, height: 20 }
+    expect(refine(noSignal)).toMatchObject(unprotected)
+    const disabled = createTextPixelRefiner(data, 200, 240, 1, [], { ...DEFAULT_REGION_DETECTION_SETTINGS.textPixels, coloredIconProtection: 'none' })
+    expect(disabled(block)).toMatchObject(unprotected)
+    const always = createTextPixelRefiner(data, 200, 240, 1, [], { ...DEFAULT_REGION_DETECTION_SETTINGS.textPixels, coloredIconProtection: 'always' })
+    expect(always(noSignal)).toMatchObject({ x: 28, y: 41, width: 142, height: 31 })
+    expect(refine(noSignal)).toMatchObject(unprotected)
     expect(refine({ ...block, confidence: 20 })).toEqual({ ...block, confidence: 20 })
     expect(createTextPixelRefiner(new Uint8ClampedArray(0), 200, 120, 1, [])(block)).toBe(block)
   })

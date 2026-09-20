@@ -1,11 +1,12 @@
 import type { OCRResult } from '~/services/ocr/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_REGION_DETECTION_SETTINGS } from '~/services/ocr/detection-settings'
+import { refineHeadingImageBounds } from '~/services/ocr/heading-bounds'
 import { prepareRegionForOCR } from '~/services/ocr/image'
 import { enhanceRegionDetection, recoverImageLabels } from '~/services/ocr/region-image'
 
 vi.mock('~/services/ocr/image', () => ({ prepareRegionForOCR: vi.fn(async () => new Blob(['local'])) }))
-vi.mock('~/services/ocr/heading-bounds', () => ({ refineHeadingImageBounds: (_image: unknown, bounds: unknown) => bounds }))
+vi.mock('~/services/ocr/heading-bounds', () => ({ refineHeadingImageBounds: vi.fn((_image: unknown, bounds: unknown) => bounds) }))
 
 const image = {} as CanvasImageSource
 const label = { x: 40, y: 100, width: 100, height: 20 }
@@ -43,6 +44,13 @@ describe('local label recovery', () => {
     expect(result.blocks).toEqual(original.blocks)
     expect(DEFAULT_REGION_DETECTION_SETTINGS.lightLabels.minimumConfidence).toBe(50)
     expect(DEFAULT_REGION_DETECTION_SETTINGS.lightLabels.maximumRequests).toBe(10)
+  })
+
+  it('forwards heading pixel settings to supplemental OCR crops', async () => {
+    const provider = { recognize: vi.fn(async () => recognized) }
+    const headingPixels = { policy: 'none' as const }
+    await recoverImageLabels(image, original, [label], provider, 2, () => true, DEFAULT_REGION_DETECTION_SETTINGS.lightLabels, headingPixels)
+    expect(refineHeadingImageBounds).toHaveBeenCalledWith(image, { ...label, text: '', confidence: null }, 1, headingPixels)
   })
 
   it('replaces the old label, maps crop coordinates and preserves neighboring prose', async () => {

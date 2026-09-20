@@ -1,6 +1,7 @@
 import type { CandidateGroup, RegionCandidateOptions } from './options'
 import type { OCRTextBlock, RegionCandidate } from '~/types/ocr'
 import { isInitiallySelected } from './filter'
+import { candidateDetectionSettings } from './settings'
 
 /** 二つの認識範囲の横方向の重なりを求める。 */
 export function horizontalOverlap(a: OCRTextBlock, b: OCRTextBlock): number {
@@ -65,10 +66,11 @@ export function candidateFromLines(
 
 /** 結合後の行へ余白を付け、画像端と隣接候補の余白の重なりを調整する。 */
 export function createCandidateBounds(groups: CandidateGroup[], trimmedLines: WeakSet<OCRTextBlock>, options: RegionCandidateOptions): RegionCandidate[] {
+  const settings = candidateDetectionSettings(options.settings)
   const padding = Math.max(0, options.padding ?? 8)
   const candidates = groups.map((group, index) => {
     const bounds = groupBounds(group.lines)
-    const groupPadding = group.lines.every(line => trimmedLines.has(line)) ? Math.min(padding, 2) : padding
+    const groupPadding = group.lines.every(line => trimmedLines.has(line)) ? Math.min(padding, settings.refinedPadding) : padding
     const x = Math.max(0, Math.floor(bounds.x - groupPadding))
     const y = Math.max(0, Math.floor(bounds.y - groupPadding))
     const right = Math.min(
@@ -82,7 +84,7 @@ export function createCandidateBounds(groups: CandidateGroup[], trimmedLines: We
     return {
       ...bounds,
       id: `candidate_${index + 1}`,
-      selected: isInitiallySelected(bounds),
+      selected: isInitiallySelected(bounds, settings.initialSelectionConfidence),
       lines: group.lines,
       x,
       y,
@@ -90,12 +92,13 @@ export function createCandidateBounds(groups: CandidateGroup[], trimmedLines: We
       height: bottom - y,
     }
   })
-  separateCandidatePadding(candidates)
+  if (settings.separatePadding)
+    separateCandidatePadding(candidates, settings.maximumPaddingGap)
   return candidates
 }
 
 /** 認識内容は離れているのに余白だけが重なる候補を、内容間の空きで分ける。 */
-function separateCandidatePadding(candidates: RegionCandidate[]): void {
+function separateCandidatePadding(candidates: RegionCandidate[], maximumGap: number): void {
   const ordered = candidates.map(candidate => ({ candidate, content: groupBounds(candidate.lines) }))
     .sort((a, b) => a.content.y - b.content.y)
   for (let i = 0; i < ordered.length; i++) {
@@ -112,7 +115,7 @@ function separateCandidatePadding(candidates: RegionCandidate[]): void {
       if (available < 0)
         continue
       const middle = contentBottom + available / 2
-      const halfGap = Math.min(1, available) / 2
+      const halfGap = Math.min(maximumGap, available) / 2
       const bottom = Math.min(upper.candidate.y + upper.candidate.height, middle - halfGap)
       const top = Math.max(lower.candidate.y, middle + halfGap)
       const lowerBottom = lower.candidate.y + lower.candidate.height

@@ -1,5 +1,6 @@
 import type { RegionCandidateOptions } from './options'
 import type { OCRTextBlock } from '~/types/ocr'
+import { DEFAULT_CANDIDATE_DETECTION_SETTINGS } from './settings'
 
 /** 認識文字と寸法・信頼度から編集候補として使える行か判定する。 */
 export function isCandidateBlock(
@@ -40,6 +41,6 @@ export function isCandidateBlock(
 }
 
 /** 信頼度不明は従来どおり選択。低信頼度は検出結果を残し、追加のみ任意にする。 */
-export function isInitiallySelected(block: OCRTextBlock): boolean {
-  return block.confidence === null || block.confidence > 40
+export function isInitiallySelected(block: OCRTextBlock, threshold = DEFAULT_CANDIDATE_DETECTION_SETTINGS.initialSelectionConfidence): boolean {
+  return block.confidence === null || block.confidence > threshold
 }
