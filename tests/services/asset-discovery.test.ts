@@ -58,6 +58,25 @@ describe('icon discovery from measured text and pixels', () => {
       .toEqual([{ x: 123, y: 131, width: 34, height: 38 }])
   })
 
+  it('does not extend a complete bright outline into punctuation joined only by a faint shadow', () => {
+    const s = scene()
+    s.rect(125, 133, 30, 34, [180, 180, 180, 255])
+    s.rect(129, 137, 22, 26, [30, 180, 40, 255])
+    s.rect(155, 155, 12, 4, [60, 65, 70, 255])
+    s.rect(167, 155, 3, 4, [230, 230, 230, 255])
+    expect(extractIconCandidates(s.data, s.width, s.height, s.measured).icons.map(icon => icon.bounds))
+      .toEqual([{ x: 123, y: 131, width: 34, height: 38 }])
+  })
+
+  it('still recovers a broad faint outline when the strong component is only an off-center fragment', () => {
+    const s = scene()
+    s.rect(15, 125, 200, 3, [25, 30, 35, 255])
+    s.rect(125, 130, 52, 42, [60, 65, 70, 255])
+    s.rect(129, 140, 22, 22, [30, 180, 40, 255])
+    expect(extractIconCandidates(s.data, s.width, s.height, s.measured).icons.map(icon => icon.bounds))
+      .toEqual([{ x: 123, y: 128, width: 56, height: 46 }])
+  })
+
   it.each([
     { background: [25, 30, 35, 255], foreground: [210, 210, 207, 255] },
     { background: [225, 225, 220, 255], foreground: [35, 35, 40, 255] },

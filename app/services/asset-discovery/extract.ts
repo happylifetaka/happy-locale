@@ -4,6 +4,7 @@ import type { RegionDraft } from '~/types/editor'
 import type { OCRTextBlock } from '~/types/ocr'
 import { pixelComponents } from '~/services/ocr/pixel-regions'
 import { clipBounds, intersectionArea, validBounds } from './geometry'
+import { chooseIconOutline } from './outline'
 import { DEFAULT_ICON_DISCOVERY_SETTINGS } from './types'
 
 function median(values: number[], fallback: number): number {
@@ -161,8 +162,8 @@ export function extractIconCandidates(
       ? median(glyphs.map(c => area.y + c.y + c.height / 2), line.y + line.height / 2)
       : median(parts.map(word => word.y + word.height / 2), line.y + line.height / 2)
     const outline = [
-      ...pixelComponents(closeGaps(contrast.map((pixel, p) => pixel || colored[p]!), area.width, area.height), area.width, area.height),
-      ...pixelComponents(closeGaps(outer, area.width, area.height), area.width, area.height),
+      pixelComponents(closeGaps(contrast.map((pixel, p) => pixel || colored[p]!), area.width, area.height), area.width, area.height),
+      pixelComponents(closeGaps(outer, area.width, area.height), area.width, area.height),
     ]
     const protectedWords = measured.words.slice(0, 10000).filter(word => reliableWord(word)
       || (validBounds(word) && (word.confidence ?? 0) >= 35 && /[a-z]{2}/iu.test(word.text) && word.width >= typical * 1.5))
@@ -175,10 +176,11 @@ export function extractIconCandidates(
         if (bounds.y + bounds.height <= center - typical * 0.4 || bounds.y >= center + typical * 0.4)
           continue
         // 色の付いた中心だけでなく、その中心を囲む明暗輪郭が孤立していれば回収する。
-        const enclosing = outline.filter(c => sizedIcon(c, typical, true)
+        const enclosingOptions = outline.map(components => components.filter(c => sizedIcon(c, typical, true)
           && intersectionArea(c, component) / (component.width * component.height) >= 0.8
           && c.width * c.height <= component.width * component.height * 12)
-          .sort((a, b) => b.area - a.area)[0]
+          .sort((a, b) => b.area - a.area)[0])
+        const enclosing = chooseIconOutline(enclosingOptions[0], enclosingOptions[1], typical)
         if (enclosing)
           bounds = { x: enclosing.x + area.x, y: enclosing.y + area.y, width: enclosing.width, height: enclosing.height }
         // 高信頼度の通常単語を切り抜きに含めない。単一の誤認識記号はここで除外しない。
