@@ -216,3 +216,11 @@ it('invalidates an owner whose candidate frame shrinks without deleting the icon
   expect(s.store.assetDiscovery!.occurrences[0]!.owner).toBeNull()
   expect(s.store.readCardCandidateEdit(s.cardId)).toEqual(s.before)
 })
+
+it('refuses a different expected card even if its geometry and candidate values are identical', () => {
+  const s = setup()
+  const before = s.store.snapshot()
+  expect(() => s.editor.applyRegionDetection(s.changes, s.before.candidates, s.afterCandidates, 'other-card')).toThrow(/カード/)
+  expect(s.store.snapshot()).toEqual(before)
+  expect(s.editor.canUndo.value).toBe(false)
+})

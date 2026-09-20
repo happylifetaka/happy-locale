@@ -290,7 +290,10 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
     changes: readonly { id: string, bounds: RegionDraft }[],
     beforeCandidates: readonly RegionCandidate[],
     afterCandidates: readonly RegionCandidate[],
+    expectedCardId: string | null = activeCardId,
   ) {
+    if (expectedCardId !== activeCardId)
+      throw new Error('編集中のカードが変わりました。再比較してください。')
     if (!candidates)
       throw new Error('OCR候補を含む編集の保存先が接続されていません。')
     const current = history.state.value
