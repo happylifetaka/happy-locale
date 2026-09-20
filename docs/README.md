@@ -24,6 +24,7 @@
 
 ## 検討中の改善案
 
+- [リファクタリング・ロードマップ](proposals/refactoring-roadmap.md)
 - [OCRとアセット認識・登録の統合](proposals/ocr-asset-recognition.md)
 - [文章領域の自動選択と微調整](proposals/region-selection.md)
 - [ゲーム別OCR領域検出プロファイルと生成AIによる設定作成](proposals/ocr-detection-profiles.md)
