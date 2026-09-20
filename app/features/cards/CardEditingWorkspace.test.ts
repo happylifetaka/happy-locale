@@ -68,6 +68,7 @@ function mountWorkspace() {
       const candidates = useRegionCandidates({
         editor,
         image,
+        currentImageId,
         provider,
         execution,
         isDemo: ref(false),

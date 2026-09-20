@@ -9,6 +9,7 @@ import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import { assertFileSize, FILE_LIMITS } from '~/utils/file-limits'
 import { readImageDpi } from '~/utils/image-dpi'
 import {
+  CURRENT_PROJECT_VERSION,
   isSafeAssetImagePath,
   isSafeCardImagePath,
   parseFolderProject,
@@ -256,6 +257,7 @@ export async function createFolderProject(
   ocrDictionary: FolderProjectDocument['ocrDictionary'],
   assetBlobs: ReadonlyMap<string, Blob>,
   glossary: FolderProjectDocument['glossary'] = [],
+  ocrCandidates?: FolderProjectCard['ocrCandidates'],
 ): Promise<FolderProjectDocument> {
   try {
     await directory.getFileHandle('project.json')
@@ -275,13 +277,14 @@ export async function createFolderProject(
     sourceImage,
   )
   const document: FolderProjectDocument = {
-    version: 2,
+    version: CURRENT_PROJECT_VERSION,
     name: directory.name,
     activeCardId: cardId,
     cards: [{
       id: cardId,
       imagePath,
       ...project,
+      ...(ocrCandidates?.length ? { ocrCandidates } : {}),
       printArea: null,
       sourceDpi: await readImageDpi(sourceImage),
     }],

@@ -1,3 +1,4 @@
+import type { RegionCandidate } from '~/services/ocr/types'
 import type {
   CardProject,
   FolderProjectDocument,
@@ -8,6 +9,7 @@ import type {
 } from '~/types/editor'
 import { defineStore } from 'pinia'
 import { computed, shallowRef } from 'vue'
+import { cloneRegionCandidates } from '~/services/ocr/candidates'
 import { updateProjectCard } from '~/services/project/cards'
 
 /** Vueの参照を含む保存可能なデータを独立した値へ複製する。 */
@@ -46,6 +48,7 @@ export const useProjectStore = defineStore('project', () => {
   const document = shallowRef<FolderProjectDocument | null>(null)
   /** フォルダ文書がまだない段階のカード編集データ。 */
   const draftCard = shallowRef<CardProject>(emptyCardProject())
+  const draftOCRCandidates = shallowRef<RegionCandidate[]>([])
   /** 初回保存前に登録した共有アセット。 */
   const draftAssets = shallowRef<ImageAsset[]>([])
   /** 初回保存前に登録したフォント参照。 */
@@ -76,6 +79,7 @@ export const useProjectStore = defineStore('project', () => {
   function replaceProject(nextDocument: FolderProjectDocument) {
     document.value = clone(nextDocument)
     draftCard.value = emptyCardProject()
+    draftOCRCandidates.value = []
     draftAssets.value = []
     draftFonts.value = []
     draftOCRDictionary.value = []
@@ -86,6 +90,7 @@ export const useProjectStore = defineStore('project', () => {
   function clearProject() {
     document.value = null
     draftCard.value = emptyCardProject()
+    draftOCRCandidates.value = []
     draftAssets.value = []
     draftFonts.value = []
     draftOCRDictionary.value = []
@@ -103,7 +108,7 @@ export const useProjectStore = defineStore('project', () => {
       replaceProject({
         ...saved,
         cards: saved.cards.map(card => card.id === saved.activeCardId
-          ? { ...card, ...draftCard.value }
+          ? { ...card, ...draftCard.value, ocrCandidates: draftOCRCandidates.value.length ? cloneRegionCandidates(draftOCRCandidates.value) : undefined }
           : card),
         assets: currentAssets,
         fonts: draftFonts.value,
@@ -170,7 +175,24 @@ export const useProjectStore = defineStore('project', () => {
     }
     if (!cardId || !document.value.cards.some(card => card.id === cardId))
       return
-    document.value = updateProjectCard(document.value, cardId, project)
+    const previous = document.value.cards.find(card => card.id === cardId)!
+    const updated = updateProjectCard(document.value, cardId, project)
+    document.value = previous.imageWidth !== project.imageWidth || previous.imageHeight !== project.imageHeight
+      ? { ...updated, cards: updated.cards.map(card => card.id === cardId ? { ...card, ocrCandidates: undefined } : card) }
+      : updated
+  }
+
+  /** 候補だけを更新し、通常領域の編集履歴と独立して未保存判定へ含める。 */
+  function setCardOCRCandidates(cardId: string, candidates: readonly RegionCandidate[] | null) {
+    const copied = candidates?.length ? cloneRegionCandidates(candidates) : undefined
+    if (!document.value) {
+      draftOCRCandidates.value = copied ?? []
+      return
+    }
+    document.value = {
+      ...document.value,
+      cards: document.value.cards.map(card => card.id === cardId ? { ...card, ocrCandidates: copied } : card),
+    }
   }
 
   /** フォルダプロジェクト文書を独立した複製として返す。文書がなければnullを返す。 */
@@ -181,6 +203,7 @@ export const useProjectStore = defineStore('project', () => {
   return {
     document,
     draftCard,
+    draftOCRCandidates,
     draftAssets,
     draftFonts,
     draftOCRDictionary,
@@ -198,6 +221,7 @@ export const useProjectStore = defineStore('project', () => {
     setOCRDictionary,
     setGlossary,
     updateCard,
+    setCardOCRCandidates,
     snapshot,
   }
 })

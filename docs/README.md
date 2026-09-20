@@ -26,6 +26,7 @@
 
 - [OCRとアセット認識・登録の統合](proposals/ocr-asset-recognition.md)
 - [文章領域の自動選択と微調整](proposals/region-selection.md)
+- [ゲーム別OCR領域検出プロファイルと生成AIによる設定作成](proposals/ocr-detection-profiles.md)
 - [無償翻訳による下訳の一括生成](proposals/free-translation.md)
 
 これらは未実装の改善提案です。各文書に現状、操作フロー、実装方針、完了条件を記載しています。

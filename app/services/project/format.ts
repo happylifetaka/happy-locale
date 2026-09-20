@@ -20,6 +20,7 @@ import type {
   TranslationStatus,
   VerticalAlign,
 } from '~/types/editor'
+import { parseRegionCandidates } from '~/services/ocr/candidate-format'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import { FILE_LIMITS } from '~/utils/file-limits'
 import { clearTemplateText } from '~/utils/layout-template'
@@ -41,7 +42,7 @@ const translationStatuses: TranslationStatus[] = [
   'reviewed',
 ]
 /** 現在書き出すカードプロジェクトの形式バージョン。 */
-export const CURRENT_PROJECT_VERSION = 2
+export const CURRENT_PROJECT_VERSION = 3
 
 /** 値がnull以外のオブジェクトとして扱えるか判定する。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -54,6 +55,8 @@ function migrateProjectDocument(value: unknown): unknown {
     return value
   if (value.version === CURRENT_PROJECT_VERSION)
     return value
+  if (value.version === 2)
+    return { ...value, version: CURRENT_PROJECT_VERSION }
   const legacyVersion = value.version === 0 || value.version === undefined
   if (!legacyVersion && value.version !== 1)
     return value
@@ -430,6 +433,7 @@ function normalizeCard(value: unknown): FolderProjectCard | null {
     sourceDpi: dpiX >= 10 && dpiX <= 9600 && dpiY >= 10 && dpiY <= 9600
       ? { x: dpiX, y: dpiY }
       : null,
+    ...(value.ocrCandidates !== undefined ? { ocrCandidates: parseRegionCandidates(value.ocrCandidates, imageWidth, imageHeight) } : {}),
     regions: Array.isArray(value.regions)
       ? value.regions
           .map(normalizeRegion)
@@ -674,6 +678,8 @@ function assertProjectComplexity(value: unknown): void {
 
 /** フォルダプロジェクトを保存用JSONへ変換する。 */
 export function serializeFolderProject(project: FolderProjectDocument): string {
+  if (project.version !== CURRENT_PROJECT_VERSION)
+    throw new Error('対応していないプロジェクト形式です。')
   assertProjectComplexity(project)
   assertProjectIntegrity(project)
   if (project.layoutTemplates !== undefined)

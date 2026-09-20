@@ -12,7 +12,7 @@ import { savedProjectSignature } from '~/utils/project-save'
 
 interface ProjectPersistenceOptions {
   editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'bindSavedCard'>
-  projectStore: Pick<ReturnType<typeof useProjectStore>, 'document' | 'activeCard' | 'assets' | 'fonts' | 'ocrDictionary' | 'glossary' | 'acceptSavedProject'>
+  projectStore: Pick<ReturnType<typeof useProjectStore>, 'document' | 'activeCard' | 'assets' | 'fonts' | 'ocrDictionary' | 'glossary' | 'acceptSavedProject' | 'draftOCRCandidates'>
   projectRuntime: Pick<ReturnType<typeof useProjectRuntime>, 'directory' | 'cardImage' | 'cardSourceFile' | 'pendingAssetWrites' | 'pendingCardThumbnailBlobs' | 'acknowledgeAssetWrites' | 'clearPendingCardThumbnails'>
   isDemo: Ref<boolean>
   activity: ProjectActivity
@@ -123,6 +123,7 @@ export function useProjectPersistence({
           projectStore.ocrDictionary,
           savedWrites,
           projectStore.glossary,
+          projectStore.draftOCRCandidates,
         )
         projectStore.acceptSavedProject(savedDocument, savedDeletionIds)
         if (wasDraft)

@@ -4,9 +4,11 @@ import type { OCRQueueCardState } from '~/services/ocr/queue'
 import type { OCRProvider, RegionCandidate } from '~/services/ocr/types'
 import type { FolderProjectCard, FolderProjectDocument } from '~/types/editor'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
-import { cloneRegionCandidates, createRegionCandidates } from '~/services/ocr/candidates'
+import { createRegionCandidates } from '~/services/ocr/candidates'
+import { refineHeadingImageBounds } from '~/services/ocr/heading-bounds'
 import { prepareRegionForOCR } from '~/services/ocr/image'
 import { runSequentialOCRQueue } from '~/services/ocr/queue'
+import { enhanceRegionDetection } from '~/services/ocr/region-image'
 import { loadFolderProjectCardImage } from '~/services/project/folder'
 import { sampleRegionCandidates } from '~/services/project/sample'
 import { assertFileSize, assertImageDimensions, FILE_LIMITS } from '~/utils/file-limits'
@@ -25,6 +27,7 @@ interface BatchOCROptions {
   clearRegionCandidates: () => void
   setMessage: (message: string) => void
   logDiagnostic: (message: string, details?: unknown, level?: 'info' | 'error') => void
+  setCardOCRCandidates: (cardId: string, candidates: readonly RegionCandidate[] | null) => void
 }
 
 /** カードを順に認識し、確定前の候補と進捗を管理する。 */
@@ -42,6 +45,7 @@ export function useBatchOCR({
   clearRegionCandidates,
   setMessage,
   logDiagnostic,
+  setCardOCRCandidates,
 }: BatchOCROptions) {
   /** 複数カードの領域検出キューを実行中か。 */
   const batchOCRRunning = ref(false)
@@ -54,9 +58,16 @@ export function useBatchOCR({
   /** 現在の一括OCRで処理するカードの総数。 */
   const batchOCRTotal = ref(0)
   /** カードIDごとの待機・処理中・確認待ち・失敗の状態。 */
-  const batchOCRStates = shallowRef(new Map<string, OCRQueueCardState>())
+  const transientStates = shallowRef(new Map<string, OCRQueueCardState>())
   /** カードIDごとに退避した確認前の領域候補。 */
-  const batchOCRResults = shallowRef(new Map<string, RegionCandidate[]>())
+  const batchOCRResults = computed(() => new Map(projectCards.value
+    .filter(card => card.ocrCandidates?.length)
+    .map(card => [card.id, card.ocrCandidates!])))
+  const batchOCRStates = computed(() => {
+    const states = new Map(transientStates.value)
+    batchOCRResults.value.forEach((candidates, cardId) => states.set(cardId, { status: 'review', candidates: candidates.length }))
+    return states
+  })
 
   /** 削除予定や現在の処理状態を考慮した一括OCRの対象カード。 */
   const batchOCREligibleCards = computed(() => projectCards.value.filter((card) => {
@@ -73,18 +84,17 @@ export function useBatchOCR({
     batchOCRCancelRequested.value = false
     batchOCRCompleted.value = 0
     batchOCRTotal.value = 0
-    batchOCRStates.value = new Map()
-    batchOCRResults.value = new Map()
+    transientStates.value = new Map()
   }
 
   /** 指定カードの一括OCR状態を更新または削除する。 */
   function updateBatchOCRState(cardId: string, state: OCRQueueCardState | null) {
-    const states = new Map(batchOCRStates.value)
-    if (state)
+    const states = new Map(transientStates.value)
+    if (state && state.status !== 'review')
       states.set(cardId, state)
     else
       states.delete(cardId)
-    batchOCRStates.value = states
+    transientStates.value = states
   }
 
   /** 指定カードの領域候補を一括OCR結果へ保存する。 */
@@ -92,12 +102,7 @@ export function useBatchOCR({
     cardId: string,
     candidates: readonly RegionCandidate[] | null,
   ) {
-    const results = new Map(batchOCRResults.value)
-    if (candidates)
-      results.set(cardId, cloneRegionCandidates(candidates))
-    else
-      results.delete(cardId)
-    batchOCRResults.value = results
+    setCardOCRCandidates(cardId, candidates)
   }
 
   /** 指定カードを除き、次に確認する一括OCR結果を探す。 */
@@ -176,7 +181,15 @@ export function useBatchOCR({
       })
       if (batchOCRDisposed)
         return []
-      const candidates = createRegionCandidates(result.blocks, {
+      ocrStatus.value = `${index + 1}/${total} ${card.imageName}: 文字の範囲と見出しを確認しています…`
+      const enhanced = await enhanceRegionDetection(bitmap, bitmap.width, bitmap.height, scale, result, ocrProvider, () => !batchOCRDisposed && !batchOCRCancelRequested.value, error => logDiagnostic('見出しの追加確認に失敗したため全体OCRの候補を使用します', error, 'error'))
+      if (batchOCRDisposed)
+        return []
+      const candidates = createRegionCandidates(enhanced.result.blocks, {
+        words: enhanced.result.words,
+        labelBounds: enhanced.labelBounds,
+        refineTextBounds: enhanced.refineTextBounds,
+        refineHeadingBounds: bounds => refineHeadingImageBounds(bitmap, bounds, scale),
         scale,
         imageWidth: bitmap.width,
         imageHeight: bitmap.height,
@@ -204,12 +217,12 @@ export function useBatchOCR({
 
     batchOCRCancelRequested.value = false
     batchOCRCompleted.value = 0
-    const queuedStates = new Map(batchOCRStates.value)
+    const queuedStates = new Map(transientStates.value)
     cards.forEach((card) => {
       queuedStates.set(card.id, { status: 'queued' })
       updateBatchOCRResult(card.id, null)
     })
-    batchOCRStates.value = queuedStates
+    transientStates.value = queuedStates
     batchOCRTotal.value = cards.length
     batchOCRRunning.value = true
     ocrRunning.value = true
@@ -263,12 +276,12 @@ export function useBatchOCR({
           : `一括OCRが完了しました（${result}）。`,
       )
       if (summary.cancelled) {
-        const remainingStates = new Map(batchOCRStates.value)
+        const remainingStates = new Map(transientStates.value)
         remainingStates.forEach((state, cardId) => {
           if (state.status === 'queued')
             remainingStates.delete(cardId)
         })
-        batchOCRStates.value = remainingStates
+        transientStates.value = remainingStates
       }
     }
     finally {

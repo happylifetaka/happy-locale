@@ -244,6 +244,7 @@ const {
 const candidateEditing = useRegionCandidates({
   editor,
   image,
+  currentImageId,
   provider: ocrProvider,
   execution: { running: ocrRunning, progress: ocrProgress, status: ocrStatus },
   isDemo,
@@ -309,6 +310,7 @@ const projectCards = computed(() => {
         printArea: null,
         sourceDpi: null,
         ...storedCard.value,
+        ...(projectStore.draftOCRCandidates.length ? { ocrCandidates: projectStore.draftOCRCandidates } : {}),
       },
     ]
   }
@@ -391,7 +393,6 @@ const {
   batchOCRResults,
   batchOCREligibleCards,
   resetBatchOCR,
-  updateBatchOCRState,
   updateBatchOCRResult,
   finishBatchOCRReview,
   requestBatchOCRCancellation,
@@ -410,6 +411,7 @@ const {
   clearRegionCandidates,
   setMessage,
   logDiagnostic,
+  setCardOCRCandidates: projectStore.setCardOCRCandidates,
 })
 /** レビュー下書き、CSV照合・出力、確定した訳文の反映。 */
 const {
@@ -540,13 +542,7 @@ function setMessage(value: string) {
 
 /** 調整中の候補と選択状態をカード別に退避し、別カードの確認から戻れるようにする。 */
 function persistDisplayedBatchCandidates() {
-  if (batchOCRStates.value.get(currentImageId.value)?.status !== 'review')
-    return
   updateBatchOCRResult(currentImageId.value, regionCandidates.value)
-  updateBatchOCRState(currentImageId.value, {
-    status: 'review',
-    candidates: regionCandidates.value.length,
-  })
 }
 
 /** 指定カードに退避した領域候補を確認画面へ戻す。 */
@@ -675,7 +671,7 @@ function projectSignature() {
   const cards = documentValue
     ? documentValue.cards
     : image.value
-      ? [{ id: currentImageId.value, imagePath: '', printArea: null, sourceDpi: null, ...storedCard.value }]
+      ? [{ id: currentImageId.value, imagePath: '', printArea: null, sourceDpi: null, ...storedCard.value, ...(projectStore.draftOCRCandidates.length ? { ocrCandidates: projectStore.draftOCRCandidates } : {}) }]
       : []
   return savedProjectSignature({
     cards,
@@ -804,6 +800,7 @@ async function openCardImage(file: File) {
       loaded.element.naturalWidth,
       loaded.element.naturalHeight,
     )
+    projectStore.setCardOCRCandidates(currentImageId.value, null)
     logDiagnostic('新規プロジェクトの最初のカード画像を反映しました')
     applyLoadedImage(loaded)
     const thumbnail = await cacheCardThumbnail(
@@ -865,6 +862,7 @@ async function finishOpeningProject() {
   currentView.value = 'card'
   if (isDemo.value)
     switchInspectorTab('ocr')
+  showBatchOCRCandidates(currentImageId.value)
   await nextTick()
   if (editorDisposed)
     return

@@ -1,3 +1,5 @@
+import type { RegionCandidate } from '../services/ocr/types'
+
 export type TextAlign = 'left' | 'center' | 'right'
 export type VerticalAlign = 'top' | 'middle' | 'bottom'
 export type BackgroundMode = 'auto' | 'manual' | 'solid' | 'none'
@@ -150,11 +152,13 @@ export type FolderProjectCard = CardProject & {
   imagePath: string
   printArea: RegionDraft | null
   sourceDpi: ImageDpi | null
+  /** 未確定のOCR候補。通常領域のUndoスナップショットとは別に保存する。 */
+  ocrCandidates?: RegionCandidate[]
 }
 
 export interface FolderProjectDocument {
   demoPreset?: 'sample-v1'
-  version: 2
+  version: 3
   name: string
   activeCardId: string
   cards: FolderProjectCard[]

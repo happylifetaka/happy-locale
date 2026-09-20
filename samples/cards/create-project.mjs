@@ -44,7 +44,7 @@ async function main() {
     const icon = effect.sourceIcons.find(icon => icon.assetId === asset.id)
     asset.sourceRect = { x: effect.x + icon.x, y: effect.y + icon.y, width: icon.width, height: icon.height }
   }
-  const project = { version: 2, name: 'サンプル（デモ）', demoPreset: 'sample-v1', activeCardId: cards[0].id, cards, assets, fonts: [], ocrDictionary: [], glossary: [], printSettings: { columns: 3, marginMm: 9, gapMm: 1, cutMarks: true } }
+  const project = { version: 3, name: 'サンプル（デモ）', demoPreset: 'sample-v1', activeCardId: cards[0].id, cards, assets, fonts: [], ocrDictionary: [], glossary: [], printSettings: { columns: 3, marginMm: 9, gapMm: 1, cutMarks: true } }
   await writeFile(new URL('project.json', root), `${JSON.stringify(project, null, 2)}\n`)
   await writeFile(new URL('demo-regions.json', import.meta.url), `${JSON.stringify(hints, null, 2)}\n`)
   process.stdout.write('Created sample project and region hints (5 cards, 2 assets, no initial regions).\n')

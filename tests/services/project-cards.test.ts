@@ -22,7 +22,7 @@ import {
 
 function projectDocument(): FolderProjectDocument {
   return {
-    version: 2,
+    version: 3,
     name: 'Cards',
     activeCardId: 'card-1',
     cards: [
@@ -403,6 +403,7 @@ describe('project card state', () => {
           imageWidth: 744,
           imageHeight: 1039,
           regions: [],
+          ocrCandidates: [{ id: 'candidate_1', text: `Candidate ${sequence}`, x: 10, y: 20, width: 80, height: 30, confidence: 85, selected: sequence % 2 === 0, lines: [] }],
           printArea: null,
           sourceDpi: null,
         }
@@ -462,6 +463,7 @@ describe('project card state', () => {
     expect(saved.cards).toHaveLength(30)
     expect(saved.cards[17]!.imageName).toBe('edited-card-18.png')
     expect(JSON.parse(writes.get('project.json') as string).cards).toHaveLength(30)
+    expect(JSON.parse(writes.get('project.json') as string).cards.map((card: { ocrCandidates: unknown }) => card.ocrCandidates)).toEqual(document.cards.map(card => card.ocrCandidates))
 
     const reordered = moveProjectCard(saved, 'card-30', -1)
     expect(reordered.cards.at(-2)?.id).toBe('card-30')
@@ -703,7 +705,7 @@ describe('project card state', () => {
 
   it('backs up the previous document and saves the active card edits', async () => {
     const writes = new Map<string, Blob | string>()
-    const previous = JSON.stringify(projectDocument())
+    const previous = JSON.stringify({ ...projectDocument(), version: 2 })
     const document = projectDocument()
     document.glossary = [{
       id: 'draw',
@@ -747,6 +749,7 @@ describe('project card state', () => {
     )
 
     expect(writes.get('project.backup.json')).toBe(previous)
+    expect(JSON.parse(writes.get('project.json') as string).version).toBe(3)
     expect(saved.cards[0]).toMatchObject({
       id: 'card-1',
       imagePath: 'images/card-1.png',

@@ -41,6 +41,10 @@ defineEmits<{
     <template v-if="candidates.length > 0">
       <p class="muted">
         チェックは追加対象です。画像上の候補をクリックすると青枠へ切り替わり、内部のドラッグで移動、辺や角のドラッグでサイズ変更できます。
+        信頼度0%は候補から除外し、0%より高く40%以下の候補は初期状態ではチェックを外しています。
+      </p>
+      <p class="muted">
+        未確定の候補も「プロジェクト保存」で保存できます（デモを除く）。再開後も確認・調整できます。追加または破棄すると候補は消えます。
       </p>
       <div class="candidate-actions">
         <button type="button" @click="$emit('selectAll', true)">
