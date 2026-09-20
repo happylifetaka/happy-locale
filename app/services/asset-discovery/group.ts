@@ -1,5 +1,5 @@
 import type { AssetFingerprint } from '~/utils/asset-matching'
-import { assetSimilarity } from '~/utils/asset-matching'
+import { createDiscoveryComparator } from './similarity'
 
 export interface IconGroupSample {
   id: string
@@ -18,24 +18,9 @@ export interface IconGroupProposal {
   truncated: boolean
 }
 
-function averageColor(fingerprint: AssetFingerprint): number[] {
-  const sums = [0, 0, 0]
-  let alpha = 0
-  for (let index = 0; index < fingerprint.pixels.length; index += 4) {
-    alpha += fingerprint.pixels[index + 3]!
-    for (let channel = 0; channel < 3; channel++)
-      sums[channel]! += fingerprint.pixels[index + channel]!
-  }
-  return sums.map(sum => alpha ? sum / alpha : 0)
-}
-
 /** 色の違いを既存の形状主体スコアだけで吸収しない。値は正解確率ではない。 */
 export function discoverySimilarity(a: AssetFingerprint, b: AssetFingerprint): number {
-  const ca = averageColor(a)
-  const cb = averageColor(b)
-  if (Math.max(...ca.map((value, index) => Math.abs(value - cb[index]!))) > 0.18)
-    return 0
-  return assetSimilarity(a, b)
+  return createDiscoveryComparator()(a, b)
 }
 
 /** 全メンバーとの一致を要求する保守的な提案。承認／既存グループを変更しない。 */
@@ -48,6 +33,7 @@ export function proposeIconGroups(samples: readonly IconGroupSample[], threshold
   const groups: { members: IconGroupSample[], minimum: number | null }[] = []
   let comparisons = 0
   let truncated = false
+  const similarity = createDiscoveryComparator()
   // 入力順を安定させ、同じ候補集合の並べ替えで提案が変わらないようにする。
   for (const sample of [...samples].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) {
     let best: typeof groups[number] | undefined
@@ -61,7 +47,7 @@ export function proposeIconGroups(samples: readonly IconGroupSample[], threshold
             break
           }
           comparisons++
-          minimum = Math.min(minimum, member.fingerprint ? discoverySimilarity(sample.fingerprint, member.fingerprint) : 0)
+          minimum = Math.min(minimum, member.fingerprint ? similarity(sample.fingerprint, member.fingerprint) : 0)
           if (minimum < threshold)
             break
         }
