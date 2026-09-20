@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Point, ResizeHandle } from '~/features/cards/canvas/geometry'
 import type {
   CardProject,
   ExclusionArea,
@@ -8,6 +9,7 @@ import type {
   TextRegion,
 } from '~/types/editor'
 import type { RegionCandidate } from '~/types/ocr'
+import { changedBounds, resizeHandleAtPoint as geometryResizeHandleAtPoint, imagePoint, lastBoundsAtPoint, normalizedBounds, pointInsideBounds, relativePoint, roundedBounds } from '~/features/cards/canvas/geometry'
 import { useEditorToolsStore } from '~/stores/editor-tools'
 import {
   createAutomaticTextMask,
@@ -89,7 +91,6 @@ const draft = ref<RegionDraft | null>(null)
 const draftMaskStroke = ref<MaskStroke | null>(null)
 /** 現在のマスク描画を開始したポインターの識別子。 */
 const activeMaskPointerId = ref<number | null>(null)
-type ResizeHandle = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw'
 interface ExclusionInteraction {
   kind: 'create' | 'move' | 'resize'
   start: { x: number, y: number }
@@ -144,11 +145,6 @@ function pickImage(event: Event) {
   )
   if (file)
     emit('image', file)
-}
-
-/** 値を指定された上下限の範囲へ収める。 */
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.max(minimum, Math.min(maximum, value))
 }
 
 /** 消去マスクを確認用の色付き画像として重ねる。 */
@@ -624,23 +620,7 @@ watch(
 /** 表示倍率の影響を取り除き、ポインター位置を元画像の画素座標へ変換する。 */
 function pointFromEvent(event: PointerEvent) {
   const element = canvas.value!
-  const bounds = element.getBoundingClientRect()
-  return {
-    x: Math.max(
-      0,
-      Math.min(
-        element.width,
-        (event.clientX - bounds.left) * (element.width / bounds.width),
-      ),
-    ),
-    y: Math.max(
-      0,
-      Math.min(
-        element.height,
-        (event.clientY - bounds.top) * (element.height / bounds.height),
-      ),
-    ),
-  }
+  return imagePoint(event, element.getBoundingClientRect(), element)
 }
 
 /** 現在選択されている翻訳領域を取得する。 */
@@ -650,171 +630,30 @@ function selectedRegion() {
   )
 }
 
-/** 元画像上の点を、領域左上を基準とする相対座標へ変換する。 */
-function relativePoint(point: { x: number, y: number }, region: TextRegion) {
-  return {
-    x: clamp(point.x - region.x, 0, region.width),
-    y: clamp(point.y - region.y, 0, region.height),
-  }
-}
-
-/** 点が翻訳領域の内側にあるか判定する。 */
-function pointInsideRegion(
-  point: { x: number, y: number },
-  region: TextRegion,
-) {
-  return (
-    point.x >= region.x
-    && point.x <= region.x + region.width
-    && point.y >= region.y
-    && point.y <= region.y + region.height
-  )
-}
-
-/** 点が指定された矩形の内側にあるか判定する。 */
-function pointInsideBounds(
-  point: { x: number, y: number },
-  bounds: RegionDraft,
-) {
-  return (
-    point.x >= bounds.x
-    && point.x <= bounds.x + bounds.width
-    && point.y >= bounds.y
-    && point.y <= bounds.y + bounds.height
-  )
-}
-
 /** ポインター位置にある保護領域を探す。 */
-function exclusionAtPoint(point: { x: number, y: number }) {
+function exclusionAtPoint(point: Point) {
   const region = selectedRegion()
-  if (!region)
-    return null
-  const local = relativePoint(point, region)
-  return (
-    region.exclusionAreas.findLast(
-      area =>
-        local.x >= area.x
-        && local.x <= area.x + area.width
-        && local.y >= area.y
-        && local.y <= area.y + area.height,
-    ) ?? null
-  )
+  return region ? lastBoundsAtPoint(region.exclusionAreas, relativePoint(point, region)) ?? null : null
 }
 
 /** ポインターが触れている矩形のリサイズハンドルを判定する。 */
-function resizeHandleAtPoint(
-  point: { x: number, y: number },
-  area: ExclusionArea,
-  region: TextRegion,
-): ResizeHandle | null {
-  const local = relativePoint(point, region)
-  const tolerance = 8 / (props.zoom / 100)
-  const handles: { handle: ResizeHandle, x: number, y: number }[] = [
-    { handle: 'nw', x: area.x, y: area.y },
-    { handle: 'ne', x: area.x + area.width, y: area.y },
-    { handle: 'sw', x: area.x, y: area.y + area.height },
-    {
-      handle: 'se',
-      x: area.x + area.width,
-      y: area.y + area.height,
-    },
-  ]
-  return (
-    handles.find(
-      ({ x, y }) =>
-        Math.abs(local.x - x) <= tolerance
-        && Math.abs(local.y - y) <= tolerance,
-    )?.handle ?? null
-  )
+function resizeHandleAtPoint(point: Point, area: ExclusionArea, region: TextRegion): ResizeHandle | null {
+  return geometryResizeHandleAtPoint(relativePoint(point, region), area, props.zoom)
 }
 
 /** 翻訳領域のどのリサイズハンドルを操作するか判定する。 */
-function regionResizeHandleAtPoint(
-  point: { x: number, y: number },
-  region: RegionDraft,
-): ResizeHandle | null {
-  const tolerance = 8 / (props.zoom / 100)
-  const handles: { handle: ResizeHandle, x: number, y: number }[] = [
-    { handle: 'nw', x: region.x, y: region.y },
-    { handle: 'ne', x: region.x + region.width, y: region.y },
-    { handle: 'sw', x: region.x, y: region.y + region.height },
-    {
-      handle: 'se',
-      x: region.x + region.width,
-      y: region.y + region.height,
-    },
-  ]
-  return (
-    handles.find(
-      ({ x, y }) =>
-        Math.abs(point.x - x) <= tolerance
-        && Math.abs(point.y - y) <= tolerance,
-    )?.handle ?? null
-  )
+function regionResizeHandleAtPoint(point: Point, region: RegionDraft): ResizeHandle | null {
+  return geometryResizeHandleAtPoint(point, region, props.zoom)
 }
 
 /** OCR候補のどのリサイズハンドルを操作するか判定する。 */
-function candidateResizeHandleAtPoint(
-  point: { x: number, y: number },
-  candidate: RegionDraft,
-): ResizeHandle | null {
-  const tolerance = 8 / (props.zoom / 100)
-  const handles: { handle: ResizeHandle, x: number, y: number }[] = [
-    { handle: 'nw', x: candidate.x, y: candidate.y },
-    { handle: 'n', x: candidate.x + candidate.width / 2, y: candidate.y },
-    { handle: 'ne', x: candidate.x + candidate.width, y: candidate.y },
-    {
-      handle: 'e',
-      x: candidate.x + candidate.width,
-      y: candidate.y + candidate.height / 2,
-    },
-    {
-      handle: 'se',
-      x: candidate.x + candidate.width,
-      y: candidate.y + candidate.height,
-    },
-    {
-      handle: 's',
-      x: candidate.x + candidate.width / 2,
-      y: candidate.y + candidate.height,
-    },
-    { handle: 'sw', x: candidate.x, y: candidate.y + candidate.height },
-    {
-      handle: 'w',
-      x: candidate.x,
-      y: candidate.y + candidate.height / 2,
-    },
-  ]
-  return (
-    handles.find(
-      ({ x, y }) =>
-        Math.abs(point.x - x) <= tolerance
-        && Math.abs(point.y - y) <= tolerance,
-    )?.handle ?? null
-  )
-}
-
-/** 二点から矩形を作り、座標と寸法を整数に丸める。 */
-function normalizedBounds(
-  start: { x: number, y: number },
-  end: { x: number, y: number },
-): RegionDraft {
-  return {
-    x: Math.round(Math.min(start.x, end.x)),
-    y: Math.round(Math.min(start.y, end.y)),
-    width: Math.round(Math.abs(end.x - start.x)),
-    height: Math.round(Math.abs(end.y - start.y)),
-  }
+function candidateResizeHandleAtPoint(point: Point, candidate: RegionDraft): ResizeHandle | null {
+  return geometryResizeHandleAtPoint(point, candidate, props.zoom, true)
 }
 
 /** 印刷範囲の変更を親コンポーネントへ通知する。 */
 function emitPrintArea(bounds: RegionDraft) {
-  emit('updatePrintArea', {
-    x: Math.round(bounds.x),
-    y: Math.round(bounds.y),
-    width: Math.round(bounds.width),
-    height: Math.round(bounds.height),
-  })
+  emit('updatePrintArea', roundedBounds(bounds))
 }
 
 /** 印刷範囲のドラッグに使った一時状態を解除する。 */
@@ -911,7 +750,7 @@ function onPointerDown(event: PointerEvent) {
   const selected = selectedRegion()
   if (editorTools.maskEditing && selected?.backgroundMode === 'manual') {
     const point = pointFromEvent(event)
-    if (!pointInsideRegion(point, selected))
+    if (!pointInsideBounds(point, selected))
       return
     draftMaskStroke.value = {
       brushSize: editorTools.maskBrushSize,
@@ -930,7 +769,7 @@ function onPointerDown(event: PointerEvent) {
   if (editorTools.exclusionEditing) {
     // 保護領域の追加中は通常領域の作成へフォールスルーさせない。
     // 選択領域の外から始めたドラッグは何もせず終了する。
-    if (!selected || !pointInsideRegion(point, selected))
+    if (!selected || !pointInsideBounds(point, selected))
       return
     const local = relativePoint(point, selected)
     emit('selectExclusion', null)
@@ -959,7 +798,7 @@ function onPointerDown(event: PointerEvent) {
       return
     }
     const regionHandle = regionResizeHandleAtPoint(point, selected)
-    if (regionHandle || pointInsideRegion(point, selected)) {
+    if (regionHandle || pointInsideBounds(point, selected)) {
       emit('selectExclusion', null)
       regionInteraction.value = {
         kind: regionHandle ? 'resize' : 'move',
@@ -981,82 +820,13 @@ function onPointerDown(event: PointerEvent) {
 }
 
 /** ドラッグ量から保護領域の変更後の矩形を計算する。 */
-function resizedExclusion(
-  interaction: ExclusionInteraction,
-  point: { x: number, y: number },
-  region: TextRegion,
-): RegionDraft {
-  const original = interaction.original!
-  const dx = point.x - interaction.start.x
-  const dy = point.y - interaction.start.y
-  if (interaction.kind === 'move') {
-    return {
-      x: clamp(original.x + dx, 0, region.width - original.width),
-      y: clamp(original.y + dy, 0, region.height - original.height),
-      width: original.width,
-      height: original.height,
-    }
-  }
-  const minimum = 5
-  const right = original.x + original.width
-  const bottom = original.y + original.height
-  const left = interaction.handle?.includes('w')
-    ? clamp(original.x + dx, 0, right - minimum)
-    : original.x
-  const top = interaction.handle?.includes('n')
-    ? clamp(original.y + dy, 0, bottom - minimum)
-    : original.y
-  const resizedRight = interaction.handle?.includes('e')
-    ? clamp(right + dx, original.x + minimum, region.width)
-    : right
-  const resizedBottom = interaction.handle?.includes('s')
-    ? clamp(bottom + dy, original.y + minimum, region.height)
-    : bottom
-  return {
-    x: left,
-    y: top,
-    width: resizedRight - left,
-    height: resizedBottom - top,
-  }
+function resizedExclusion(interaction: ExclusionInteraction, point: Point, region: TextRegion): RegionDraft {
+  return changedBounds({ ...interaction, kind: interaction.kind === 'move' ? 'move' : 'resize', original: interaction.original! }, point, region)
 }
 
 /** 開始時の領域と現在のポインターから移動・リサイズ後の範囲を求める。 */
-function changedRegionBounds(
-  interaction: RegionInteraction,
-  point: { x: number, y: number },
-): RegionDraft {
-  const original = interaction.original
-  const dx = point.x - interaction.start.x
-  const dy = point.y - interaction.start.y
-  if (interaction.kind === 'move') {
-    return {
-      x: clamp(original.x + dx, 0, props.project.imageWidth - original.width),
-      y: clamp(original.y + dy, 0, props.project.imageHeight - original.height),
-      width: original.width,
-      height: original.height,
-    }
-  }
-  const minimum = 5
-  const right = original.x + original.width
-  const bottom = original.y + original.height
-  const left = interaction.handle?.includes('w')
-    ? clamp(original.x + dx, 0, right - minimum)
-    : original.x
-  const top = interaction.handle?.includes('n')
-    ? clamp(original.y + dy, 0, bottom - minimum)
-    : original.y
-  const resizedRight = interaction.handle?.includes('e')
-    ? clamp(right + dx, original.x + minimum, props.project.imageWidth)
-    : right
-  const resizedBottom = interaction.handle?.includes('s')
-    ? clamp(bottom + dy, original.y + minimum, props.project.imageHeight)
-    : bottom
-  return {
-    x: left,
-    y: top,
-    width: resizedRight - left,
-    height: resizedBottom - top,
-  }
+function changedRegionBounds(interaction: RegionInteraction, point: Point): RegionDraft {
+  return changedBounds(interaction, point, { width: props.project.imageWidth, height: props.project.imageHeight })
 }
 
 /** 候補の開始位置から変更後の矩形を計算する。 */
@@ -1140,14 +910,8 @@ function onPointerMove(event: PointerEvent) {
 }
 
 /** ポインター位置にある翻訳領域を探す。 */
-function findRegion(point: { x: number, y: number }) {
-  return props.project.regions.findLast(
-    region =>
-      point.x >= region.x
-      && point.x <= region.x + region.width
-      && point.y >= region.y
-      && point.y <= region.y + region.height,
-  )
+function findRegion(point: Point) {
+  return lastBoundsAtPoint(props.project.regions, point)
 }
 
 /** 新しい領域の背景色を元画像から推定する。 */
@@ -1187,12 +951,7 @@ function onPointerUp(event: PointerEvent) {
     const bounds = draftCandidate.value
     const interaction = candidateInteraction.value
     if (bounds) {
-      const rounded = {
-        x: Math.round(bounds.x),
-        y: Math.round(bounds.y),
-        width: Math.round(bounds.width),
-        height: Math.round(bounds.height),
-      }
+      const rounded = roundedBounds(bounds)
       if (
         rounded.x !== interaction.original.x
         || rounded.y !== interaction.original.y
@@ -1214,12 +973,7 @@ function onPointerUp(event: PointerEvent) {
     const selected = selectedRegion()
     const bounds = draftExclusion.value
     if (selected && bounds && bounds.width >= 5 && bounds.height >= 5) {
-      const rounded = {
-        x: Math.round(bounds.x),
-        y: Math.round(bounds.y),
-        width: Math.round(bounds.width),
-        height: Math.round(bounds.height),
-      }
+      const rounded = roundedBounds(bounds)
       if (exclusionInteraction.value.kind === 'create') {
         emit('addExclusion', selected.id, rounded)
       }
@@ -1240,12 +994,7 @@ function onPointerUp(event: PointerEvent) {
     const bounds = draftRegion.value
     const original = regionInteraction.value.original
     if (bounds) {
-      const rounded = {
-        x: Math.round(bounds.x),
-        y: Math.round(bounds.y),
-        width: Math.round(bounds.width),
-        height: Math.round(bounds.height),
-      }
+      const rounded = roundedBounds(bounds)
       if (
         rounded.x !== original.x
         || rounded.y !== original.y

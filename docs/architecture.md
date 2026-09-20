@@ -113,6 +113,8 @@ PDF専用UIとcomposable、その単体テストは`app/features/pdf/`へまと�
 
 ## Canvas描画
 
+`app/features/cards/canvas/geometry.ts`は表示座標から原画像座標への変換、ヒット判定、矩形の移動・リサイズを担当する純粋関数です。通常領域・OCR候補・保護領域・印刷範囲が同じ計算を使い、候補だけ辺中央のハンドルも判定します。ドラッグ中は小数を保ち、確定時に整数化します。DOM・Store・描画資源は所有しません。
+
 描画処理はUIから分離した関数へ寄せています。
 
 - `app/utils/canvas/background.ts`: 背景色推定、文字マスク、簡易補間、手動マスク
