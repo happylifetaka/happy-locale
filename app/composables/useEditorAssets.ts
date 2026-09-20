@@ -234,29 +234,38 @@ export function useEditorAssets({
       feather: draft.edgeFeather,
       backgroundColor: draft.backgroundColor,
     }, draft.manualMaskStrokes)
-    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
-    if (assetCreationDisposed || !isCurrent())
-      return null
-    const currentError = validateAssetName(name, assets.value)
-    if (currentError)
-      throw new Error(currentError)
-    if (!blob)
-      throw new Error('アセット画像を作成できませんでした。再試行してください。')
-    const id = crypto.randomUUID()
-    const asset: ImageAsset = {
-      id,
-      name,
-      sourceImageId,
-      sourceRect: { ...draft.sourceRect },
-      imagePath: `assets/${id}.png`,
-      scale: 1,
-      baselineOffset: 0,
-      inlinePadding: 0,
+    let retained = false
+    try {
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+      if (assetCreationDisposed || !isCurrent())
+        return null
+      const currentError = validateAssetName(name, assets.value)
+      if (currentError)
+        throw new Error(currentError)
+      if (!blob)
+        throw new Error('アセット画像を作成できませんでした。再試行してください。')
+      const id = crypto.randomUUID()
+      const asset: ImageAsset = {
+        id,
+        name,
+        sourceImageId,
+        sourceRect: { ...draft.sourceRect },
+        imagePath: `assets/${id}.png`,
+        scale: 1,
+        baselineOffset: 0,
+        inlinePadding: 0,
+      }
+      projectStore.setAssets([...assets.value, asset])
+      projectRuntime.setAssetImage(id, canvas)
+      retained = true
+      projectRuntime.setPendingAssetWrite(id, blob)
+      return asset
     }
-    projectStore.setAssets([...assets.value, asset])
-    projectRuntime.setAssetImage(id, canvas)
-    projectRuntime.setPendingAssetWrite(id, blob)
-    return asset
+    finally {
+      // 登録後はruntimeが所有する。取消・失敗した作業Canvasだけを解放する。
+      if (!retained)
+        canvas.width = canvas.height = 1
+    }
   }
 
   /** 共有定義・全カードのトークン・編集履歴を揃えて改名し、Undo後の参照切れを防ぐ。 */

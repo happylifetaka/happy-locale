@@ -1,6 +1,6 @@
 import type { DiscoveryReviewContext, OccurrenceReviewChange } from '~/services/asset-discovery/review-operations'
 import { expect, it } from 'vitest'
-import { addManualOccurrence, editReviewGroup, moveReviewOccurrences, reviewOccurrence } from '~/services/asset-discovery/review-operations'
+import { addManualOccurrence, editReviewGroup, linkReviewAsset, moveReviewOccurrences, reviewOccurrence } from '~/services/asset-discovery/review-operations'
 import { discoveryProject } from '../fixtures/asset-discovery'
 
 function fixture() {
@@ -184,5 +184,31 @@ it('rejects invalid moves or group metadata atomically', () => {
   expect(() => editReviewGroup(state, 'missing', { name: '' }, context)).toThrow('見つかりません')
   for (const patch of [{ representativeId: 'occurrence-3' }, { proposedAssetId: 'missing' }, { name: 'x'.repeat(1001) }])
     expect(() => editReviewGroup(state, 'group-1', patch, context)).toThrow('保存データ')
+  expect(state).toEqual(before)
+})
+
+it('links only explicitly selected members, preserves excluded decisions, and does not approve the group', () => {
+  const { state, context } = groupedFixture()
+  const before = structuredClone(state)
+  const linked = linkReviewAsset(state, ['occurrence-1'], 'asset-2', 'group-1', context)
+  expect(linked.occurrences[0]).toMatchObject({ assetId: 'asset-2', approval: null, decision: 'pending' })
+  expect(linked.occurrences.slice(1)).toEqual(state.occurrences.slice(1))
+  expect(linked.groups[0]!.proposedAssetId).toBe('asset-2')
+  const excluded = linkReviewAsset(linked, ['occurrence-3'], 'asset-2', 'group-2', context)
+  expect(excluded.occurrences[2]).toMatchObject({ assetId: 'asset-2', decision: 'excluded', approval: null })
+  const unlinked = linkReviewAsset(excluded, ['occurrence-1', 'occurrence-2'], null, 'group-1', context)
+  expect(unlinked.occurrences.slice(0, 2).every(item => item.assetId === null && item.approval === null)).toBe(true)
+  expect(unlinked.groups[0]!.proposedAssetId).toBeNull()
+  expect(state).toEqual(before)
+})
+
+it('validates every selected assignment before committing and leaves same-asset approvals intact', () => {
+  const { state, context } = groupedFixture()
+  const before = structuredClone(state)
+  expect(linkReviewAsset(state, ['occurrence-1', 'occurrence-2'], 'asset-1', 'group-1', context)).toEqual(state)
+  for (const ids of [[], ['missing'], ['occurrence-1', 'occurrence-1']])
+    expect(() => linkReviewAsset(state, ids, 'asset-2', undefined, context)).toThrow('一つずつ')
+  expect(() => linkReviewAsset(state, ['occurrence-1', 'occurrence-3'], 'asset-2', 'group-1', context)).toThrow('グループ')
+  expect(() => linkReviewAsset(state, ['occurrence-1'], 'missing', 'group-1', context)).toThrow('アセット参照')
   expect(state).toEqual(before)
 })

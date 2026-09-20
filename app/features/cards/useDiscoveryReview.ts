@@ -8,7 +8,7 @@ import { computed, onScopeDispose, readonly, ref, shallowRef, watch } from 'vue'
 import { parseAssetDiscovery } from '~/services/asset-discovery/format'
 import { adoptIconProposal, compareIconProposal } from '~/services/asset-discovery/proposal-review'
 import { occurrenceIsApproved } from '~/services/asset-discovery/review'
-import { addManualOccurrence, editReviewGroup, moveReviewOccurrences, reviewOccurrence } from '~/services/asset-discovery/review-operations'
+import { addManualOccurrence, editReviewGroup, linkReviewAsset, moveReviewOccurrences, reviewOccurrence } from '~/services/asset-discovery/review-operations'
 
 interface DiscoveryReviewOptions {
   store: Pick<ReturnType<typeof useProjectStore>, 'assetDiscovery' | 'setAssetDiscovery'>
@@ -199,6 +199,10 @@ export function useDiscoveryReview(options: DiscoveryReviewOptions) {
     },
     change(id: string, change: OccurrenceReviewChange) {
       apply((state, ctx) => reviewOccurrence(state, id, change, ctx))
+    },
+    /** 明示選択した出現箇所と任意のグループ提案だけを関連付ける。登録自体・承認は履歴に混ぜない。 */
+    linkAsset(ids: readonly string[], assetId: string | null, groupId?: string) {
+      apply((state, ctx) => linkReviewAsset(state, ids, assetId, groupId, ctx))
     },
     move(ids: readonly string[], destination: ReviewGroupDestination) {
       apply((state, ctx) => moveReviewOccurrences(state, ids, destination, ctx))

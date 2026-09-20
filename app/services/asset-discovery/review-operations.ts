@@ -159,3 +159,25 @@ export function editReviewGroup(
     group.proposedAssetId = patch.proposedAssetId
   return parseAssetDiscovery(next, context)
 }
+
+/** 明示選択した出現箇所だけを一括関連付けする。除外判断と未選択候補は保持し、承認はしない。 */
+export function linkReviewAsset(state: AssetDiscoveryState, ids: readonly string[], assetId: string | null, groupId: string | undefined, context: DiscoveryReviewContext): AssetDiscoveryState {
+  const next = parseAssetDiscovery(state, context)
+  const selected = new Set(ids)
+  const existing = new Set(next.occurrences.map(item => item.id))
+  if (!ids.length || selected.size !== ids.length || ids.some(id => !existing.has(id)))
+    throw new Error('関連付けるアイコン候補を一つずつ選んでください。')
+  if (groupId !== undefined) {
+    const group = next.groups.find(group => group.id === groupId)
+    if (!group || ids.some(id => !group.memberIds.includes(id)))
+      throw new Error('関連付ける候補のグループを確認してください。')
+    group.proposedAssetId = assetId
+  }
+  next.occurrences = next.occurrences.map((item) => {
+    if (!selected.has(item.id))
+      return item
+    const revised = reviseOccurrence(item, item.bounds, assetId)
+    return item.decision === 'excluded' ? { ...revised, decision: 'excluded' } : revised
+  })
+  return parseAssetDiscovery(next, context)
+}
