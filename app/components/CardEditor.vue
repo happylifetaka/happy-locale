@@ -29,6 +29,7 @@ import { useTranslationReview } from '~/composables/useTranslationReview'
 import AssetDiscoveryDialog from '~/features/cards/AssetDiscoveryDialog.vue'
 import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTranslation } from '~/features/cards/cardEditingContext'
 import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
+import IconRegionAnalysisDialog from '~/features/cards/IconRegionAnalysisDialog.vue'
 import { useCandidateReview } from '~/features/cards/useCandidateReview'
 import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
 import { useDiscoveryImageIdentity } from '~/features/cards/useDiscoveryImageIdentity'
@@ -273,7 +274,7 @@ const {
   selectAllRegionCandidates,
   splitCandidate,
   undoCandidateChange,
-  detectRegionCandidates,
+  detectRegionCandidates: detectPlainRegionCandidates,
 } = candidateEditing
 /** 現在の翻訳設定と、ブラウザへの保存を伴う更新操作。 */
 const { settings: translationSettings, updateSettings: updateTranslationSettings }
@@ -514,6 +515,21 @@ const candidateReview = useCandidateReview({
 const { discardRegionCandidates, confirmRegionCandidates } = candidateReview
 
 const discoveryOpen = ref(false)
+const iconAnalysisOpen = ref(false)
+function detectRegionCandidates() {
+  if (projectStore.assetDiscovery?.occurrences.some(item => item.cardId === currentImageId.value && item.assetId && item.decision !== 'excluded'))
+    iconAnalysisOpen.value = true
+  else
+    void detectPlainRegionCandidates()
+}
+function editAnalysisRegions() {
+  iconAnalysisOpen.value = false
+  switchInspectorTab('ocr')
+  if (batchOCRResults.value.get(currentImageId.value)?.length)
+    candidateReview.showBatchOCRCandidates(currentImageId.value)
+  else
+    void detectPlainRegionCandidates()
+}
 const discoveryOptions: DiscoveryWorkspaceOptions = {
   store: projectStore,
   runtime: projectRuntime,
@@ -769,7 +785,9 @@ provideCardTranslation({
       :options="discoveryOptions"
       :request-thumbnail="requestCardThumbnail"
       @close="discoveryOpen = false"
+      @analyze-regions="discoveryOpen = false; iconAnalysisOpen = true"
     />
+    <IconRegionAnalysisDialog v-if="iconAnalysisOpen" :options="discoveryOptions" @close="iconAnalysisOpen = false" @edit-regions="editAnalysisRegions" />
     <GlossaryDialog
       :open="glossaryOpen"
       :entries="glossary"

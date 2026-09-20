@@ -1,3 +1,4 @@
+import type { FolderProjectDocument } from '../../../app/types/editor'
 import { useCardEditor } from '../../../app/composables/useCardEditor'
 import { serializeFolderProject } from '../../../app/services/project/format'
 import { baselineProject } from '../../fixtures/refactoring-baseline'
@@ -67,4 +68,38 @@ export async function prepareDiscoveryUIProject(groupCount = 0) {
   await writer.close()
   Object.assign(window, { showDirectoryPicker: async () => directory })
   return { name, regions: project.cards.map(card => card.regions) }
+}
+
+/** Invented pre-classified icon without a region owner. */
+export async function prepareIconRegionUIProject(fresh = false) {
+  const fixture = await prepareDiscoveryUIProject(1)
+  const directory = await (await navigator.storage.getDirectory()).getDirectoryHandle(fixture.name)
+  const handle = await directory.getFileHandle('project.json')
+  const project = JSON.parse(await (await handle.getFile()).text()) as FolderProjectDocument
+  const occurrence = project.assetDiscovery!.occurrences[0]!
+  occurrence.bounds.width = 32
+  occurrence.assetId = 'token'
+  occurrence.owner = null
+  project.assetDiscovery!.groups[0]!.proposedAssetId = 'token'
+  project.assets = [{ id: 'token', name: 'token', sourceImageId: 'one', sourceRect: occurrence.bounds, imagePath: 'assets/token.png', scale: 1, baselineOffset: 0, inlinePadding: 0 }]
+  const canvas = document.createElement('canvas')
+  canvas.width = 32
+  canvas.height = 42
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#ee3030'
+  ctx.fillRect(0, 0, 32, 42)
+  const png = await new Promise<Blob>(resolve => canvas.toBlob(blob => resolve(blob!), 'image/png'))
+  const assets = await directory.getDirectoryHandle('assets', { create: true })
+  const assetWriter = await (await assets.getFileHandle('token.png', { create: true })).createWritable()
+  await assetWriter.write(png)
+  await assetWriter.close()
+  if (fresh) {
+    const region = project.cards[0]!.regions[0]!
+    project.cards[0]!.ocrCandidates = [{ id: 'saved-candidate', x: region.x, y: region.y, width: region.width, height: region.height, selected: true, text: 'Gain two tokens', confidence: 90, lines: [] }]
+    project.cards[0]!.regions = []
+  }
+  const writer = await handle.createWritable()
+  await writer.write(serializeFolderProject(project))
+  await writer.close()
+  return { name: fixture.name, project }
 }

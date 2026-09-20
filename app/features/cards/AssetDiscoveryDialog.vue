@@ -9,7 +9,7 @@ import DiscoveryBoundsEditor from './DiscoveryBoundsEditor.vue'
 import { useDiscoveryWorkspace } from './useDiscoveryWorkspace'
 
 const props = defineProps<{ options: DiscoveryWorkspaceOptions, requestThumbnail: (id: string) => unknown }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: [], analyzeRegions: [] }>()
 const model = useDiscoveryWorkspace(props.options)
 const dialog = ref<HTMLDialogElement | null>(null)
 const titleId = useId()
@@ -149,6 +149,10 @@ onMounted(() => dialog.value?.showModal())
     </section>
     <p>画像は端末内で処理します。候補の整理・登録・承認だけでは、原文・訳文・カードの描画を変更しません。</p>
     <p>候補と調整内容は「プロジェクト保存」で保存できます。この画面の編集は即時に保存対象へ反映され、「候補編集を戻す」で取り消せます。</p>
+    <button type="button" :disabled="model.working.value || model.pending.value.size > 0 || Boolean(model.creation.value)" @click="emit('analyzeRegions')">
+      次へ：領域検出・アイコン反映
+    </button>
+    <p>分類・アセット割当後は「次へ」で位置を引き継ぎ、アイコンタグ付きの原文を確認できます。</p>
     <details :open="model.occurrences.value.length === 0">
       <summary>収集するカードを選ぶ</summary>
       <fieldset :disabled="model.working.value">
