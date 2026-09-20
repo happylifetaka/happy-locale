@@ -69,6 +69,8 @@ export class TesseractOCRProvider implements OCRProvider {
         async ({ createWorker, OEM }) =>
           createWorker('eng', OEM.LSTM_ONLY, {
             workerPath: `${this.assetBase}/worker/worker.min.js`,
+            // 同一アプリから配信するWorkerを直接起動し、Tesseract内部の未解放Blob URLを作らない。
+            workerBlobURL: false,
             corePath: `${this.assetBase}/core`,
             langPath: `${this.assetBase}/lang`,
             logger: message =>

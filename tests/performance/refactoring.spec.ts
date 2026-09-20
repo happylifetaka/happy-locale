@@ -168,16 +168,15 @@ test('records repeatable browser baselines without private material', async ({ p
     finally { await provider.dispose() }
     return { signature, pixels, ocr, workerBefore, workerDuring, workerAfter: window.__hlBaseline() }
   })
-  expect(operations.workerAfter.workers).toBe(operations.workerBefore.workers)
+  expect(operations.workerAfter).toEqual(operations.workerBefore)
   expect(afterSwitches.resources).toEqual(before.resources)
   const afterOperations = { resources: await resources(), heap: await heap() }
   // Client-side route transition exercises the workspace's actual disposal hooks.
   await page.getByRole('link', { name: /ホーム/ }).click()
   await frame()
   const afterLeave = { resources: await resources(), heap: await heap() }
-  // Baseline defect: Tesseract's spawnWorker creates a blob URL without revoking it.
-  // Track it explicitly, separately from application-owned image URLs; do not hide it.
-  expect(afterLeave.resources).toEqual({ urls: 1, bitmaps: 0, workers: 0, workerUrls: 1 })
+  // The same-origin worker is loaded directly; no library-owned blob URL should remain.
+  expect(afterLeave.resources).toEqual({ urls: 0, bitmaps: 0, workers: 0, workerUrls: 0 })
   expect(errors).toEqual([])
   await info.attach('baseline.json', {
     body: JSON.stringify({ browser: browser.version(), viewport: page.viewportSize(), mode: 'Nuxt dev; instrumentation enabled; GC before heap samples; UI timings include automation and two animation frames', initial, switches, drags, operations, before, afterSwitches, afterOperations, afterLeave }, null, 2),
