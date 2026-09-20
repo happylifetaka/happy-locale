@@ -117,6 +117,8 @@ PDF専用UIとcomposable、その単体テストは`app/features/pdf/`へまと�
 
 同じディレクトリの`renderer.ts`は元画像・編集済みプレビューのCanvasキャッシュを所有し、`CardCanvas`のスコープ終了時に参照を破棄します。画像・アセット・フォントは借用し、解放責任を移しません。`overlays.ts`は選択枠・候補・保護領域・マスク・印刷範囲の編集用表示だけを描画します。プレビューとPNG/JPEG出力は既存の`renderCard`を共用し、出力経路へ仮ドラッグ・選択枠を渡しません。
 
+`useCanvasInteractions`はポインター操作の優先順と仮状態を所有します。入力・編集ツール・確定コールバックを受け、描画用の仮状態とイベントハンドラーを公開します。Storeや履歴を直接更新せず、`CardCanvas`が従来のprops/eventsへ接続します。
+
 描画処理はUIから分離した関数へ寄せています。
 
 - `app/utils/canvas/background.ts`: 背景色推定、文字マスク、簡易補間、手動マスク
