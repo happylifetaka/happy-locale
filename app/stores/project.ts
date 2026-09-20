@@ -83,9 +83,11 @@ export const useProjectStore = defineStore('project', () => {
 
   /** カード切り替えを含む文書の差し替え入口。呼び出し元のオブジェクトとは参照を共有しない。 */
   function replaceProject(nextDocument: FolderProjectDocument) {
-    if (nextDocument.assetDiscovery !== undefined)
-      parseAssetDiscovery(nextDocument.assetDiscovery, { cards: nextDocument.cards, assetIds: new Set(nextDocument.assets.map(asset => asset.id)) })
-    document.value = clone(nextDocument)
+    const discovery = nextDocument.assetDiscovery !== undefined
+      ? parseAssetDiscovery(nextDocument.assetDiscovery, { cards: nextDocument.cards, assetIds: new Set(nextDocument.assets.map(asset => asset.id)) })
+      : undefined
+    // setAssetDiscoveryと同じ正規形を保持し、無変更操作やUndoで保存署名が変わらないようにする。
+    document.value = clone(discovery ? { ...nextDocument, assetDiscovery: discovery } : nextDocument)
     draftCard.value = emptyCardProject()
     draftOCRCandidates.value = []
     draftAssetDiscovery.value = undefined
