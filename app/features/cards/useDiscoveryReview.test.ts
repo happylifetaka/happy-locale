@@ -5,7 +5,7 @@ import { useDiscoveryReview } from '~/features/cards/useDiscoveryReview'
 import { parseFolderProject, serializeFolderProject } from '~/services/project/format'
 import { useProjectStore } from '~/stores/project'
 import { savedProjectSignature } from '~/utils/project-save'
-import { discoveryProject } from '../../../tests/fixtures/asset-discovery'
+import { discoveryProject, discoveryProposal } from '../../../tests/fixtures/asset-discovery'
 
 const scopes: ReturnType<typeof effectScope>[] = []
 beforeEach(() => setActivePinia(createPinia()))
@@ -246,4 +246,86 @@ it('does not mutate history for failed validation or Store writes, and refuses b
   scope.stop()
   expect(review.canRedo.value).toBe(false)
   expect(() => review.redo()).toThrow('操作できません')
+})
+
+it('adopts only selected extraction proposals into the Store as one undoable edit', () => {
+  const { store, review } = fixture({ empty: true })
+  const proposal = discoveryProposal()
+  const comparison = review.compare(proposal)
+  expect(store.assetDiscovery).toBeUndefined()
+  expect(review.canUndo.value).toBe(false)
+  expect(review.adopt(comparison, []).size).toBe(0)
+  expect(store.assetDiscovery).toBeUndefined()
+  expect(review.canUndo.value).toBe(false)
+  const ids = review.adopt(comparison, [{ action: 'add', detectedId: 'detected-1' }])
+  expect(ids.get('detected-1')).toBe('detected-1')
+  expect(store.assetDiscovery!.occurrences).toHaveLength(1)
+  expect(review.canUndo.value).toBe(true)
+  expect(() => review.adopt(comparison, [{ action: 'add', detectedId: 'detected-1' }])).toThrow('再比較')
+  review.undo()
+  expect(store.assetDiscovery).toBeUndefined()
+  expect(() => review.adopt(comparison, [{ action: 'add', detectedId: 'detected-1' }])).toThrow('再比較')
+  review.redo()
+  expect(store.assetDiscovery!.occurrences).toHaveLength(1)
+  expect(parseFolderProject(serializeFolderProject(store.document!)).assetDiscovery).toEqual(store.assetDiscovery)
+  const repeated = review.compare(discoveryProposal())
+  expect(() => review.adopt(repeated, [{ action: 'add', detectedId: 'detected-1' }])).toThrow('対応')
+})
+
+it('keeps approval, groups and history unchanged for repeated equivalent proposals', () => {
+  const { store, review } = fixture()
+  const before = store.snapshot()
+  const comparison = review.compare(discoveryProposal())
+  const choices = [{ action: 'replace' as const, detectedId: 'detected-1', occurrenceId: 'occurrence-1' }]
+  expect(review.adopt(comparison, choices).get('detected-1')).toBe('occurrence-1')
+  expect(review.adopt(comparison, choices).get('detected-1')).toBe('occurrence-1')
+  expect(store.snapshot()).toEqual(before)
+  expect(review.canUndo.value).toBe(false)
+})
+
+it('undoes an explicit replacement together with its approval invalidation', () => {
+  const { store, review } = fixture()
+  const before = store.snapshot()
+  const proposal = discoveryProposal()
+  proposal.occurrences[0]!.bounds.x++
+  proposal.occurrences[0]!.detectedBounds!.x++
+  const comparison = review.compare(proposal)
+  review.adopt(comparison, [{ action: 'replace', detectedId: 'detected-1', occurrenceId: 'occurrence-1' }])
+  expect(store.assetDiscovery!.occurrences[0]).toMatchObject({ id: 'occurrence-1', bounds: { x: 41 }, decision: 'pending', approval: null })
+  expect(store.assetDiscovery!.groups).toEqual(before!.assetDiscovery!.groups)
+  review.undo()
+  expect(store.snapshot()).toEqual(before)
+  review.redo()
+  expect(store.assetDiscovery!.occurrences[0]!.decision).toBe('pending')
+})
+
+it.each(['resource', 'edit-undo', 'outside-edit'] as const)('invalidates a comparison after %s, even when the prior data is later restored', (kind) => {
+  const { store, review, source } = fixture()
+  const comparison = review.compare(discoveryProposal())
+  if (kind === 'resource') {
+    const original = source.value
+    source.value = new Blob(['different'])
+    source.value = original
+  }
+  if (kind === 'edit-undo') {
+    review.editGroup('group-1', { name: 'New name' })
+    review.undo()
+  }
+  if (kind === 'outside-edit') {
+    const original = structuredClone(store.assetDiscovery!)
+    store.setAssetDiscovery({ ...original, groups: original.groups.map(group => ({ ...group, name: 'Changed' })) })
+    store.setAssetDiscovery(original)
+  }
+  const before = store.snapshot()
+  expect(() => review.adopt(comparison, [])).toThrow('再比較')
+  expect(store.snapshot()).toEqual(before)
+})
+
+it('rejects comparisons from another review session and rejects unread source images', () => {
+  const first = fixture()
+  const comparison = first.review.compare(discoveryProposal())
+  const second = fixture()
+  expect(() => second.review.adopt(comparison, [])).toThrow('再比較')
+  second.known.value = false
+  expect(() => second.review.compare(discoveryProposal())).toThrow('元画像')
 })

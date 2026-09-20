@@ -1,9 +1,12 @@
+import type { CardIconProposal } from '~/services/asset-discovery/collect'
+import type { IconProposalChoice, IconProposalReview } from '~/services/asset-discovery/proposal-review'
 import type { DiscoveryReviewContext, OccurrenceReviewChange, ReviewGroupDestination } from '~/services/asset-discovery/review-operations'
 import type { useProjectStore } from '~/stores/project'
 import type { AssetDiscoveryState, IconCandidateGroup } from '~/types/asset-discovery'
 import type { RegionDraft } from '~/types/editor'
 import { computed, onScopeDispose, readonly, ref, shallowRef, watch } from 'vue'
 import { parseAssetDiscovery } from '~/services/asset-discovery/format'
+import { adoptIconProposal, compareIconProposal } from '~/services/asset-discovery/proposal-review'
 import { occurrenceIsApproved } from '~/services/asset-discovery/review'
 import { addManualOccurrence, editReviewGroup, moveReviewOccurrences, reviewOccurrence } from '~/services/asset-discovery/review-operations'
 
@@ -35,6 +38,8 @@ export function useDiscoveryReview(options: DiscoveryReviewOptions) {
   const disposed = ref(false)
   const historyTruncated = ref(false)
   let writing = false
+  let revision = 0
+  const comparisons = new WeakMap<IconProposalReview, number>()
 
   function stamp(): ReviewStamp {
     const current = context()
@@ -55,6 +60,7 @@ export function useDiscoveryReview(options: DiscoveryReviewOptions) {
   }
 
   function clearHistory() {
+    revision++
     past.value = []
     future.value = []
     historyTruncated.value = false
@@ -81,6 +87,7 @@ export function useDiscoveryReview(options: DiscoveryReviewOptions) {
     writing = true
     try {
       store.setAssetDiscovery(next, draftCardId?.())
+      revision++
       baseline.value = stamp()
     }
     finally {
@@ -167,6 +174,26 @@ export function useDiscoveryReview(options: DiscoveryReviewOptions) {
     clearHistory,
     undo,
     redo,
+    compare(proposal: CardIconProposal): IconProposalReview {
+      assertAvailable()
+      const comparison = compareIconProposal(store.assetDiscovery ?? { occurrences: [], groups: [] }, proposal, context())
+      comparisons.set(comparison, revision)
+      return comparison
+    },
+    adopt(comparison: IconProposalReview, choices: readonly IconProposalChoice[]): ReadonlyMap<string, string> {
+      assertAvailable()
+      if (comparisons.get(comparison) !== revision)
+        throw new Error('比較後にレビューや画像が変わりました。再比較してください。')
+      if (!choices.length)
+        return adoptIconProposal(store.assetDiscovery ?? { occurrences: [], groups: [] }, comparison, choices, context()).adoptedIds
+      let adoptedIds: ReadonlyMap<string, string> = new Map()
+      apply((state, ctx) => {
+        const result = adoptIconProposal(state, comparison, choices, ctx)
+        adoptedIds = result.adoptedIds
+        return result.state
+      })
+      return adoptedIds
+    },
     add(cardId: string, bounds: RegionDraft) {
       return apply((state, ctx) => addManualOccurrence(state, cardId, bounds, ctx)).occurrences.at(-1)!.id
     },

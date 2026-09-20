@@ -1,3 +1,4 @@
+import type { CardIconProposal } from '~/services/asset-discovery/collect'
 import type { AssetDiscoveryState } from '~/types/asset-discovery'
 import { baselineProject } from './refactoring-baseline'
 
@@ -36,4 +37,19 @@ export function discoveryProject() {
   }
   project.assetDiscovery = state
   return project
+}
+
+/** A new extraction of the same invented icon, never pre-approved or pre-assigned. */
+export function discoveryProposal(): CardIconProposal {
+  const source = discoveryProject().assetDiscovery!.occurrences[0]!
+  return {
+    cardId: source.cardId,
+    imageDigest: source.imageDigest,
+    imageSize: { ...source.imageSize },
+    occurrences: [{ ...source, id: 'detected-1', assetId: null, approval: null, decision: 'pending', owner: null }],
+    samples: [],
+    searchedAreas: [],
+    ocrAreas: [],
+    limitsHit: [],
+  }
 }
