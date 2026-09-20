@@ -61,6 +61,8 @@ PDF編集はversion付きの専用サイドカーJSONへ解析結果、翻訳、
 
 診断は`useEditorDiagnostics`が画面ごとに直近50件を保持し、表示用の型は`types/diagnostics.ts`で共有します。`useEditorNotifications`は既存の通知期限を維持し、スコープ終了時にタイマーを全解除します。`useEditorHistoryShortcuts`はマウント中だけキーイベントを購読し、処理中・別画面・入力欄・モーダルの履歴操作を横取りしません。これらの状態は保存文書へ含めません。
 
+画像の反映は`useEditorImageAdoption`、読込済み文書の採用は`useProjectAdoption`が担当します。前者は最初の下書き画像・アセット切り出し元・カード画像の反映とDPI読取を接続し、後者は新規フォルダ／既存文書の異なる初期化順を保ってStore・履歴・runtimeへ反映します。画像の検証・デコードと未採用画像の解放は`useEditorImageLoading`、プロジェクトのI/O・準備中断・未採用アセットの解放は`useProjectSession`、採用後のブラウザ資源の所有は`useProjectRuntime`に残します。カード切替では既存の`useProjectNavigation`がカード別履歴を維持します。
+
 PDF専用UIとcomposable、その単体テストは`app/features/pdf/`へまとめています。複数機能が使う部品・サービス・型は共通配置に残し、親画面との接続テストとE2Eは`tests/`へ置きます。既存のカード操作別composableは`app/composables/`にあり、すべての機能をコロケーション済みという意味ではありません。
 
 ## 状態の境界

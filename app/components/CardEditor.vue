@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { RuntimeLoadedImage } from '~/composables/useProjectRuntime'
-import type { OpenedFolderProject } from '~/composables/useProjectSession'
 import type {
   OCRProvider,
 } from '~/services/ocr/types'
@@ -32,15 +31,16 @@ import { useCandidateReview } from '~/features/cards/useCandidateReview'
 import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
 import { useEditorDiagnostics } from '~/features/cards/useEditorDiagnostics'
 import { useEditorHistoryShortcuts } from '~/features/cards/useEditorHistoryShortcuts'
+import { useEditorImageAdoption } from '~/features/cards/useEditorImageAdoption'
 import { useEditorNotifications } from '~/features/cards/useEditorNotifications'
 import { useProjectActivity } from '~/features/cards/useProjectActivity'
+import { useProjectAdoption } from '~/features/cards/useProjectAdoption'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import {
   supportsFolderProjects,
 } from '~/services/project/folder'
 import { useProjectStore } from '~/stores/project'
-import { readImageDpi } from '~/utils/image-dpi'
 import { fitsImage } from '~/utils/layout-template'
 import { savedProjectSignature } from '~/utils/project-save'
 import DiagnosticsDialog from './DiagnosticsDialog.vue'
@@ -457,6 +457,27 @@ const {
   applyPrintAreaToUnconfiguredCards,
 } = useEditorPrintSettings({ projectStore, activeCardId, setMessage })
 
+/** 読込済み画像の反映。URL等の所有・解放は共有runtimeを使う。 */
+const imageAdoption = useEditorImageAdoption({
+  editor,
+  projectStore,
+  projectRuntime,
+  currentImageId,
+  assetSourceImageId,
+  assetEditing,
+  assetCreationDraft,
+  assetRecropId,
+  addingCards,
+  loadingCardId,
+  clearRegionCandidates,
+  loadImage,
+  cacheCardThumbnail,
+  updateCardPrintDpi,
+  setMessage,
+  logDiagnostic,
+})
+const { openCardImage, openAssetSourceImage } = imageAdoption
+
 const candidateReview = useCandidateReview({
   currentImageId,
   activeProjectCard,
@@ -513,36 +534,13 @@ function showBatchOCRCandidates(cardId: string) {
   return candidateReview.showBatchOCRCandidates(cardId)
 }
 
-/** 読み込み済みカード画像を表示用runtimeへ採用する。 */
+/** navigation等の初期化時には同じ画像採用インスタンスへの遅延委譲を渡す。 */
 function applyLoadedImage(loaded: RuntimeLoadedImage) {
-  clearRegionCandidates()
-  projectRuntime.replaceCardImage(loaded)
-  logDiagnostic('画像をエディターへ反映しました', {
-    width: loaded.element.naturalWidth,
-    height: loaded.element.naturalHeight,
-  })
+  imageAdoption.applyLoadedImage(loaded)
 }
 
-/** 画像のDPIを取得し、対応するカードの実寸情報へ反映する。 */
-async function detectAndApplyCardDpi(cardId: string, file: File) {
-  const card = folderDocument.value?.cards.find(item => item.id === cardId)
-  if (!card || card.sourceDpi)
-    return
-  const dpi = await readImageDpi(file)
-  if (!dpi)
-    return
-  updateCardPrintDpi(cardId, dpi)
-  logDiagnostic('元画像のDPIメタデータを読み込みました', {
-    cardId,
-    x: dpi.x,
-    y: dpi.y,
-  })
-}
-
-/** 現在のカード画像と関連リソースを解放する。 */
-function clearLoadedCardImage() {
-  clearRegionCandidates()
-  projectRuntime.clearCardImage()
+function detectAndApplyCardDpi(cardId: string, file: File) {
+  return imageAdoption.detectAndApplyCardDpi(cardId, file)
 }
 
 /** 未保存判定に使用する現在の保存対象の比較値を作る。 */
@@ -615,141 +613,30 @@ async function selectProjectRegion(cardId: string, regionId: string) {
   await navigateToRegion(cardId, regionId)
 }
 
-/** アセット切り出し用の元画像をruntimeへ採用する。 */
-function applyAssetSourceImage(loaded: RuntimeLoadedImage) {
-  projectRuntime.replaceAssetSourceImage(loaded)
-  assetSourceImageId.value = crypto.randomUUID()
-  logDiagnostic('アセット切り出し元画像を反映しました', {
-    width: loaded.element.naturalWidth,
-    height: loaded.element.naturalHeight,
-  })
-}
-
-/** アセット切り出し用の画像と一時URLを解放する。 */
-function clearAssetSourceImage() {
-  projectRuntime.clearAssetSourceImage()
-  assetSourceImageId.value = crypto.randomUUID()
-  assetEditing.value = false
-  assetCreationDraft.value = null
-  assetRecropId.value = null
-}
-
-/** project.jsonがない選択フォルダで、新しいカード編集を開始する。 */
-function startNewFolderProject(directory: FileSystemDirectoryHandle) {
-  resetBatchOCR()
-  clearLoadedCardImage()
-  editor.loadImageProject('', 0, 0)
-  projectRuntime.setDirectory(directory)
-  projectStore.clearProject()
-  currentImageId.value = crypto.randomUUID()
-  resetCardThumbnails()
-  pendingCardDeletionIds.value = new Set()
-  cardPendingDeletionConfirmation.value = null
-  clearAssetSourceImage()
-  projectRuntime.replaceAssetImages(new Map())
-  projectRuntime.clearPendingAssetWrites()
-  cachedFontIds.value = new Set()
-  pendingFontCacheDeletionIds.value = new Set()
-  fontPendingDeletionConfirmation.value = null
-  projectRuntime.replaceLoadedFonts(new Map())
-  currentView.value = 'card'
-  nextTick(() => {
-    lastSavedProjectSignature.value = projectSignature()
-  })
-}
-
-/** 新規プロジェクトの最初のカード画像を読み込み、編集状態を初期化する。 */
-async function openCardImage(file: File) {
-  if (addingCards.value || loadingCardId.value) {
-    setMessage('カードの処理が完了してから画像を開いてください。')
-    return
-  }
-  if (!projectDirectory.value) {
-    setMessage('先にプロジェクトフォルダを選択してください。')
-    return
-  }
-  if (folderDocument.value) {
-    setMessage('既存プロジェクトへの追加はカード一覧の＋を使用してください。')
-    return
-  }
-  logDiagnostic('「画像を開く」の選択を開始しました')
-  const loaded = await loadImage(file)
-  if (!loaded)
-    return
-  try {
-    editor.loadImageProject(
-      file.name,
-      loaded.element.naturalWidth,
-      loaded.element.naturalHeight,
-    )
-    projectStore.setCardOCRCandidates(currentImageId.value, null)
-    logDiagnostic('新規プロジェクトの最初のカード画像を反映しました')
-    applyLoadedImage(loaded)
-    const thumbnail = await cacheCardThumbnail(
-      currentImageId.value,
-      loaded.element,
-    )
-    if (thumbnail) {
-      projectRuntime.setPendingCardThumbnail(currentImageId.value, thumbnail)
-    }
-    setMessage(`${file.name} を読み込みました。`)
-  }
-  catch (error) {
-    URL.revokeObjectURL(loaded.url)
-    logDiagnostic('編集プロジェクトの初期化に失敗しました', error, 'error')
-    setMessage('画像の編集画面を初期化できませんでした。')
-  }
-}
-
-/** 選択画像をアセットの切り出し元として読み込む。 */
-async function openAssetSourceImage(file: File) {
-  logDiagnostic('アセット切り出し元の画像選択を開始しました')
-  const loaded = await loadImage(file)
-  if (!loaded)
-    return
-  applyAssetSourceImage(loaded)
-  assetEditing.value = false
-  assetCreationDraft.value = null
-  assetRecropId.value = null
-  setMessage(`${file.name} をアセット切り出し元として読み込みました。`)
-}
-
-/** 完全に読み込めた文書と画像を、各機能の初期状態として採用する。 */
-function adoptOpenedProject(opened: OpenedFolderProject, loaded: RuntimeLoadedImage, images: Map<string, ImageBitmap>) {
-  projectRuntime.setDirectory(opened.directory)
-  resetBatchOCR()
-  projectStore.replaceProject(opened.document)
-  editor.loadSavedProject({
-    imageName: opened.card.imageName,
-    imageWidth: loaded.element.naturalWidth,
-    imageHeight: loaded.element.naturalHeight,
-    regions: opened.card.regions,
-  }, opened.card.id)
-  currentImageId.value = opened.card.id
-  resetCardThumbnails()
-  pendingCardDeletionIds.value = new Set()
-  cardPendingDeletionConfirmation.value = null
-  clearAssetSourceImage()
-  projectRuntime.replaceAssetImages(images)
-  applyLoadedImage(loaded)
-  projectRuntime.clearPendingAssetWrites()
-  projectRuntime.replaceLoadedFonts(new Map())
-  cachedFontIds.value = new Set()
-  pendingFontCacheDeletionIds.value = new Set()
-  fontPendingDeletionConfirmation.value = null
-}
-
-/** 読込後の表示と未保存判定を同期する。 */
-async function finishOpeningProject() {
-  currentView.value = 'card'
-  if (isDemo.value)
-    switchInspectorTab('ocr')
-  showBatchOCRCandidates(currentImageId.value)
-  await nextTick()
-  if (editorDisposed)
-    return
-  lastSavedProjectSignature.value = projectSignature()
-}
+/** 文書と画像の準備が終わった後の、Store・履歴・runtimeへの採用。 */
+const { startNewFolderProject, adoptOpenedProject, finishOpeningProject } = useProjectAdoption({
+  editor,
+  projectStore,
+  projectRuntime,
+  currentImageId,
+  currentView,
+  pendingCardDeletionIds,
+  cardPendingDeletionConfirmation,
+  cachedFontIds,
+  pendingFontCacheDeletionIds,
+  fontPendingDeletionConfirmation,
+  lastSavedProjectSignature,
+  isDemo,
+  isActive: () => !editorDisposed,
+  projectSignature,
+  resetBatchOCR,
+  resetCardThumbnails,
+  clearLoadedCardImage: imageAdoption.clearLoadedCardImage,
+  clearAssetSourceImage: imageAdoption.clearAssetSourceImage,
+  applyLoadedImage,
+  switchInspectorTab,
+  showBatchOCRCandidates,
+})
 
 /** フォルダ選択と文書・画像の準備、未採用リソースの解放。 */
 const { openingProject, openProject: openProjectSession } = useProjectSession({
