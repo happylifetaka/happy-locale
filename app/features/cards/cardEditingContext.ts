@@ -1,48 +1,6 @@
-import type { InjectionKey, Ref } from 'vue'
-import type { useCardWorkspace } from './useCardWorkspace'
-import type { useSourceIcons } from './useSourceIcons'
-import type { useCardEditor } from '~/composables/useCardEditor'
-import type { useEditorAssets } from '~/composables/useEditorAssets'
-import type { OCRExecutionState, useEditorOCR } from '~/composables/useEditorOCR'
-import type { useRegionCandidates } from '~/composables/useRegionCandidates'
-import type { FontReference, GlossaryEntry, ImageAsset, OCRDictionaryEntry } from '~/types/editor'
+import type { InjectionKey } from 'vue'
+import type { CardEditingContext, CardOCRContext, CardResourcesContext, CardSourceIconsContext, CardTranslationContext } from './cardEditingContracts'
 import { inject, provide } from 'vue'
-
-/** 保存・カード切替を公開せず、既存の編集インスタンスへの操作だけを共有する。 */
-interface CardEditingContext {
-  cardId: Readonly<Ref<string>>
-  notify: (message: string) => void
-  editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'selectedRegion' | 'selectedRegionId' | 'updateRegion'>
-  workspace: Omit<ReturnType<typeof useCardWorkspace>, 'stopEditing' | 'resetCardSelection' | 'maskEditing' | 'exclusionEditing'>
-}
-
-/** runtimeが所有する描画資源への参照と、OCR内での新規登録窓口。解放・保存は全体側に残す。 */
-interface CardResourcesContext {
-  createSourceIconAsset: ReturnType<typeof useEditorAssets>['createSourceIconAsset']
-  image: Readonly<Ref<HTMLImageElement | null>>
-  projectSelected: Readonly<Ref<boolean>>
-  assets: Readonly<Ref<ImageAsset[]>>
-  assetImages: Readonly<Ref<ReadonlyMap<string, CanvasImageSource>>>
-  fontFamilies: Readonly<Ref<ReadonlyMap<string, string>>>
-  fonts: Readonly<Ref<FontReference[]>>
-  loadedFontIds: Readonly<Ref<ReadonlySet<string>>>
-}
-
-interface CardOCRContext {
-  region: ReturnType<typeof useEditorOCR>
-  execution: OCRExecutionState
-  dictionary: Readonly<Ref<OCRDictionaryEntry[]>>
-  candidates: Pick<ReturnType<typeof useRegionCandidates>, 'regionCandidates' | 'selectedCandidateId' | 'selectRegionCandidate' | 'updateCandidateBounds'>
-}
-
-interface CardTranslationContext {
-  enabled: Readonly<Ref<boolean>>
-  running: Readonly<Ref<boolean>>
-  glossary: Readonly<Ref<GlossaryEntry[]>>
-  reusableCount: Readonly<Ref<number>>
-  requestReuse: () => void
-  translate: () => void
-}
 
 function context<T>(name: string) {
   const key: InjectionKey<T> = Symbol(name)
@@ -71,6 +29,6 @@ export const provideCardTranslation = translation.provide
 export const useCardTranslation = translation.use
 
 /** Workspaceだけが生成し、詳細Inspectorから確認を開くための局所的な窓口。 */
-const sourceIcons = context<ReturnType<typeof useSourceIcons>>('card source icons')
+const sourceIcons = context<CardSourceIconsContext>('card source icons')
 export const provideCardSourceIcons = sourceIcons.provide
 export const useCardSourceIcons = sourceIcons.use

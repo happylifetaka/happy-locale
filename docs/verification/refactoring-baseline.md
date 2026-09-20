@@ -119,3 +119,11 @@ mise exec -- pnpm exec playwright test --config playwright.performance.config.ts
 - 実フォルダ選択・実フォント・私有画像の手動検証は未実施。OCR検出アルゴリズムや保存形式は変更していない。
 
 P3で追加監査する既存の非同期境界: DPI読取後の文書同一性、最初の画像のサムネイル作成待ち中の対象変更、新規フォルダ開始後の`nextTick`。今回の抽出では元の条件を維持しており、これらを新たに安全性確認済みとは扱わない。
+
+## P1-d: Context公開型の明示化
+
+`cardEditingContracts.ts`へ編集・Workspace・描画資源・OCR・翻訳の公開型を分離した。実装の`ReturnType`や除外式`Omit`をContextから外し、子に必要なAPIを列挙。Inspectorへ渡す原文アイコン確認は`open`だけに限定する。共有インスタンス、provide/injectのキー、画面のprops/eventsは変更していない。
+
+- 公開型へ保存・履歴初期化・資源解放・候補検出が漏れないことを型テスト2件で固定。型検査でもこのテストを検査する。
+- 既存Workspace・画面接続と合わせて6ファイル42件成功。型検査・対象Lint・`git diff --check`成功。
+- 型の変更のみであり、E2E・静的生成・実機手動確認はこの単位では再実行していない。直前のP1-cの実行結果と区別する。

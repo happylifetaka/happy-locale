@@ -1,11 +1,11 @@
 import type { Ref } from 'vue'
-import type { useCardEditor } from '~/composables/useCardEditor'
+import type { CardEditingContext } from './cardEditingContracts'
 import type { ImageAsset, SourceIcon, TextRegion } from '~/types/editor'
 import { shallowRef, watch } from 'vue'
 import { sourceIconProblems } from '~/utils/source-icons'
 
 interface SourceIconsOptions {
-  editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'selectedRegion' | 'updateRegion'>
+  editor: Pick<CardEditingContext['editor'], 'project' | 'selectedRegion' | 'updateRegion'>
   cardId: Readonly<Ref<string>>
   assets: Readonly<Ref<ImageAsset[]>>
   ocrRunning: Readonly<Ref<boolean>>

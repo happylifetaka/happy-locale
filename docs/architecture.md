@@ -55,7 +55,7 @@ PDF編集はversion付きの専用サイドカーJSONへ解析結果、翻訳、
 
 カード編集専用の接続は`app/features/cards/`へ配置しています。`useCardWorkspace`は表示倍率・プレビューモード・Inspectorタブ・領域操作をまとめ、`CardEditingWorkspace`がCanvas・Inspector・領域の確認ダイアログを接続します。印刷・アセット画面への切替ではWorkspaceを破棄せず、選択と表示倍率を保持します。
 
-`cardEditingContext.ts`は編集・描画資源・OCR・翻訳の用途別に型付きのprovide/injectを定義します。親で作った同じインスタンスを共有し、保存・資源解放などのAPIは子へ公開しません。原文アイコン確認の`useSourceIcons`はWorkspaceで生成し、その配下だけへ共有します。
+`cardEditingContext.ts`は編集・描画資源・OCR・翻訳の用途別に型付きのprovide/injectを定義します。`cardEditingContracts.ts`で子画面が使うAPIを列挙し、実装の戻り値へ操作を追加しても自動的に公開型が広がらないようにしています。親で作った同じインスタンスを共有し、保存・資源解放などのAPIは子の型へ公開しません（別インスタンスの生成や実行時のアクセス制御ではありません）。原文アイコン確認の`useSourceIcons`はWorkspaceで生成し、Inspectorには確認を開く操作だけを共有します。
 
 `useCandidateReview`は候補の作業コピーの復元・退避・確定・破棄を担当します。候補検出・編集履歴の所有は`useRegionCandidates`、カード別候補の保存と次カードへのレビュー進行は既存のStore・一括OCR側に残します。Canvasは背景色を取得する関数だけを渡し、レビュー操作はWorker・Canvas資源・フォルダI/Oを所有しません。
 
