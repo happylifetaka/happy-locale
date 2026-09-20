@@ -1,6 +1,6 @@
 import type { DiscoveryReviewContext, OccurrenceReviewChange } from '~/services/asset-discovery/review-operations'
 import { expect, it } from 'vitest'
-import { addManualOccurrence, editReviewGroup, linkReviewAsset, linkReviewAssetChoices, moveReviewOccurrences, reviewOccurrence } from '~/services/asset-discovery/review-operations'
+import { addManualOccurrence, editReviewGroup, linkReviewAsset, linkReviewAssetChoices, moveReviewOccurrences, reviewOccurrence, splitReviewOccurrence } from '~/services/asset-discovery/review-operations'
 import { discoveryProject } from '../fixtures/asset-discovery'
 
 function fixture() {
@@ -15,6 +15,43 @@ function fixture() {
   }
   return { project, card, state, context, id: state.occurrences[0]!.id }
 }
+
+it.each(['horizontal', 'vertical'] as const)('splits a composite candidate %s without transferring approval, assignment or grouping', (axis) => {
+  const { project, state, context, id } = fixture()
+  const before = structuredClone(project)
+  const next = splitReviewOccurrence(state, id, axis, 0.4, context)
+  expect(next.occurrences).toHaveLength(2)
+  expect(new Set(next.occurrences.map(item => item.id)).size).toBe(2)
+  expect(next.groups).toEqual([])
+  for (const item of next.occurrences) {
+    expect(item.id).not.toBe(id)
+    expect(item).toMatchObject({ decision: 'pending', assetId: null, approval: null, origin: 'manual', detectedBounds: null })
+  }
+  const [a, b] = next.occurrences.map(item => item.bounds)
+  expect(a).toEqual(axis === 'horizontal' ? { x: 40, y: 50, width: 20, height: 8 } : { x: 40, y: 50, width: 8, height: 20 })
+  expect(b).toEqual(axis === 'horizontal' ? { x: 40, y: 58, width: 20, height: 12 } : { x: 48, y: 50, width: 12, height: 20 })
+  expect(project).toEqual(before)
+})
+
+it('preserves other group members and refuses stale images, invalid split points and capacity overflow atomically', () => {
+  const { state, context, id } = fixture()
+  const other = { ...structuredClone(state.occurrences[0]!), id: 'other' }
+  state.occurrences.push(other)
+  state.groups[0]!.memberIds.push(other.id)
+  const before = structuredClone(state)
+  const next = splitReviewOccurrence(state, id, 'horizontal', 0.5, context)
+  expect(next.groups[0]).toMatchObject({ memberIds: ['other'], representativeId: 'other' })
+  expect(next.occurrences[0]).toEqual(other)
+  for (const ratio of [0, 1, -1, Number.NaN, Number.POSITIVE_INFINITY])
+    expect(() => splitReviewOccurrence(state, id, 'horizontal', ratio, context)).toThrow('分割位置')
+  expect(() => splitReviewOccurrence(state, id, 'horizontal', 0.5, { ...context, imageDigests: new Map() })).toThrow('元画像')
+  expect(() => splitReviewOccurrence(state, id, 'horizontal', 0.5, { ...context, imageDigests: new Map([[other.cardId, 'c'.repeat(64)]]) })).toThrow('元画像')
+  const full = { ...state, occurrences: [state.occurrences[0]!, ...Array.from({ length: 99 }, (_, index) => ({ ...other, id: index ? `full-${index}` : 'other' }))] }
+  const fullBefore = structuredClone(full)
+  expect(() => splitReviewOccurrence(full, id, 'horizontal', 0.5, context)).toThrow('候補数')
+  expect(full).toEqual(fullBefore)
+  expect(state).toEqual(before)
+})
 
 it('creates a manual, unapproved occurrence with independent bounds and unique ownership', () => {
   const { project, state, card, context } = fixture()

@@ -39,7 +39,7 @@ export async function prepareDiscoveryUIProject(groupCount = 0) {
         cardId: 'one',
         imageDigest: digest,
         imageSize: { width: 600, height: 900 },
-        bounds: { x: 275, y: 574, width: 32, height: 42 },
+        bounds: { x: 275, y: 574, width: index === groupCount - 1 ? 77 : 32, height: 42 },
         detectedBounds: null,
         origin: 'manual',
         detectorRevision: 'synthetic-ui',

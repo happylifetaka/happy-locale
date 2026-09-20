@@ -19,12 +19,30 @@ test('all 32 groups are reachable and share editable human-readable names', asyn
     await expect(dialog.getByRole('heading', { name: 'グループ（32）', exact: true })).toBeVisible()
     await expect(navigation).toContainText('1–8 / 32件')
     await expect(list.getByRole('button')).toHaveCount(8)
-    await expect(dialog.getByLabel('候補の移動先').locator('option')).not.toContainText(['internal-'])
+    await expect(dialog.getByLabel('候補の移動先').locator('option')).toHaveText([
+      '移動先グループを選択',
+      '新しいグループへ分ける',
+      '未分類に戻す',
+      ...Array.from({ length: 32 }, (_, index) => `グループ${index + 1}へ統合・移動`),
+    ])
+    const selectAll = dialog.getByRole('checkbox', { name: /すべて選択/ })
+    await selectAll.check()
+    await expect(dialog.getByRole('button', { name: '選択32件を移動', exact: true })).toBeDisabled()
+    await dialog.getByLabel('候補の移動先').selectOption('internal-0')
+    await expect(dialog.getByRole('button', { name: '選択32件を移動', exact: true })).toBeEnabled()
+    await dialog.getByRole('navigation', { name: '候補のページ', exact: true }).getByRole('button', { name: '次へ', exact: true }).click()
+    await expect(dialog.locator('.occurrence input:checked')).toHaveCount(8)
+    await dialog.locator('.occurrence input').first().uncheck()
+    await expect(selectAll).toHaveJSProperty('indeterminate', true)
+    await selectAll.check()
+    await selectAll.uncheck()
+    await expect(dialog.locator('.occurrence input:checked')).toHaveCount(0)
     for (let pageIndex = 0; pageIndex < 4; pageIndex++) {
       for (let index = 1; index <= 8; index++) {
         const number = pageIndex * 8 + index
         await list.getByRole('button', { name: new RegExp(`^グループ${number}：`) }).click()
         await expect(dialog.getByLabel('グループ名', { exact: true })).toHaveValue(`グループ${number}`)
+        await expect(selectAll).not.toBeChecked()
       }
       if (pageIndex < 3)
         await navigation.getByRole('button', { name: '次へ', exact: true }).click()
@@ -40,6 +58,26 @@ test('all 32 groups are reachable and share editable human-readable names', asyn
     await expect(name).toHaveValue('グループ32')
     await dialog.getByRole('button', { name: '候補編集をやり直す', exact: true }).click()
     await expect(name).toHaveValue('防御アイコン')
+    await selectAll.check()
+    await expect(dialog.getByRole('button', { name: '選択1件を移動', exact: true })).toBeVisible()
+    await dialog.locator('.occurrence button').first().click()
+    await dialog.getByRole('button', { name: '複数のアイコンを2候補に分割', exact: true }).click()
+    await dialog.getByRole('button', { name: '分割をキャンセル', exact: true }).click()
+    await expect(dialog.locator('.occurrence')).toHaveCount(1)
+    await dialog.getByRole('button', { name: '複数のアイコンを2候補に分割', exact: true }).click()
+    await dialog.getByLabel('分割方向', { exact: true }).selectOption('vertical')
+    await dialog.getByLabel('分割位置', { exact: true }).focus()
+    await dialog.getByLabel('分割位置', { exact: true }).press('ArrowRight')
+    await expect(dialog.locator('.bounds-editor svg rect')).toHaveCount(2)
+    await dialog.locator('.bounds-editor').screenshot({ path: testInfo.outputPath('split-preview.png') })
+    await dialog.getByRole('button', { name: '2候補への分割を確定', exact: true }).click()
+    await expect(dialog.getByText(/2つの未確認・未分類候補に分割しました/)).toBeVisible()
+    await expect(dialog.locator('.occurrence')).toHaveCount(2)
+    await expect(dialog.locator('.occurrence button')).toContainText(['未確認', '未確認'])
+    await expect(dialog.locator('.occurrence button')).toContainText(['アセット未割当', 'アセット未割当'])
+    await dialog.getByRole('button', { name: '候補編集を戻す', exact: true }).click()
+    await expect(dialog.locator('.occurrence')).toHaveCount(0)
+    await expect(dialog.getByRole('heading', { name: 'グループ（32）', exact: true })).toBeVisible()
     await dialog.screenshot({ path: testInfo.outputPath('32-groups.png') })
     await dialog.getByRole('button', { name: '閉じる', exact: true }).click()
     await page.getByRole('button', { name: 'プロジェクト保存', exact: true }).click()

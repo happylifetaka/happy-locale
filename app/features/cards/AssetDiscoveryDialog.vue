@@ -16,7 +16,7 @@ const optedIn = ref(false)
 const cardIds = ref([props.options.currentImageId.value])
 const groupId = ref('all')
 const checked = ref<string[]>([])
-const destination = ref('new')
+const destination = ref('')
 const newGroupName = ref('')
 const adding = ref(false)
 const groupPage = ref(0)
@@ -30,6 +30,11 @@ const visibleGroups = computed(() => model.groups.value.slice(groupPage.value * 
 const activeGroup = computed(() => model.groups.value.find(group => group.id === groupId.value))
 const filtered = computed(() => model.occurrences.value.filter(item => groupId.value === 'all' || (groupId.value === 'ungrouped' ? !model.groups.value.some(group => group.memberIds.includes(item.id)) : model.groups.value.find(group => group.id === groupId.value)?.memberIds.includes(item.id))))
 const visible = computed(() => filtered.value.slice(occurrencePage.value * 24, (occurrencePage.value + 1) * 24))
+const checkedCount = computed(() => filtered.value.filter(item => checked.value.includes(item.id)).length)
+const allChecked = computed(() => filtered.value.length > 0 && checkedCount.value === filtered.value.length)
+function checkAll(event: Event) {
+  checked.value = (event.target as HTMLInputElement).checked ? filtered.value.map(item => item.id) : []
+}
 const selectedGroup = computed(() => model.groups.value.find(group => group.memberIds.includes(model.selectedId.value ?? '')))
 const currentSelection = computed(() => model.selected.value?.cardId === props.options.currentImageId.value ? model.selected.value : undefined)
 const currentImage = computed(() => props.options.runtime.cardImage.value)
@@ -59,6 +64,8 @@ function close() {
   emit('close')
 }
 function moveChecked() {
+  if (!destination.value)
+    return
   action(() => {
     model.review.move(checked.value, destination.value === 'new' ? { kind: 'new', id: crypto.randomUUID(), name: newGroupName.value } : destination.value === 'ungrouped' ? { kind: 'ungrouped' } : { kind: 'existing', id: destination.value })
     checked.value = []
@@ -81,6 +88,8 @@ function applyDifference() {
 }
 watch(groupId, () => {
   occurrencePage.value = 0
+  checked.value = []
+  destination.value = ''
 })
 watch(() => model.comparison.value, () => {
   diffIds.value = []
@@ -96,7 +105,13 @@ watch(() => model.groups.value, (groups) => {
   groupPage.value = Math.min(groupPage.value, Math.max(0, Math.ceil(groups.length / groupPageSize) - 1))
   if (!['all', 'ungrouped'].includes(groupId.value) && !groups.some(group => group.id === groupId.value))
     groupId.value = 'all'
+  if (destination.value && !['new', 'ungrouped'].includes(destination.value) && !groups.some(group => group.id === destination.value))
+    destination.value = ''
 })
+async function splitCandidate(axis: 'horizontal' | 'vertical', ratio: number) {
+  if (await model.split(axis, ratio))
+    groupId.value = 'ungrouped'
+}
 watch(() => [...visible.value, ...visibleGroups.value.flatMap(group => representative(group.representativeId) ?? [])], (items) => {
   new Set(items.map(item => item.cardId)).forEach((id) => {
     void props.requestThumbnail(id)
@@ -226,6 +241,9 @@ onMounted(() => dialog.value?.showModal())
         <fieldset :disabled="model.working.value">
           <legend>選択した候補のグループ整理</legend>
           <select v-model="destination" aria-label="候補の移動先">
+            <option disabled value="">
+              移動先グループを選択
+            </option>
             <option value="new">
               新しいグループへ分ける
             </option><option value="ungrouped">
@@ -236,10 +254,14 @@ onMounted(() => dialog.value?.showModal())
             </option>
           </select>
           <input v-if="destination === 'new'" v-model="newGroupName" aria-label="新しいグループ名" placeholder="グループ名（任意）">
-          <button type="button" :disabled="!checked.length" @click="moveChecked">
+          <button type="button" :disabled="!checked.length || !destination" @click="moveChecked">
             選択{{ checked.length }}件を移動
           </button>
         </fieldset>
+        <label class="select-all">
+          <input type="checkbox" :checked="allChecked" :indeterminate="checkedCount > 0 && !allChecked" :disabled="model.working.value || !filtered.length" @change="checkAll">
+          すべて選択（{{ filtered.length }}件・ページ外を含む）
+        </label>
         <div v-for="item in visible" :key="item.id" class="occurrence">
           <input v-model="checked" type="checkbox" :value="item.id" :aria-label="`${cardName(item.cardId)}の候補を整理対象にする ${item.id}`" :disabled="model.working.value">
           <button type="button" :disabled="model.working.value" :aria-pressed="model.selectedId.value === item.id" @click="model.select(item.id)">
@@ -263,7 +285,7 @@ onMounted(() => dialog.value?.showModal())
           {{ adding ? '手動追加を終了' : '現在のカードに手動追加' }}
         </button>
         <template v-if="editableCard && currentImage && (currentSelection || adding)">
-          <DiscoveryBoundsEditor :key="adding ? 'new' : currentSelection?.id" :image-url="currentImage.src" :image-width="editableCard.imageWidth" :image-height="editableCard.imageHeight" :bounds="adding ? undefined : currentSelection?.bounds" :disabled="model.working.value || Boolean(model.creation.value)" @commit="model.changeBounds($event, adding)" />
+          <DiscoveryBoundsEditor :key="adding ? 'new' : currentSelection?.id" :image-url="currentImage.src" :image-width="editableCard.imageWidth" :image-height="editableCard.imageHeight" :bounds="adding ? undefined : currentSelection?.bounds" :disabled="model.working.value || Boolean(model.creation.value)" @commit="model.changeBounds($event, adding)" @split="splitCandidate" />
           <fieldset v-if="currentSelection && !adding" :disabled="model.working.value">
             <legend>この出現箇所の判断</legend>
             <button type="button" @click="action(() => model.review.change(currentSelection!.id, { kind: 'decision', decision: currentSelection!.decision === 'excluded' ? 'pending' : 'excluded' }))">

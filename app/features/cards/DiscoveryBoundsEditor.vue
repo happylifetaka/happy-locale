@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import type { RegionDraft } from '~/types/editor'
 import { computed, ref, watch } from 'vue'
+import { splitIconBounds } from '~/services/asset-discovery/split'
 
 const props = defineProps<{ imageUrl: string, imageWidth: number, imageHeight: number, bounds?: RegionDraft, disabled: boolean }>()
-const emit = defineEmits<{ commit: [bounds: RegionDraft] }>()
+const emit = defineEmits<{ commit: [bounds: RegionDraft], split: [axis: 'horizontal' | 'vertical', ratio: number] }>()
 const svg = ref<SVGSVGElement | null>(null)
 const start = ref<{ x: number, y: number } | null>(null)
 const draft = ref<RegionDraft>({ x: 0, y: 0, width: 20, height: 20 })
 const drawing = ref(false)
+const splitting = ref(false)
+const splitAxis = ref<'horizontal' | 'vertical'>('horizontal')
+const splitPercent = ref(50)
+const parts = computed(() => props.bounds && splitting.value ? splitIconBounds(props.bounds, splitAxis.value, splitPercent.value / 100) : [])
 const closeup = computed(() => {
   const bounds = props.bounds
   if (!bounds)
@@ -21,6 +26,7 @@ watch(() => [props.bounds, props.imageUrl, props.imageWidth, props.imageHeight],
   draft.value = props.bounds ? { ...props.bounds } : { x: 0, y: 0, width: Math.min(20, props.imageWidth), height: Math.min(20, props.imageHeight) }
   start.value = null
   drawing.value = false
+  splitting.value = false
 }, { immediate: true })
 function point(event: PointerEvent) {
   const matrix = svg.value?.getScreenCTM()
@@ -54,9 +60,22 @@ function end(event: PointerEvent) {
   <section class="bounds-editor">
     <svg ref="svg" :viewBox="closeup" role="img" aria-label="アイコン候補と周辺の元画像" :class="{ drawing }" @pointerdown="begin" @pointermove="move" @pointerup="end" @pointercancel="start = null" @lostpointercapture="start = null">
       <image :href="imageUrl" :width="imageWidth" :height="imageHeight" />
-      <rect :x="draft.x" :y="draft.y" :width="Math.max(0, draft.width)" :height="Math.max(0, draft.height)" fill="#2563eb20" stroke="#2563eb" stroke-width="2" vector-effect="non-scaling-stroke" />
+      <rect v-if="!splitting" :x="draft.x" :y="draft.y" :width="Math.max(0, draft.width)" :height="Math.max(0, draft.height)" fill="#2563eb20" stroke="#2563eb" stroke-width="2" vector-effect="non-scaling-stroke" />
+      <rect v-for="(part, index) in parts" :key="index" :x="part.x" :y="part.y" :width="part.width" :height="part.height" :fill="index ? '#f9731630' : '#2563eb30'" :stroke="index ? '#f97316' : '#2563eb'" stroke-width="2" vector-effect="non-scaling-stroke" />
     </svg>
-    <fieldset :disabled="disabled">
+    <fieldset v-if="splitting" :disabled="disabled">
+      <legend>候補を2つに分割</legend>
+      <label>分割方向<select v-model="splitAxis" aria-label="分割方向"><option value="horizontal">上下に分ける</option><option value="vertical">左右に分ける</option></select></label>
+      <label>分割位置（{{ splitPercent }}%）<input v-model.number="splitPercent" type="range" min="5" max="95" step="1" aria-label="分割位置"></label>
+      <p>保存済みの枠を青・オレンジの2候補に置き換えます。両方とも未確認・未分類・アセット未割当になります。登録済みアセットは削除しません。確定後に個別の範囲を調整できます。</p>
+      <button type="button" @click="emit('split', splitAxis, splitPercent / 100)">
+        2候補への分割を確定
+      </button>
+      <button type="button" @click="splitting = false">
+        分割をキャンセル
+      </button>
+    </fieldset>
+    <fieldset v-else :disabled="disabled">
       <legend>{{ bounds ? '候補の範囲を調整' : '手動で候補を追加' }}</legend>
       <button type="button" :aria-pressed="drawing" @click="drawing = !drawing">
         {{ drawing ? 'ドラッグで囲んでください' : '画像上で囲み直す' }}
@@ -71,6 +90,9 @@ function end(event: PointerEvent) {
       </p>
       <button type="button" :disabled="!valid" @click="emit('commit', { ...draft })">
         {{ bounds ? '範囲の変更を保存' : '手動候補を追加' }}
+      </button>
+      <button v-if="bounds" type="button" @click="splitting = true; drawing = false; start = null">
+        複数のアイコンを2候補に分割
       </button>
     </fieldset>
   </section>

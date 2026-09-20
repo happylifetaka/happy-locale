@@ -178,6 +178,22 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
         review.change(id, { kind: 'approve' })
     })
   }
+  async function split(axis: 'horizontal' | 'vertical', ratio: number) {
+    const item = selected.value
+    if (working.value || !item || creation.value)
+      return false
+    let applied = false
+    await run(async () => {
+      await verify()
+      if (selected.value !== item || item.cardId !== currentImageId.value)
+        throw new Error('分割対象が変わりました。候補を選び直してください。')
+      const ids = review.split(item.id, axis, ratio)
+      selectedId.value = ids[0]!
+      notice.value = '2つの未確認・未分類候補に分割しました。それぞれ範囲と登録先を確認してください。候補編集を戻す1回で元に戻せます。'
+      applied = true
+    })
+    return applied
+  }
   async function prepareRegistration() {
     if (working.value || !selected.value)
       return
@@ -242,5 +258,5 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
     disposed = true
     digestCache.clear()
   })
-  return { cards, activeCard, occurrences, groups, selectedId, selected, error, notice, creation, comparison, pending, working, collection, registration, review, run, select, collect, changeBounds, approve, prepareRegistration, register, compare, adopt }
+  return { cards, activeCard, occurrences, groups, selectedId, selected, error, notice, creation, comparison, pending, working, collection, registration, review, run, select, collect, changeBounds, split, approve, prepareRegistration, register, compare, adopt }
 }

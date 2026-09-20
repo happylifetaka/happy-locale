@@ -3,6 +3,7 @@ import type { AssetDiscoveryState, IconCandidateGroup, IconOccurrence } from '~/
 import type { RegionDraft } from '~/types/editor'
 import { parseAssetDiscovery } from './format'
 import { approveOccurrence, containsBounds, reviseOccurrence } from './review'
+import { splitIconBounds } from './split'
 
 export interface DiscoveryReviewContext {
   cards: readonly DiscoveryCard[]
@@ -106,6 +107,20 @@ export type ReviewGroupDestination
   = { kind: 'existing', id: string }
     | { kind: 'new', id: string, name: string }
     | { kind: 'ungrouped' }
+
+/** 元候補を二つの未確認・未割当候補に置換する。失敗時も元データを変更しない。 */
+export function splitReviewOccurrence(state: AssetDiscoveryState, id: string, axis: 'horizontal' | 'vertical', ratio: number, context: DiscoveryReviewContext): AssetDiscoveryState {
+  const item = state.occurrences.find(item => item.id === id)
+  if (!item)
+    throw new Error('分割するアイコン候補を選び直してください。')
+  matchingImage(context, item)
+  const parts = splitIconBounds(item.bounds, axis, ratio)
+  let next = moveReviewOccurrences(state, [id], { kind: 'ungrouped' }, context)
+  next.occurrences = next.occurrences.filter(item => item.id !== id)
+  for (const bounds of parts)
+    next = addManualOccurrence(next, item.cardId, bounds, context)
+  return next
+}
 
 /** 移動・統合・分割は所属一覧だけを変える。グループの登録先を個別候補に伝播させない。 */
 export function moveReviewOccurrences(

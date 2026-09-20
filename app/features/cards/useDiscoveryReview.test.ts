@@ -96,6 +96,23 @@ it('marks edits unsaved, preserves history on saving, and restores the original 
   expect(store.assetDiscovery!.groups[0]!.name).toBe('New name')
 })
 
+it.each([false, true])('splits one occurrence with one atomic undo/redo and retains shared assets (draft=%s)', (draft) => {
+  const { store, review } = fixture({ draft })
+  const before = structuredClone(store.assetDiscovery)
+  const regions = structuredClone(store.activeCard.regions)
+  const assets = structuredClone(store.assets)
+  const ids = review.split('occurrence-1', 'horizontal', 0.4)
+  expect(store.assetDiscovery!.occurrences.map(item => item.id)).toEqual(ids)
+  expect(store.assetDiscovery!.occurrences).toHaveLength(2)
+  expect(review.undo()).toBe(true)
+  expect(store.assetDiscovery).toEqual(before)
+  expect(review.canUndo.value).toBe(false)
+  expect(review.redo()).toBe(true)
+  expect(store.assetDiscovery!.occurrences.map(item => item.id)).toEqual(ids)
+  expect(store.assets).toEqual(assets)
+  expect(store.activeCard.regions).toEqual(regions)
+})
+
 it('supports group split/move and crop/exclude history without changing the source project or shared asset', () => {
   const { store, review, cardId } = fixture()
   const original = structuredClone(store.assetDiscovery)
