@@ -116,6 +116,8 @@ test('records repeatable browser baselines without private material', async ({ p
   const operations = await page.evaluate(async () => {
     const load = (path: string) => import(/* @vite-ignore */ `/_nuxt/${path}`)
     const { savedProjectSignature } = await load('utils/project-save.ts') as typeof import('../../app/utils/project-save')
+    const { captureProjectSave } = await load('services/project/save-snapshot.ts') as typeof import('../../app/services/project/save-snapshot')
+    const { createCardCanvasRenderer } = await load('features/cards/canvas/renderer.ts') as typeof import('../../app/features/cards/canvas/renderer')
     const { analyzeRegionImage } = await load('services/ocr/region-image.ts') as typeof import('../../app/services/ocr/region-image')
     const { createRegionCandidates } = await load('services/ocr/candidates.ts') as typeof import('../../app/services/ocr/candidates')
     const { parseFolderProject } = await load('services/project/format.ts') as typeof import('../../app/services/project/format')
@@ -145,6 +147,46 @@ test('records repeatable browser baselines without private material', async ({ p
       return samples
     }
     const signature = measure(() => savedProjectSignature(documentValue), 100)
+    const snapshot = measure(() => captureProjectSave({
+      document: documentValue,
+      card: documentValue.cards[0]!,
+      cardId: documentValue.cards[0]!.id,
+      assets: [],
+      fonts: [],
+      ocrDictionary: [],
+      glossary: [],
+      draftOCRCandidates: [],
+    }, new Map(), new Set()), 100)
+    const source = new Image()
+    source.src = image.toDataURL()
+    await source.decode()
+    const renderInput = {
+      image: source,
+      project: documentValue.cards[0]!,
+      selectedRegionId: null,
+      autoMaskPreview: false,
+      selectedExclusionId: null,
+      zoom: 50,
+      previewMode: 'edited' as const,
+      assets: [],
+      assetImages: new Map(),
+      fontFamilies: new Map(),
+      regionCandidates: [],
+      selectedCandidateId: null,
+      printArea: null,
+      printAreaEditing: false,
+    }
+    const renderer = createCardCanvasRenderer(() => renderInput)
+    const target = document.createElement('canvas')
+    target.width = 600
+    target.height = 900
+    const drafts = { region: null, newRegion: null, exclusion: null, creatingExclusion: false, candidate: null, maskStroke: null, printArea: null }
+    const redrawCached = measure(() => renderer.redraw(target, drafts, false), 100)
+    const redrawChanged = measure(() => {
+      renderInput.project = { ...renderInput.project }
+      renderer.redraw(target, drafts, false)
+    }, 20)
+    renderer.dispose()
     const blocks = [{ text: 'Synthetic Card', x: 120, y: 360, width: 280, height: 55, confidence: 95 }]
     const pixels = measure(() => {
       const analysis = analyzeRegionImage(image, 600, 900, 1, [])
@@ -166,7 +208,7 @@ test('records repeatable browser baselines without private material', async ({ p
       workerDuring = window.__hlBaseline()
     }
     finally { await provider.dispose() }
-    return { signature, pixels, ocr, workerBefore, workerDuring, workerAfter: window.__hlBaseline() }
+    return { signature, snapshot, redrawCached, redrawChanged, pixels, ocr, workerBefore, workerDuring, workerAfter: window.__hlBaseline() }
   })
   expect(operations.workerAfter).toEqual(operations.workerBefore)
   expect(afterSwitches.resources).toEqual(before.resources)

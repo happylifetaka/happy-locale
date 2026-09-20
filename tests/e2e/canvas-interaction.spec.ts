@@ -41,6 +41,28 @@ for (const zoom of [50, 100, 150]) {
   })
 }
 
+test('redraws selection handles immediately on zoom without changing geometry or history', async ({ page }) => {
+  await page.goto('/cards?demo=1')
+  const canvas = page.getByLabel('カード編集キャンバス')
+  await expect(canvas).toBeVisible()
+  const zoom = page.getByRole('combobox', { name: '表示倍率', exact: true })
+  await zoom.selectOption('50')
+  await dragImagePoints(page, [60, 180], [220, 280])
+  await page.locator('#inspector-tab-region').click()
+  const coordinates = page.locator('.region-coordinates dd')
+  await expect(coordinates).toHaveText(['60', '180', '160', '100'])
+  const pixels = () => canvas.evaluate((element: HTMLCanvasElement) => element.toDataURL())
+  const before = await pixels()
+  await zoom.selectOption('100')
+  await expect.poll(pixels).not.toBe(before)
+  await expect(coordinates).toHaveText(['60', '180', '160', '100'])
+  await zoom.selectOption('50')
+  await expect.poll(pixels).toBe(before)
+  const undo = page.getByRole('button', { name: '元に戻す', exact: true })
+  await undo.click()
+  await expect(undo).toBeDisabled()
+})
+
 for (const interruption of ['pointercancel', 'lostpointercapture'] as const) {
   test(`discards ${interruption} geometry without adding history and accepts the next gesture`, async ({ page }) => {
     await page.goto('/cards?demo=1')
