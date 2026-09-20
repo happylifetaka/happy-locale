@@ -128,3 +128,23 @@ it('opens demo OCR review but does not acknowledge the signature after disposal'
   expect(options.projectSignature).not.toHaveBeenCalled()
   expect(options.lastSavedProjectSignature.value).toBe('old-signature')
 })
+
+it('does not mark a new-folder baseline saved after disposal', async () => {
+  const { options, adoption } = setup()
+  adoption.startNewFolderProject({ name: 'folder' } as FileSystemDirectoryHandle)
+  vi.mocked(options.isActive).mockReturnValue(false)
+  await nextTick()
+  expect(options.projectSignature).not.toHaveBeenCalled()
+  expect(options.lastSavedProjectSignature.value).toBe('old-signature')
+})
+
+it('acknowledges only the latest folder adoption when multiple completions await the same tick', async () => {
+  const { options, adoption } = setup()
+  const finishing = adoption.finishOpeningProject()
+  adoption.startNewFolderProject({ name: 'first' } as FileSystemDirectoryHandle)
+  adoption.startNewFolderProject({ name: 'second' } as FileSystemDirectoryHandle)
+  await finishing
+  await nextTick()
+  expect(options.projectSignature).toHaveBeenCalledOnce()
+  expect(options.lastSavedProjectSignature.value).toBe('new-signature')
+})

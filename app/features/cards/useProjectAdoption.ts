@@ -54,8 +54,11 @@ export function useProjectAdoption({
   switchInspectorTab,
   showBatchOCRCandidates,
 }: ProjectAdoptionOptions) {
+  let adoptionGeneration = 0
+
   /** project.jsonのないフォルダでは空の下書きから開始し、旧文書と履歴を残さない。 */
   function startNewFolderProject(directory: FileSystemDirectoryHandle) {
+    const generation = ++adoptionGeneration
     resetBatchOCR()
     clearLoadedCardImage()
     editor.loadImageProject('', 0, 0)
@@ -74,12 +77,15 @@ export function useProjectAdoption({
     projectRuntime.replaceLoadedFonts(new Map())
     currentView.value = 'card'
     nextTick(() => {
+      if (!isActive() || generation !== adoptionGeneration)
+        return
       lastSavedProjectSignature.value = projectSignature()
     })
   }
 
   /** 新規フォルダと順序を混同せず、復元したカードIDと実画像寸法で履歴を初期化する。 */
   function adoptOpenedProject(opened: OpenedFolderProject, loaded: RuntimeLoadedImage, images: Map<string, ImageBitmap>) {
+    adoptionGeneration++
     projectRuntime.setDirectory(opened.directory)
     resetBatchOCR()
     projectStore.replaceProject(opened.document)
@@ -105,12 +111,14 @@ export function useProjectAdoption({
 
   /** フォント・DPI等の後処理が終わってから候補と未保存判定を同期する。 */
   async function finishOpeningProject() {
+    const generation = adoptionGeneration
+    const cardId = currentImageId.value
     currentView.value = 'card'
     if (isDemo.value)
       switchInspectorTab('ocr')
-    showBatchOCRCandidates(currentImageId.value)
+    showBatchOCRCandidates(cardId)
     await nextTick()
-    if (!isActive())
+    if (!isActive() || generation !== adoptionGeneration || currentImageId.value !== cardId)
       return
     lastSavedProjectSignature.value = projectSignature()
   }

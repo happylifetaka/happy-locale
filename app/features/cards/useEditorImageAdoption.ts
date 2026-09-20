@@ -16,9 +16,10 @@ interface EditorImageAdoptionOptions {
   assetRecropId: Ref<string | null>
   addingCards: Readonly<Ref<boolean>>
   loadingCardId: Readonly<Ref<string | null>>
+  isActive: () => boolean
   clearRegionCandidates: () => void
   loadImage: (file: File) => Promise<RuntimeLoadedImage | null>
-  cacheCardThumbnail: (cardId: string, image: HTMLImageElement) => Promise<Blob | null>
+  cacheCardThumbnail: (cardId: string, image: HTMLImageElement, isCurrent?: () => boolean) => Promise<Blob | null>
   updateCardPrintDpi: (cardId: string, dpi: FolderProjectCard['sourceDpi']) => void
   setMessage: (message: string) => void
   logDiagnostic: (message: string, details?: unknown, level?: 'info' | 'error') => void
@@ -36,6 +37,7 @@ export function useEditorImageAdoption({
   assetRecropId,
   addingCards,
   loadingCardId,
+  isActive,
   clearRegionCandidates,
   loadImage,
   cacheCardThumbnail,
@@ -43,6 +45,9 @@ export function useEditorImageAdoption({
   setMessage,
   logDiagnostic,
 }: EditorImageAdoptionOptions) {
+  let cardRequest = 0
+  let assetRequest = 0
+
   function applyLoadedImage(loaded: RuntimeLoadedImage) {
     clearRegionCandidates()
     projectRuntime.replaceCardImage(loaded)
@@ -53,12 +58,15 @@ export function useEditorImageAdoption({
   }
 
   async function detectAndApplyCardDpi(cardId: string, file: File) {
+    const directory = projectRuntime.directory.value
     const card = projectStore.document?.cards.find(item => item.id === cardId)
-    if (!card || card.sourceDpi)
+    if (!isActive() || !card || card.sourceDpi)
       return
     const dpi = await readImageDpi(file)
-    if (!dpi)
+    if (!dpi || !isActive() || projectRuntime.directory.value !== directory
+      || projectStore.document?.cards.find(item => item.id === cardId) !== card || card.sourceDpi) {
       return
+    }
     updateCardPrintDpi(cardId, dpi)
     logDiagnostic('元画像のDPIメタデータを読み込みました', {
       cardId,
@@ -68,6 +76,7 @@ export function useEditorImageAdoption({
   }
 
   function clearLoadedCardImage() {
+    cardRequest++
     clearRegionCandidates()
     projectRuntime.clearCardImage()
   }
@@ -82,6 +91,7 @@ export function useEditorImageAdoption({
   }
 
   function clearAssetSourceImage() {
+    assetRequest++
     projectRuntime.clearAssetSourceImage()
     assetSourceImageId.value = crypto.randomUUID()
     assetEditing.value = false
@@ -91,6 +101,8 @@ export function useEditorImageAdoption({
 
   /** 新規フォルダの最初の画像。既存プロジェクトへのカード追加とは別経路。 */
   async function openCardImage(file: File) {
+    if (!isActive())
+      return
     if (addingCards.value || loadingCardId.value) {
       setMessage('カードの処理が完了してから画像を開いてください。')
       return
@@ -103,36 +115,68 @@ export function useEditorImageAdoption({
       setMessage('既存プロジェクトへの追加はカード一覧の＋を使用してください。')
       return
     }
+    const request = ++cardRequest
+    const directory = projectRuntime.directory.value
+    const cardId = currentImageId.value
+    const isCurrent = () => isActive() && request === cardRequest
+      && projectRuntime.directory.value === directory && currentImageId.value === cardId && !projectStore.document
     logDiagnostic('「画像を開く」の選択を開始しました')
     const loaded = await loadImage(file)
     if (!loaded)
       return
+    if (!isCurrent()) {
+      URL.revokeObjectURL(loaded.url)
+      loaded.element.removeAttribute('src')
+      return
+    }
+    let adopted = false
     try {
       editor.loadImageProject(
         file.name,
         loaded.element.naturalWidth,
         loaded.element.naturalHeight,
       )
-      projectStore.setCardOCRCandidates(currentImageId.value, null)
+      projectStore.setCardOCRCandidates(cardId, null)
       logDiagnostic('新規プロジェクトの最初のカード画像を反映しました')
       applyLoadedImage(loaded)
-      const thumbnail = await cacheCardThumbnail(currentImageId.value, loaded.element)
+      adopted = true
+      const thumbnail = await cacheCardThumbnail(cardId, loaded.element, isCurrent)
+      if (!isCurrent())
+        return
       if (thumbnail)
-        projectRuntime.setPendingCardThumbnail(currentImageId.value, thumbnail)
+        projectRuntime.setPendingCardThumbnail(cardId, thumbnail)
       setMessage(`${file.name} を読み込みました。`)
     }
     catch (error) {
-      URL.revokeObjectURL(loaded.url)
+      if (!adopted) {
+        URL.revokeObjectURL(loaded.url)
+        loaded.element.removeAttribute('src')
+      }
+      if (!isCurrent())
+        return
+      if (adopted) {
+        logDiagnostic('カードサムネイルを作成できませんでした', error, 'error')
+        setMessage(`${file.name} を読み込みました（サムネイルの作成に失敗しました）。`)
+        return
+      }
       logDiagnostic('編集プロジェクトの初期化に失敗しました', error, 'error')
       setMessage('画像の編集画面を初期化できませんでした。')
     }
   }
 
   async function openAssetSourceImage(file: File) {
+    if (!isActive())
+      return
+    const request = ++assetRequest
     logDiagnostic('アセット切り出し元の画像選択を開始しました')
     const loaded = await loadImage(file)
     if (!loaded)
       return
+    if (!isActive() || request !== assetRequest) {
+      URL.revokeObjectURL(loaded.url)
+      loaded.element.removeAttribute('src')
+      return
+    }
     applyAssetSourceImage(loaded)
     assetEditing.value = false
     assetCreationDraft.value = null

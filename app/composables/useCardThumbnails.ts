@@ -59,12 +59,16 @@ export function useCardThumbnails({
   }
 
   /** 読み込み済みの画像から一覧用サムネイルを作る。 */
-  async function cacheCardThumbnail(cardId: string, source: HTMLImageElement) {
+  async function cacheCardThumbnail(cardId: string, source: HTMLImageElement, isCurrent = () => true) {
+    const generation = thumbnailGeneration
+    const directory = projectDirectory.value
     const thumbnail = await createCardThumbnailBlob(
       source,
       source.naturalWidth,
       source.naturalHeight,
     )
+    if (generation !== thumbnailGeneration || directory !== projectDirectory.value || !isCurrent())
+      return null
     if (thumbnail)
       setCardThumbnail(cardId, thumbnail)
     return thumbnail

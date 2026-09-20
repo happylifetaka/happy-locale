@@ -459,6 +459,7 @@ const {
 
 /** 読込済み画像の反映。URL等の所有・解放は共有runtimeを使う。 */
 const imageAdoption = useEditorImageAdoption({
+  isActive: () => !editorDisposed,
   editor,
   projectStore,
   projectRuntime,
