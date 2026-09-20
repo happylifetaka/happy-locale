@@ -10,7 +10,7 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: ['tests/e2e/**', '**/node_modules/**', '**/.git/**'],
+    exclude: ['tests/e2e/**', 'tests/performance/**', '**/node_modules/**', '**/.git/**'],
     environment: 'node',
     coverage: {
       reporter: ['text', 'html'],

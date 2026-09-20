@@ -50,6 +50,38 @@ mise exec -- pnpm exec playwright test tests/e2e/card-editor.spec.ts --workers=1
 - 合成fixtureの追加テスト: 2件成功。生成したsnapshotは内容を確認済み。
 - アプリ・テストの型検査、追加TypeScriptのESLint、差分チェック成功。
 - `tests/e2e/card-editor.spec.ts`: Chromiumで7件成功。最初の起動はsandboxのポート制約で失敗したが、権限付き再実行ではサーバー起動・全7件とも成功。
-- 性能基準計測はまだ未実施。P0全体は未完了であり、構造変更にはまだ着手しない。
+- P0の合成データ・同梱サンプルを使う自動回帰基準と性能基準を取得済み。実フォルダ・実フォント・長時間利用の品質保証は残るが、構造整理を比較する基準としてP1へ進める。
 
 性能計測は同一のブラウザ・端末・合成データ・表示倍率で行い、初回とウォーム状態を分ける。初期表示、カード切替、ドラッグ、保存差分、OCR補正の時間と、反復操作後のObject URL・画像資源・Worker・メモリを記録する。自動化結果と実フォルダ・実フォントの確認は区別する。私有素材を使う追加結果は`docs/local/`へ置く。
+
+## 性能基準（構造変更前）
+
+2026-09-20、ローカル端末、Playwright Chromium 153.0.8010.12、1440×1000、カード表示50%、Nuxt dev。計測コードは`tests/performance/refactoring.spec.ts`、専用設定は`playwright.performance.config.ts`。通常の単体/E2Eとは別に明示実行する。
+
+```bash
+mise exec -- pnpm exec playwright test --config playwright.performance.config.ts
+```
+
+`test-results/performance.json`内の`baseline.json`添付に各サンプルを保存する。生成物はGit除外対象。次回のPlaywright実行で上書きされ得るため、比較用に残す場合は`docs/local/`等へ退避する。
+
+| 計測 | 初回 | 中央値 / 再読込 | 最大 | サンプル |
+| --- | ---: | ---: | ---: | --- |
+| デモ表示完了 | 4,077.7ms | 再読込471.9ms | — | 2回 |
+| 5カード間切替 | 126.3ms | 84.7ms | 126.3ms | 20回 |
+| 領域ドラッグ（10移動イベント、毎回Undo） | 355.3ms | 310.3ms | 355.3ms | 5回 |
+| 保存差分JSON作成（合成100カード×10領域） | 0.5ms | 0.3ms | 1.1ms | 100回 |
+| 合成600×900画像の解析＋文字枠補正＋候補生成 | 16.5ms | 5.8ms | 16.5ms | 20回 |
+| 合成画像の実Tesseract全体OCR | 219.0ms | 同Worker再実行34.7ms | — | 2回 |
+
+注意: 表示・操作時間にはPlaywright操作・期待値待ち・2フレームの待機を含む。初回表示には開発時のモジュール処理が含まれ、本番ロード速度の指標ではない。OCRモデルのブラウザキャッシュ消去はしておらず、初回OCR値を初回ダウンロード時間とみなさない。画素補正時間には局所OCRを含めない。
+
+資源追跡はURL、メインスレッドのImageBitmap、Worker生成/解放を計測用ラッパーで監視する。デモでは元画像はHTMLImageElementで、URL数で参照の解放を確認する。GPU・Worker内の画像数を網羅した計測ではない。
+
+| 時点 | Object URL | ImageBitmap | Worker | GC後JS heap使用量 |
+| --- | ---: | ---: | ---: | ---: |
+| 切替前 | 6 | 2 | 0 | 20,224,268 bytes |
+| 20回切替後 | 6 | 2 | 0 | 21,382,788 bytes |
+| 合成OCR等の実行後 | 7 | 2 | 0 | 22,643,056 bytes |
+| SPA遷移で画面を離れた後 | 1 | 0 | 0 | 22,336,788 bytes |
+
+既存問題: Tesseract 7の`src/worker/browser/spawnWorker.js`はWorker用Blob URLを生成し、今回の計測ではterminate後も1件残る。アプリ画像URLは解放されている。テストではWorker由来URLを区別して1件の残存を明示的に固定した。P5で対応した際はこの基準を0へ更新する。これを「全資源の解放成功」とは扱わない。JS heapにはNuxt/Viteのキャッシュや履歴等も含まれるため、単一試行の増減だけでリークとは断定しない。
