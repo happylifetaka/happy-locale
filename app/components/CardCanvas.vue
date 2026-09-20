@@ -9,23 +9,15 @@ import type {
   TextRegion,
 } from '~/types/editor'
 import type { RegionCandidate } from '~/types/ocr'
+import { onScopeDispose } from 'vue'
 import { changedBounds, resizeHandleAtPoint as geometryResizeHandleAtPoint, imagePoint, lastBoundsAtPoint, normalizedBounds, pointInsideBounds, relativePoint, roundedBounds } from '~/features/cards/canvas/geometry'
+import { createCardCanvasRenderer } from '~/features/cards/canvas/renderer'
 import { useEditorToolsStore } from '~/stores/editor-tools'
-import {
-  createAutomaticTextMask,
-  createBlendedBackground,
-  createManualMask,
-  createMaskPreview,
-  createRegionRemovalMask,
-  estimateBackgroundColor,
-} from '~/utils/canvas/background'
-import { drawSelection, renderCard } from '~/utils/canvas/render'
 import { consumeSelectedFile } from '~/utils/file-input'
 import {
   printAreaPointerCompletion,
   usablePrintArea,
 } from '~/utils/print-area'
-import { transformRegionContents } from '~/utils/regions'
 
 const props = defineProps<{
   image: HTMLImageElement | null
@@ -69,20 +61,6 @@ const editorTools = useEditorToolsStore()
 const canvas = ref<HTMLCanvasElement | null>(null)
 /** 画像ファイルを選ぶための非表示の入力要素。 */
 const imageInput = ref<HTMLInputElement | null>(null)
-/** 背景色の採取などに使う、編集前の元画像Canvasのキャッシュ。 */
-let sourceCanvas: HTMLCanvasElement | null = null
-/** 元画像Canvasを作成した画像。差し替え判定に使う。 */
-let sourceCanvasImage: HTMLImageElement | null = null
-/** 同じ編集状態の再描画を避けるための合成画像キャッシュ。 */
-let editedPreviewCanvas: HTMLCanvasElement | null = null
-/** 合成画像の再利用可否を判定する入力オブジェクトの組。 */
-let editedPreviewKey: {
-  image: HTMLImageElement
-  project: CardProject
-  assets: ImageAsset[]
-  assetImages: ReadonlyMap<string, CanvasImageSource>
-  fontFamilies: ReadonlyMap<string, string>
-} | null = null
 /** ドラッグ開始位置。元画像の画素座標。 */
 const dragStart = ref<{ x: number, y: number } | null>(null)
 /** 作成中の翻訳領域の矩形。元画像の画素座標。 */
@@ -127,6 +105,23 @@ const printAreaInteraction = ref<RegionInteraction | null>(null)
 /** 操作中の印刷範囲の仮の矩形。 */
 const draftPrintArea = ref<RegionDraft | null>(null)
 
+const renderer = createCardCanvasRenderer(() => props)
+const colorFromOriginalImage = renderer.colorFromOriginalImage
+const exportImage = renderer.exportImage
+onScopeDispose(renderer.dispose)
+
+function redraw() {
+  renderer.redraw(canvas.value, {
+    region: draftRegion.value,
+    newRegion: draft.value,
+    exclusion: draftExclusion.value,
+    creatingExclusion: exclusionInteraction.value?.kind === 'create',
+    candidate: draftCandidate.value,
+    maskStroke: draftMaskStroke.value,
+    printArea: draftPrintArea.value,
+  }, editorTools.maskEditing)
+}
+
 /** 操作可能な場合に画像ファイルの選択を開く。 */
 function openImagePicker() {
   emit('diagnostic', 'カード画像選択ダイアログを開きます')
@@ -145,444 +140,6 @@ function pickImage(event: Event) {
   )
   if (file)
     emit('image', file)
-}
-
-/** 消去マスクを確認用の色付き画像として重ねる。 */
-function drawMaskOverlay(
-  context: CanvasRenderingContext2D,
-  region: TextRegion,
-  strokes: readonly MaskStroke[],
-) {
-  const width = Math.max(1, Math.round(region.width))
-  const height = Math.max(1, Math.round(region.height))
-  const mask = createRegionRemovalMask(
-    createManualMask(width, height, [...strokes]),
-    width,
-    height,
-    region.sourceIcons,
-    region.exclusionAreas,
-  )
-  drawMaskPreview(context, mask, width, height, region.x, region.y)
-}
-
-/** 渡された消去マスクを色付きの確認画像にして、指定位置へ描画する。 */
-function drawMaskPreview(
-  context: CanvasRenderingContext2D,
-  mask: Uint8ClampedArray,
-  width: number,
-  height: number,
-  x: number,
-  y: number,
-) {
-  const overlay = document.createElement('canvas')
-  overlay.width = width
-  overlay.height = height
-  overlay.getContext('2d')?.putImageData(
-    createMaskPreview(mask, width, height),
-    0,
-    0,
-  )
-  context.drawImage(overlay, Math.round(x), Math.round(y))
-}
-
-/** 自動補修で消す範囲を元画像から計算して重ねる。 */
-function drawAutomaticMaskPreview(
-  context: CanvasRenderingContext2D,
-  region: TextRegion,
-) {
-  const source = sourceContext()?.getImageData(
-    0,
-    0,
-    props.project.imageWidth,
-    props.project.imageHeight,
-  )
-  if (!source)
-    return
-  const background = createBlendedBackground(
-    source,
-    source.width,
-    source.height,
-    region,
-    region.backgroundColor,
-  )
-  const mask = createRegionRemovalMask(
-    createAutomaticTextMask(
-      source,
-      background,
-      region,
-      region.autoMaskSensitivity,
-      region.removeColorOutliers,
-      region.autoMaskPreset,
-    ),
-    background.width,
-    background.height,
-    region.sourceIcons,
-    region.exclusionAreas,
-  )
-  drawMaskPreview(
-    context,
-    mask,
-    background.width,
-    background.height,
-    region.x,
-    region.y,
-  )
-}
-
-/** 保護領域とその操作用の枠を描画する。 */
-function drawExclusionOverlay(
-  context: CanvasRenderingContext2D,
-  region: TextRegion,
-) {
-  const handleSize = 10 / (props.zoom / 100)
-  const areas = region.exclusionAreas.map(area =>
-    area.id === props.selectedExclusionId && draftExclusion.value
-      ? { ...area, ...draftExclusion.value }
-      : area,
-  )
-  if (exclusionInteraction.value?.kind === 'create' && draftExclusion.value) {
-    areas.push({ id: '__draft__', ...draftExclusion.value })
-  }
-
-  context.save()
-  context.setLineDash([8 / (props.zoom / 100), 5 / (props.zoom / 100)])
-  context.lineWidth = 2 / (props.zoom / 100)
-  for (const area of areas) {
-    const selected
-      = area.id === props.selectedExclusionId || area.id === '__draft__'
-    context.fillStyle = selected ? '#facc1538' : '#facc1522'
-    context.strokeStyle = selected ? '#ca8a04' : '#eab308'
-    context.fillRect(
-      region.x + area.x,
-      region.y + area.y,
-      area.width,
-      area.height,
-    )
-    context.strokeRect(
-      region.x + area.x,
-      region.y + area.y,
-      area.width,
-      area.height,
-    )
-    if (!selected || area.id === '__draft__')
-      continue
-    context.setLineDash([])
-    context.fillStyle = '#ca8a04'
-    const half = handleSize / 2
-    for (const point of [
-      { x: area.x, y: area.y },
-      { x: area.x + area.width, y: area.y },
-      { x: area.x, y: area.y + area.height },
-      { x: area.x + area.width, y: area.y + area.height },
-    ]) {
-      context.fillRect(
-        region.x + point.x - half,
-        region.y + point.y - half,
-        handleSize,
-        handleSize,
-      )
-    }
-    context.setLineDash([8 / (props.zoom / 100), 5 / (props.zoom / 100)])
-  }
-  context.restore()
-}
-
-/** 選択領域の枠とサイズ変更用のハンドルを描画する。 */
-function drawRegionSelection(
-  context: CanvasRenderingContext2D,
-  region: RegionDraft,
-) {
-  drawSelection(context, region)
-  const handleSize = 10 / (props.zoom / 100)
-  const half = handleSize / 2
-  context.save()
-  context.fillStyle = '#2563eb'
-  for (const point of [
-    { x: region.x, y: region.y },
-    { x: region.x + region.width, y: region.y },
-    { x: region.x, y: region.y + region.height },
-    { x: region.x + region.width, y: region.y + region.height },
-  ]) {
-    context.fillRect(point.x - half, point.y - half, handleSize, handleSize)
-  }
-  context.restore()
-}
-
-/** 印刷対象の範囲と操作中の矩形を描画する。 */
-function drawPrintArea(context: CanvasRenderingContext2D) {
-  const area = draftPrintArea.value ?? props.printArea
-  if (!area)
-    return
-  const scale = props.zoom / 100
-  context.save()
-  context.fillStyle = '#f973161f'
-  context.strokeStyle = '#ea580c'
-  context.lineWidth = 2 / scale
-  context.setLineDash([8 / scale, 5 / scale])
-  context.fillRect(area.x, area.y, area.width, area.height)
-  context.strokeRect(area.x, area.y, area.width, area.height)
-  context.setLineDash([])
-  context.fillStyle = '#ea580c'
-  const handleSize = 10 / scale
-  const half = handleSize / 2
-  for (const point of [
-    { x: area.x, y: area.y },
-    { x: area.x + area.width, y: area.y },
-    { x: area.x, y: area.y + area.height },
-    { x: area.x + area.width, y: area.y + area.height },
-  ]) {
-    context.fillRect(point.x - half, point.y - half, handleSize, handleSize)
-  }
-  context.restore()
-}
-
-/** 未選択の翻訳領域の位置を枠線で示す。 */
-function drawUnselectedRegionOutlines(
-  context: CanvasRenderingContext2D,
-  regions: readonly TextRegion[],
-) {
-  const scale = props.zoom / 100
-  context.save()
-  context.strokeStyle = '#64748b'
-  context.lineWidth = 1.5 / scale
-  context.setLineDash([5 / scale, 4 / scale])
-  for (const region of regions) {
-    if (region.id === props.selectedRegionId)
-      continue
-    context.strokeRect(region.x, region.y, region.width, region.height)
-  }
-  context.restore()
-}
-
-/** 確認中のOCR候補の枠と選択状態を描画する。 */
-function drawRegionCandidates(context: CanvasRenderingContext2D) {
-  const scale = props.zoom / 100
-  context.save()
-  context.setLineDash([7 / scale, 5 / scale])
-  context.lineWidth = 2 / scale
-  context.font = `${12 / scale}px sans-serif`
-  context.textBaseline = 'top'
-  for (const [index, candidate] of props.regionCandidates.entries()) {
-    const bounds
-      = candidate.id === props.selectedCandidateId && draftCandidate.value
-        ? draftCandidate.value
-        : candidate
-    const editing = candidate.id === props.selectedCandidateId
-    context.fillStyle = candidate.selected ? '#22c55e30' : '#64748b20'
-    context.strokeStyle = editing
-      ? '#2563eb'
-      : candidate.selected
-        ? '#16a34a'
-        : '#64748b'
-    context.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
-    context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
-    context.fillStyle = candidate.selected ? '#15803d' : '#475569'
-    context.fillText(
-      `${candidate.selected ? '✓' : '–'} ${index + 1}`,
-      bounds.x + 3 / scale,
-      bounds.y + 3 / scale,
-    )
-    if (editing) {
-      context.setLineDash([])
-      context.fillStyle = '#2563eb'
-      const handleSize = 10 / scale
-      const half = handleSize / 2
-      for (const point of [
-        { x: bounds.x, y: bounds.y },
-        { x: bounds.x + bounds.width / 2, y: bounds.y },
-        { x: bounds.x + bounds.width, y: bounds.y },
-        { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 },
-        { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
-        { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height },
-        { x: bounds.x, y: bounds.y + bounds.height },
-        { x: bounds.x, y: bounds.y + bounds.height / 2 },
-      ]) {
-        context.fillRect(
-          point.x - half,
-          point.y - half,
-          handleSize,
-          handleSize,
-        )
-      }
-      context.setLineDash([7 / scale, 5 / scale])
-    }
-  }
-  context.restore()
-}
-
-/** 背景色採取と補修には編集前の画素を使うため、元画像専用Canvasをキャッシュする。 */
-function sourceContext() {
-  if (
-    !props.image
-    || props.project.imageWidth <= 0
-    || props.project.imageHeight <= 0
-  ) {
-    return null
-  }
-  if (
-    !sourceCanvas
-    || sourceCanvasImage !== props.image
-    || sourceCanvas.width !== props.project.imageWidth
-    || sourceCanvas.height !== props.project.imageHeight
-  ) {
-    sourceCanvas = document.createElement('canvas')
-    sourceCanvas.width = props.project.imageWidth
-    sourceCanvas.height = props.project.imageHeight
-    sourceCanvasImage = props.image
-    const context = sourceCanvas.getContext('2d', { willReadFrequently: true })
-    context?.drawImage(
-      props.image,
-      0,
-      0,
-      props.project.imageWidth,
-      props.project.imageHeight,
-    )
-  }
-  return sourceCanvas.getContext('2d', { willReadFrequently: true })
-}
-
-/** 編集データや画像の参照が変わるまで描画結果を再利用し、ズームや選択枠の操作を軽くする。 */
-function editedPreview(): HTMLCanvasElement | null {
-  if (!props.image)
-    return null
-  const cacheValid
-    = editedPreviewCanvas
-      && editedPreviewKey?.image === props.image
-      && editedPreviewKey.project === props.project
-      && editedPreviewKey.assets === props.assets
-      && editedPreviewKey.assetImages === props.assetImages
-      && editedPreviewKey.fontFamilies === props.fontFamilies
-  if (cacheValid)
-    return editedPreviewCanvas
-
-  const output = document.createElement('canvas')
-  output.width = props.project.imageWidth
-  output.height = props.project.imageHeight
-  const context = output.getContext('2d')
-  if (!context)
-    return null
-  renderCard(
-    context,
-    props.image,
-    output.width,
-    output.height,
-    props.project.regions,
-    props.assets.filter(asset => props.assetImages.has(asset.id)),
-    props.assetImages,
-    props.fontFamilies,
-  )
-  editedPreviewCanvas = output
-  editedPreviewKey = {
-    image: props.image,
-    project: props.project,
-    assets: props.assets,
-    assetImages: props.assetImages,
-    fontFamilies: props.fontFamilies,
-  }
-  return output
-}
-
-/** 編集画像の上に選択枠・候補・マスクを重ねる。操作用の表示は書き出し画像には含めない。 */
-function redraw() {
-  const element = canvas.value
-  if (
-    !element
-    || !props.image
-    || props.project.imageWidth <= 0
-    || props.project.imageHeight <= 0
-  ) {
-    return
-  }
-  const context = element.getContext('2d')
-  if (!context)
-    return
-  const previewRegions = props.project.regions.map(region =>
-    region.id === props.selectedRegionId && draftRegion.value
-      ? {
-          ...region,
-          ...draftRegion.value,
-          ...transformRegionContents(region, draftRegion.value),
-        }
-      : region,
-  )
-  const selected = previewRegions.find(
-    region => region.id === props.selectedRegionId,
-  )
-  const inspectingAutomaticMask
-    = props.autoMaskPreview && selected?.backgroundMode === 'auto'
-  if (props.previewMode === 'original' || inspectingAutomaticMask) {
-    context.clearRect(
-      0,
-      0,
-      props.project.imageWidth,
-      props.project.imageHeight,
-    )
-    context.drawImage(
-      props.image,
-      0,
-      0,
-      props.project.imageWidth,
-      props.project.imageHeight,
-    )
-  }
-  else {
-    const cached = draftRegion.value ? null : editedPreview()
-    if (cached) {
-      context.clearRect(
-        0,
-        0,
-        props.project.imageWidth,
-        props.project.imageHeight,
-      )
-      context.drawImage(cached, 0, 0)
-    }
-    else {
-      renderCard(
-        context,
-        props.image,
-        props.project.imageWidth,
-        props.project.imageHeight,
-        previewRegions,
-        props.assets.filter(asset => props.assetImages.has(asset.id)),
-        props.assetImages,
-        props.fontFamilies,
-      )
-    }
-  }
-  if (props.previewMode === 'edited' && !props.printAreaEditing)
-    drawUnselectedRegionOutlines(context, previewRegions)
-  if (selected && inspectingAutomaticMask)
-    drawAutomaticMaskPreview(context, selected)
-  if (selected && !props.printAreaEditing)
-    drawRegionSelection(context, selected)
-  if (!props.printAreaEditing && selected && selected.exclusionAreas.length > 0) {
-    drawExclusionOverlay(context, selected)
-  }
-  else if (
-    !props.printAreaEditing
-    && selected
-    && exclusionInteraction.value?.kind === 'create'
-    && draftExclusion.value
-  ) {
-    drawExclusionOverlay(context, selected)
-  }
-  if (
-    !props.printAreaEditing
-    && selected
-    && editorTools.maskEditing
-    && selected.backgroundMode === 'manual'
-  ) {
-    drawMaskOverlay(context, selected, [
-      ...selected.manualMaskStrokes,
-      ...(draftMaskStroke.value ? [draftMaskStroke.value] : []),
-    ])
-  }
-  if (draft.value)
-    drawSelection(context, draft.value, true)
-  if (props.regionCandidates.length > 0 && !props.printAreaEditing)
-    drawRegionCandidates(context)
-  if (props.printAreaEditing)
-    drawPrintArea(context)
 }
 
 // 画像・編集状態・操作表示の変更に応じてCanvasを再描画する。
@@ -914,22 +471,6 @@ function findRegion(point: Point) {
   return lastBoundsAtPoint(props.project.regions, point)
 }
 
-/** 新しい領域の背景色を元画像から推定する。 */
-function colorFromOriginalImage(bounds: RegionDraft) {
-  const context = sourceContext()
-  if (!context)
-    return '#ffffff'
-  return estimateBackgroundColor(
-    context,
-    bounds.x,
-    bounds.y,
-    bounds.width,
-    bounds.height,
-    props.project.imageWidth,
-    props.project.imageHeight,
-  )
-}
-
 /** 操作対象ごとの確定条件を判定し、確定した範囲やマスクを親へ通知する。 */
 function onPointerUp(event: PointerEvent) {
   if (printAreaInteraction.value) {
@@ -1052,31 +593,6 @@ function onLostPointerCapture(event: PointerEvent) {
   if (draftMaskStroke.value && event.pointerId === activeMaskPointerId.value) {
     commitDraftMaskStroke()
   }
-}
-
-/** 表示倍率に関係なく元解像度で再描画し、選択枠を含まないPNG／JPEGを生成する。 */
-async function exportImage(
-  type: 'image/png' | 'image/jpeg',
-): Promise<Blob | null> {
-  if (!props.image)
-    return null
-  const output = document.createElement('canvas')
-  output.width = props.project.imageWidth
-  output.height = props.project.imageHeight
-  const context = output.getContext('2d')
-  if (!context)
-    return null
-  renderCard(
-    context,
-    props.image,
-    output.width,
-    output.height,
-    props.project.regions,
-    props.assets.filter(asset => props.assetImages.has(asset.id)),
-    props.assetImages,
-    props.fontFamilies,
-  )
-  return new Promise(resolve => output.toBlob(resolve, type, 0.92))
 }
 
 defineExpose({
