@@ -141,7 +141,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
     }>,
   ) {
     if (drafts.length === 0)
-      return
+      return []
     const firstSequence = history.state.value.regions.length + 1
     const regions = drafts.map((draft, index): TextRegion => {
       const sequence = firstSequence + index
@@ -181,6 +181,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
     })
     selectedRegionId.value = regions.at(-1)?.id ?? null
     publishProject()
+    return regions.map(region => region.id)
   }
 
   /** 指定領域の変更を履歴へ確定し、文字列変更時の書式も調整する。 */

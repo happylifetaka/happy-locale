@@ -17,7 +17,7 @@ it('retains only the existing format facade exports', () => {
     'serializeFolderProject',
     'toCardProject',
   ])
-  expect(format.CURRENT_PROJECT_VERSION).toBe(3)
+  expect(format.CURRENT_PROJECT_VERSION).toBe(4)
 })
 
 it.each([undefined, 0, 1])('migrates legacy version %s without mutating its input or validating field values early', (version) => {
@@ -26,7 +26,7 @@ it.each([undefined, 0, 1])('migrates legacy version %s without mutating its inpu
   const migrated = migrateProjectDocument(legacy)
   expect(migrated).toEqual({
     ...legacy,
-    version: 3,
+    version: 4,
     activeCardId: 'synthetic-1',
     glossary: [],
     cards: legacy.cards.map(card => ({ ...card, printArea: null, sourceDpi: null })),
@@ -34,17 +34,17 @@ it.each([undefined, 0, 1])('migrates legacy version %s without mutating its inpu
   })
   expect(legacy).toEqual(before)
   const malformed = { ...legacy, cards: [null] }
-  expect(migrateProjectDocument(malformed)).toMatchObject({ version: 3, cards: [null] })
+  expect(migrateProjectDocument(malformed)).toMatchObject({ version: 4, cards: [null] })
   expect(() => format.parseFolderProject(JSON.stringify(malformed))).toThrow('cards[0].id')
 })
 
-it('preserves version 2 settings and leaves current/unknown versions to the codec gate', () => {
+it.each([2, 3])('preserves version %s settings and leaves current/unknown versions to the codec gate', (version) => {
   const current = baselineProject()
-  const version2 = { ...current, version: 2 }
+  const version2 = { ...current, version }
   expect(migrateProjectDocument(version2)).toEqual(current)
-  expect(version2.version).toBe(2)
+  expect(version2.version).toBe(version)
   expect(migrateProjectDocument(current)).toBe(current)
-  const future = { ...current, version: 4 }
+  const future = { ...current, version: 5 }
   expect(migrateProjectDocument(future)).toBe(future)
   expect(() => format.parseFolderProject(JSON.stringify(future))).toThrow('対応していない')
   expect(migrateProjectDocument(null)).toBeNull()

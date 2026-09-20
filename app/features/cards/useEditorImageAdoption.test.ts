@@ -6,6 +6,7 @@ import { useCardEditor } from '~/composables/useCardEditor'
 import { useProjectRuntime } from '~/composables/useProjectRuntime'
 import { useProjectStore } from '~/stores/project'
 import { readImageDpi } from '~/utils/image-dpi'
+import { discoveryProject } from '../../../tests/fixtures/asset-discovery'
 import { baselineProject } from '../../../tests/fixtures/refactoring-baseline'
 import { useEditorImageAdoption } from './useEditorImageAdoption'
 
@@ -70,6 +71,26 @@ it('keeps first-image loading separate from missing folders, existing projects a
   await busyImages.openCardImage(loaded.file)
   expect(options.setMessage).toHaveBeenLastCalledWith('カードの処理が完了してから画像を開いてください。')
   expect(options.loadImage).not.toHaveBeenCalled()
+})
+
+it('invalidates old icon approval when a different draft image has the same dimensions', async () => {
+  const { options, loaded, projectStore, projectRuntime, images, editor } = setup()
+  const project = discoveryProject()
+  options.currentImageId.value = project.activeCardId
+  editor.loadImageProject('previous.png', 200, 240)
+  projectStore.setCardOCRCandidates(project.activeCardId, project.cards[0]!.ocrCandidates!)
+  projectStore.setAssets(project.assets)
+  projectStore.setAssetDiscovery(project.assetDiscovery!, project.activeCardId)
+  projectRuntime.setDirectory({ name: 'folder' } as FileSystemDirectoryHandle)
+  await images.openCardImage(loaded.file)
+  expect(projectStore.assetDiscovery!.occurrences[0]).toMatchObject({
+    imageSize: { width: 200, height: 240 },
+    imageDigest: 'a'.repeat(64),
+    owner: null,
+    decision: 'pending',
+    approval: null,
+  })
+  expect(projectStore.assetDiscovery!.occurrences[0]!.bounds).toEqual(project.assetDiscovery!.occurrences[0]!.bounds)
 })
 
 it('adopts the draft first image and stages its thumbnail using the same draft identity', async () => {

@@ -24,7 +24,7 @@ export function baselineOCR(): OCRResult {
 
 export function baselineProject(): FolderProjectDocument {
   return {
-    version: 3,
+    version: 4,
     name: 'Synthetic regression project',
     activeCardId: 'synthetic-1',
     cards: [{

@@ -1,5 +1,6 @@
 import type { AssetDiscoveryState, IconCandidateGroup, IconOccurrence, IconOccurrenceApproval } from '~/types/asset-discovery'
 import type { FolderProjectCard, RegionDraft } from '~/types/editor'
+import { assertImageDimensions } from '~/utils/file-limits'
 import { containsBounds, sameBounds } from './review'
 
 export const ASSET_DISCOVERY_LIMITS = Object.freeze({ perCard: 100, project: 2000, identifierLength: 128 })
@@ -14,7 +15,7 @@ const id = (v: unknown): v is string => typeof v === 'string' && v.trim().length
 const digest = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/u.test(v)
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
-/** version 4の接続で用いる厳密な値・参照検証。単独では既存文書のversionを変更しない。 */
+/** version 4の保存値・参照検証。旧画像の座標は元の寸法で検証し、現在画像へ自動適用しない。 */
 export function parseAssetDiscovery(value: unknown, context: DiscoveryFormatContext): AssetDiscoveryState {
   const fail = (reason: string): never => {
     throw new Error(`アイコン候補の保存データが不正です（${reason}）。`)
@@ -45,12 +46,26 @@ export function parseAssetDiscovery(value: unknown, context: DiscoveryFormatCont
     const card = cards.get(item.cardId)
     if (!card)
       return fail('カード参照')
+    if (!record(item.imageSize) || !finite(item.imageSize.width) || !finite(item.imageSize.height))
+      return fail('元画像の寸法')
+    const imageSize = { width: item.imageSize.width, height: item.imageSize.height }
+    if (!Number.isSafeInteger(imageSize.width) || !Number.isSafeInteger(imageSize.height))
+      return fail('元画像の寸法')
+    try {
+      assertImageDimensions(imageSize.width, imageSize.height)
+    }
+    catch {
+      return fail('元画像の寸法')
+    }
+    const changedDimensions = imageSize.width !== card.imageWidth || imageSize.height !== card.imageHeight
+    if (changedDimensions && (item.decision === 'accepted' || item.owner !== null))
+      return fail('画像寸法の変更後は承認・所属の再確認が必要')
     const count = (counts.get(item.cardId) ?? 0) + 1
     if (count > ASSET_DISCOVERY_LIMITS.perCard)
       return fail('カード内の候補数')
     counts.set(item.cardId, count)
-    const currentBounds = bounds(item.bounds, card.imageWidth, card.imageHeight)
-    const detectedBounds = item.detectedBounds === null ? null : bounds(item.detectedBounds, card.imageWidth, card.imageHeight)
+    const currentBounds = bounds(item.bounds, imageSize.width, imageSize.height)
+    const detectedBounds = item.detectedBounds === null ? null : bounds(item.detectedBounds, imageSize.width, imageSize.height)
     let approval: IconOccurrenceApproval | null = null
     if (item.approval !== null) {
       const raw = item.approval
@@ -58,7 +73,7 @@ export function parseAssetDiscovery(value: unknown, context: DiscoveryFormatCont
         || raw.assetId !== item.assetId || raw.imageDigest !== item.imageDigest || item.decision !== 'accepted') {
         return fail('承認対象')
       }
-      const approvedBounds = bounds(raw.bounds, card.imageWidth, card.imageHeight)
+      const approvedBounds = bounds(raw.bounds, imageSize.width, imageSize.height)
       if (!sameBounds(approvedBounds, currentBounds))
         return fail('承認後に変更された矩形')
       approval = { imageDigest: raw.imageDigest, assetId: raw.assetId, assetDigest: raw.assetDigest, bounds: approvedBounds }
@@ -80,6 +95,7 @@ export function parseAssetDiscovery(value: unknown, context: DiscoveryFormatCont
       id: item.id,
       cardId: item.cardId,
       imageDigest: item.imageDigest,
+      imageSize,
       bounds: currentBounds,
       detectedBounds,
       origin: item.origin,

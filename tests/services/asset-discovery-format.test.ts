@@ -13,6 +13,7 @@ function fixture() {
       id: 'occurrence',
       cardId: 'card',
       imageDigest: 'a'.repeat(64),
+      imageSize: { width: 500, height: 700 },
       bounds: { x: 40, y: 130, width: 20, height: 20 },
       detectedBounds: { x: 40, y: 130, width: 20, height: 20 },
       origin: 'detected',
@@ -32,7 +33,7 @@ function fixture() {
   return { state, context: { cards: [{ id: 'card', ...editor.project.value }], assetIds: new Set(['asset']) } }
 }
 
-describe('discovery persistence contract before format integration', () => {
+describe('discovery persistence contract', () => {
   it('validates and copies JSON-safe approval, membership and original image coordinates', () => {
     const { state, context } = fixture()
     const parsed = parseAssetDiscovery(JSON.parse(JSON.stringify(state)), context)
@@ -47,6 +48,8 @@ describe('discovery persistence contract before format integration', () => {
     (s: AssetDiscoveryState) => { s.occurrences[0]!.bounds.width = Number.NaN },
     (s: AssetDiscoveryState) => { s.occurrences[0]!.bounds.width = 1000 },
     (s: AssetDiscoveryState) => { s.occurrences[0]!.imageDigest = 'not-a-digest' },
+    (s: AssetDiscoveryState) => { s.occurrences[0]!.imageSize.width = Number.NaN },
+    (s: AssetDiscoveryState) => { s.occurrences[0]!.imageSize.height = 800 },
     (s: AssetDiscoveryState) => { s.occurrences[0]!.cardId = 'missing' },
     (s: AssetDiscoveryState) => { s.occurrences[0]!.assetId = 'missing' },
     (s: AssetDiscoveryState) => { s.occurrences[0]!.approval = null },

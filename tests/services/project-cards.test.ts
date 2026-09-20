@@ -22,7 +22,7 @@ import {
 
 function projectDocument(): FolderProjectDocument {
   return {
-    version: 3,
+    version: 4,
     name: 'Cards',
     activeCardId: 'card-1',
     cards: [
@@ -749,7 +749,7 @@ describe('project card state', () => {
     )
 
     expect(writes.get('project.backup.json')).toBe(previous)
-    expect(JSON.parse(writes.get('project.json') as string).version).toBe(3)
+    expect(JSON.parse(writes.get('project.json') as string).version).toBe(4)
     expect(saved.cards[0]).toMatchObject({
       id: 'card-1',
       imagePath: 'images/card-1.png',

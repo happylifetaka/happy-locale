@@ -5,6 +5,8 @@ export interface IconOccurrence {
   id: string
   cardId: string
   imageDigest: string
+  /** ハッシュで識別する検出元画像の寸法。差替え後も旧座標を解釈できるよう保持する。 */
+  imageSize: { width: number, height: number }
   bounds: RegionDraft
   detectedBounds: RegionDraft | null
   origin: 'detected' | 'manual'
@@ -30,7 +32,7 @@ export interface IconCandidateGroup {
   proposedAssetId: string | null
 }
 
-/** 保存接続前のJSON契約。現行project.jsonにこの型を追加するだけでは移行済みとしない。 */
+/** project.json version 4で保存するレビュー状態。画像資源・実測OCRは含めない。 */
 export interface AssetDiscoveryState {
   occurrences: IconOccurrence[]
   groups: IconCandidateGroup[]

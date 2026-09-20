@@ -258,6 +258,7 @@ export async function createFolderProject(
   assetBlobs: ReadonlyMap<string, Blob>,
   glossary: FolderProjectDocument['glossary'] = [],
   ocrCandidates?: FolderProjectCard['ocrCandidates'],
+  assetDiscovery?: FolderProjectDocument['assetDiscovery'],
 ): Promise<FolderProjectDocument> {
   try {
     await directory.getFileHandle('project.json')
@@ -293,6 +294,7 @@ export async function createFolderProject(
     ocrDictionary,
     glossary,
     printSettings: { ...DEFAULT_PRINT_SETTINGS },
+    ...(assetDiscovery !== undefined ? { assetDiscovery } : {}),
   }
   await writeAssetFiles(directory, assets, assetBlobs)
   await writeProjectDocument(directory, document, false)
@@ -473,6 +475,8 @@ async function writeProjectDocument(
   document: FolderProjectDocument,
   createBackup: boolean,
 ) {
+  // 参照・容量の検証失敗ではバックアップも既存JSONも変更しない。
+  const serialized = serializeFolderProject(document)
   if (createBackup) {
     try {
       const previous = await readTextFile(directory, 'project.json')
@@ -489,6 +493,6 @@ async function writeProjectDocument(
   }
   await writeFile(
     await directory.getFileHandle('project.json', { create: true }),
-    serializeFolderProject(document),
+    serialized,
   )
 }

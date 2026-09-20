@@ -10,6 +10,7 @@ function occurrence(overrides: Partial<IconOccurrence> = {}): IconOccurrence {
     id: 'icon-1',
     cardId: 'card-1',
     imageDigest: 'image-v1',
+    imageSize: { width: 500, height: 700 },
     bounds: { x: 40, y: 130, width: 20, height: 20 },
     detectedBounds: { x: 40, y: 130, width: 20, height: 20 },
     origin: 'detected',

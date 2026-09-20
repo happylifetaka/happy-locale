@@ -1,4 +1,5 @@
 import type { CardProject, FolderProjectCard, FolderProjectDocument, FontReference, GlossaryEntry, ImageAsset, OCRDictionaryEntry } from '~/types/editor'
+import { parseAssetDiscovery } from '~/services/asset-discovery/format'
 import { FILE_LIMITS } from '~/utils/file-limits'
 import { normalizeAsset, normalizeCard, normalizeFont, normalizeGlossaryEntry, normalizeLayoutTemplates, normalizeOCRDictionaryEntry, normalizePrintSettings } from './entities'
 import { assertProjectComplexity, assertProjectIntegrity } from './integrity'
@@ -16,6 +17,8 @@ export function parseFolderProject(text: string): FolderProjectDocument {
   catch {
     throw new Error('project.jsonが正しいJSONではありません。')
   }
+  if (isRecord(value) && value.version !== CURRENT_PROJECT_VERSION && value.assetDiscovery !== undefined)
+    throw new Error('アイコン候補を含むプロジェクトはversion 4で保存してください。対応していない形式です。')
   value = migrateProjectDocument(value)
   assertProjectComplexity(value)
   if (
@@ -36,6 +39,9 @@ export function parseFolderProject(text: string): FolderProjectDocument {
   const activeCardId = cards.some(card => card.id === requestedActiveId)
     ? requestedActiveId
     : cards[0]!.id
+  const assets = Array.isArray(value.assets)
+    ? value.assets.map(normalizeAsset).filter((asset): asset is ImageAsset => asset !== null)
+    : []
   return {
     version: CURRENT_PROJECT_VERSION,
     name: string(value.name, 'HappyLocale Project'),
@@ -43,11 +49,10 @@ export function parseFolderProject(text: string): FolderProjectDocument {
     ...(value.layoutTemplates !== undefined ? { layoutTemplates: normalizeLayoutTemplates(value.layoutTemplates) } : {}),
     activeCardId,
     cards,
-    assets: Array.isArray(value.assets)
-      ? value.assets
-          .map(normalizeAsset)
-          .filter((asset): asset is ImageAsset => asset !== null)
-      : [],
+    assets,
+    ...(value.assetDiscovery !== undefined
+      ? { assetDiscovery: parseAssetDiscovery(value.assetDiscovery, { cards, assetIds: new Set(assets.map(asset => asset.id)) }) }
+      : {}),
     fonts: Array.isArray(value.fonts)
       ? value.fonts
           .map(normalizeFont)
@@ -75,7 +80,12 @@ export function serializeFolderProject(project: FolderProjectDocument): string {
   assertProjectIntegrity(project)
   if (project.layoutTemplates !== undefined)
     normalizeLayoutTemplates(project.layoutTemplates)
-  return `${JSON.stringify(project, null, 2)}\n`
+  if (project.assetDiscovery !== undefined)
+    parseAssetDiscovery(project.assetDiscovery, { cards: project.cards, assetIds: new Set(project.assets.map(asset => asset.id)) })
+  const text = `${JSON.stringify(project, null, 2)}\n`
+  if (new Blob([text]).size > FILE_LIMITS.textBytes)
+    throw new Error('project.jsonは20 MiB以下にしてください。')
+  return text
 }
 
 /** 保存カードから編集履歴に必要な情報だけを取り出す。 */

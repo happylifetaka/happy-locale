@@ -10,7 +10,7 @@ import {
 
 function document(): FolderProjectDocument {
   return {
-    version: 3,
+    version: 4,
     name: 'カード翻訳',
     activeCardId: 'card-1',
     cards: [
@@ -158,7 +158,7 @@ describe('folder project format', () => {
 
       const parsed = parseFolderProject(JSON.stringify(value))
 
-      expect(parsed.version).toBe(3)
+      expect(parsed.version).toBe(4)
       expect(parsed.activeCardId).toBe('card-1')
       expect(parsed.ocrDictionary).toEqual([])
       expect(parsed.glossary).toEqual([])
@@ -177,7 +177,7 @@ describe('folder project format', () => {
 
     const parsed = parseFolderProject(JSON.stringify(value))
 
-    expect(parsed.version).toBe(3)
+    expect(parsed.version).toBe(4)
     expect(parsed.cards[0]!.printArea).toBeNull()
     expect(parsed.cards[0]!.sourceDpi).toBeNull()
     expect(parsed.printSettings).toEqual({
@@ -191,7 +191,7 @@ describe('folder project format', () => {
   it('rejects unsupported and empty projects', () => {
     expect(() => parseFolderProject('{')).toThrow('正しいJSON')
     expect(() =>
-      parseFolderProject(JSON.stringify({ version: 4, cards: [] })),
+      parseFolderProject(JSON.stringify({ version: 5, cards: [] })),
     ).toThrow('対応していない')
     expect(() =>
       parseFolderProject(JSON.stringify({ version: 2, cards: [] })),

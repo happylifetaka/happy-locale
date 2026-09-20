@@ -16,12 +16,13 @@ interface CandidateReviewOptions {
   batchOCRStates: Readonly<Ref<ReadonlyMap<string, OCRQueueCardState>>>
   editor: {
     selectedRegionId: Ref<string | null>
-    addRegions: (drafts: { bounds: RegionDraft, backgroundColor: string, originalText: string }[]) => void
+    addRegions: (drafts: { bounds: RegionDraft, backgroundColor: string, originalText: string }[]) => string[]
     appendTemplateRegions: (regions: readonly TextRegion[]) => void
   }
   updateBatchOCRResult: (cardId: string, candidates: readonly RegionCandidate[] | null) => void
   finishBatchOCRReview: (cardId: string) => void
   clearRegionCandidates: () => void
+  promoteDiscoveryOwners: (cardId: string, promotedIds: ReadonlyMap<string, string>) => void
   switchInspectorTab: (tab: 'ocr' | 'text') => void
   backgroundColorForBounds: (bounds: RegionDraft) => string
   setMessage: (message: string) => void
@@ -42,6 +43,7 @@ export function useCandidateReview({
   updateBatchOCRResult,
   finishBatchOCRReview,
   clearRegionCandidates,
+  promoteDiscoveryOwners,
   switchInspectorTab,
   backgroundColorForBounds,
   setMessage,
@@ -109,7 +111,7 @@ export function useCandidateReview({
         finishBatchOCRReview(reviewedCardId)
       return
     }
-    editor.addRegions(
+    const regionIds = editor.addRegions(
       selected.map(candidate => ({
         bounds: {
           x: candidate.x,
@@ -122,6 +124,8 @@ export function useCandidateReview({
         originalText: candidate.text,
       })),
     )
+    const promotedIds = new Map(selected.map((candidate, index) => [candidate.id, regionIds[index]!]))
+    promoteDiscoveryOwners(currentImageId.value, promotedIds)
     const count = selected.length
     const reviewedCardId = batchOCRStates.value.get(currentImageId.value)?.status
       === 'review'

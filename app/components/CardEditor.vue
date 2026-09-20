@@ -492,6 +492,7 @@ const candidateReview = useCandidateReview({
   updateBatchOCRResult,
   finishBatchOCRReview,
   clearRegionCandidates,
+  promoteDiscoveryOwners: projectStore.reconcileDiscoveryOwners,
   switchInspectorTab,
   backgroundColorForBounds: bounds => canvasApi.value?.backgroundColorForBounds(bounds) ?? '#ffffff',
   setMessage,
@@ -561,6 +562,7 @@ function projectSignature() {
     ocrDictionary: ocrDictionary.value,
     glossary: glossary.value,
     layoutTemplates: documentValue?.layoutTemplates,
+    assetDiscovery: projectStore.assetDiscovery,
     printSettings: documentValue?.printSettings ?? { ...DEFAULT_PRINT_SETTINGS },
   }, pendingCardDeletionIds.value, pendingAssetWrites.value.keys(), pendingFontCacheDeletionIds.value)
 }

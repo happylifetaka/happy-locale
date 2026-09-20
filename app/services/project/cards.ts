@@ -4,6 +4,7 @@ import type {
   FolderProjectDocument,
   TextRegion,
 } from '~/types/editor'
+import { reconcileOccurrenceOwners, removeDiscoveryCards } from '~/services/asset-discovery/review'
 import { renameInlineAssetStyles } from '~/utils/inline-assets'
 import { reconcileTextStyles } from '~/utils/text-styles'
 
@@ -93,12 +94,32 @@ export function updateProjectCard(
   cardId: string,
   project: CardProject,
 ): FolderProjectDocument {
-  return {
+  return reconcileProjectDiscoveryOwners({
     ...document,
     cards: document.cards.map(card =>
       card.id === cardId ? { ...card, ...structuredClone(project) } : card,
     ),
-  }
+  }, cardId)
+}
+
+/** 領域の削除・縮小・Undo後は候補を残し、無効になった所属だけを解除する。 */
+export function reconcileProjectDiscoveryOwners(
+  document: FolderProjectDocument,
+  cardId: string,
+  promotedIds: ReadonlyMap<string, string> = new Map(),
+): FolderProjectDocument {
+  const state = document.assetDiscovery
+  const card = document.cards.find(card => card.id === cardId)
+  if (!state || !card)
+    return document
+  const owners = [
+    ...card.regions.map(region => ({ ...region, kind: 'region' as const })),
+    ...(card.ocrCandidates ?? []).map(candidate => ({ ...candidate, kind: 'candidate' as const })),
+  ]
+  const occurrences = reconcileOccurrenceOwners(state.occurrences, cardId, owners, promotedIds)
+  if (occurrences.every((occurrence, index) => occurrence === state.occurrences[index]))
+    return document
+  return { ...document, assetDiscovery: { ...state, occurrences } }
 }
 
 /** 文書の編集対象カードIDを切り替える。 */
@@ -161,7 +182,14 @@ export function finalizeProjectCardDeletions(
     ? document.activeCardId
     : cards[0]!.id
   return {
-    document: { ...document, activeCardId, cards },
+    document: {
+      ...document,
+      activeCardId,
+      cards,
+      ...(document.assetDiscovery
+        ? { assetDiscovery: removeDiscoveryCards(document.assetDiscovery, new Set(deletedCards.map(card => card.id))) }
+        : {}),
+    },
     deletedCards,
   }
 }

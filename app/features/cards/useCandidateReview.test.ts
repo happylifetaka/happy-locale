@@ -37,6 +37,7 @@ function setup() {
     batchOCRStates: ref(new Map<string, OCRQueueCardState>([['synthetic-1', { status: 'review', candidates: 2 }]])),
     editor,
     updateBatchOCRResult: vi.fn(),
+    promoteDiscoveryOwners: vi.fn(() => events.push('promote')),
     finishBatchOCRReview: vi.fn(() => events.push('finish')),
     clearRegionCandidates: vi.fn(() => {
       events.push('clear')
@@ -78,7 +79,8 @@ describe('candidate review operations', () => {
     expect(s.editor.project.value.regions).toHaveLength(1)
     expect(s.editor.project.value.regions[0]).toMatchObject({ x: 10, y: 20, width: 80, height: 20, backgroundColor: '#123456', originalText: 'Choose an ally.' })
     expect(s.backgroundColorForBounds).toHaveBeenCalledOnce()
-    expect(s.events).toEqual(['clear', 'finish'])
+    expect(s.events).toEqual(['promote', 'clear', 'finish'])
+    expect(s.promoteDiscoveryOwners).toHaveBeenCalledWith('synthetic-1', new Map([['keep', s.editor.project.value.regions[0]!.id]]))
     expect(s.finishBatchOCRReview).toHaveBeenCalledWith('synthetic-1')
     s.editor.undo()
     expect(s.editor.project.value.regions).toEqual([])

@@ -7,7 +7,7 @@ import { savedProjectSignature } from '~/utils/project-save'
 
 function project(): FolderProjectDocument {
   return {
-    version: 3,
+    version: 4,
     name: 'cards',
     activeCardId: 'card-1',
     cards: [{

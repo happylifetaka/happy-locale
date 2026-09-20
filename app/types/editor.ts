@@ -1,3 +1,4 @@
+import type { AssetDiscoveryState } from './asset-discovery'
 import type { RegionCandidate } from './ocr'
 
 export type TextAlign = 'left' | 'center' | 'right'
@@ -158,7 +159,7 @@ export type FolderProjectCard = CardProject & {
 
 export interface FolderProjectDocument {
   demoPreset?: 'sample-v1'
-  version: 3
+  version: 4
   name: string
   activeCardId: string
   cards: FolderProjectCard[]
@@ -168,6 +169,8 @@ export interface FolderProjectDocument {
   glossary: GlossaryEntry[]
   printSettings: PrintLayoutSettings
   layoutTemplates?: LayoutTemplate[]
+  /** 領域の編集履歴から独立したアイコン候補と確認状態。 */
+  assetDiscovery?: AssetDiscoveryState
 }
 
 export interface LayoutTemplate {

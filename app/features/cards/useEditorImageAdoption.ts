@@ -7,7 +7,7 @@ import { readImageDpi } from '~/utils/image-dpi'
 
 interface EditorImageAdoptionOptions {
   editor: Pick<ReturnType<typeof useCardEditor>, 'loadImageProject'>
-  projectStore: Pick<ReturnType<typeof useProjectStore>, 'document' | 'setCardOCRCandidates'>
+  projectStore: Pick<ReturnType<typeof useProjectStore>, 'document' | 'setCardOCRCandidates' | 'invalidateAssetDiscoveryImage'>
   projectRuntime: Pick<ReturnType<typeof useProjectRuntime>, 'directory' | 'replaceCardImage' | 'clearCardImage' | 'replaceAssetSourceImage' | 'clearAssetSourceImage' | 'setPendingCardThumbnail'>
   currentImageId: Ref<string>
   assetSourceImageId: Ref<string>
@@ -137,6 +137,7 @@ export function useEditorImageAdoption({
         loaded.element.naturalHeight,
       )
       projectStore.setCardOCRCandidates(cardId, null)
+      projectStore.invalidateAssetDiscoveryImage(cardId)
       logDiagnostic('新規プロジェクトの最初のカード画像を反映しました')
       applyLoadedImage(loaded)
       adopted = true

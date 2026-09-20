@@ -11,6 +11,7 @@ interface ProjectSaveData {
   ocrDictionary: FolderProjectDocument['ocrDictionary']
   glossary: FolderProjectDocument['glossary']
   draftOCRCandidates: RegionCandidate[]
+  draftAssetDiscovery?: FolderProjectDocument['assetDiscovery']
 }
 
 /** I/O開始前の保存データを確定する。画像Blobは複製せず、成功後の同一性照合用に控える。 */

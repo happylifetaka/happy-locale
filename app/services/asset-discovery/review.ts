@@ -60,6 +60,16 @@ export function reconcileApprovals(
   })
 }
 
+/** 画像差替えを確認した際は旧座標を保存したまま適用対象から外す。除外判断は維持する。 */
+export function invalidateDiscoveryImage(state: AssetDiscoveryState, cardId: string): AssetDiscoveryState {
+  return {
+    ...state,
+    occurrences: state.occurrences.map(occurrence => occurrence.cardId === cardId
+      ? { ...occurrence, owner: null, approval: null, decision: occurrence.decision === 'accepted' ? 'pending' : occurrence.decision }
+      : occurrence),
+  }
+}
+
 interface RegionOwner extends RegionDraft { id: string, kind: 'candidate' | 'region' }
 
 /** 新しい領域へ勝手に再所属させず、消えた／はみ出した参照だけ解除する。 */

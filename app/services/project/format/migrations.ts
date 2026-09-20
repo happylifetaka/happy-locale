@@ -2,7 +2,7 @@ import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import { isRecord, string } from './values'
 
 /** 現在書き出すカードプロジェクトの形式バージョン。 */
-export const CURRENT_PROJECT_VERSION = 3
+export const CURRENT_PROJECT_VERSION = 4
 
 /** 旧形式を正規化処理で扱える形へ移す。個々の値の検証は後段で行う。 */
 export function migrateProjectDocument(value: unknown): unknown {
@@ -10,7 +10,7 @@ export function migrateProjectDocument(value: unknown): unknown {
     return value
   if (value.version === CURRENT_PROJECT_VERSION)
     return value
-  if (value.version === 2)
+  if (value.version === 2 || value.version === 3)
     return { ...value, version: CURRENT_PROJECT_VERSION }
   const legacyVersion = value.version === 0 || value.version === undefined
   if (!legacyVersion && value.version !== 1)

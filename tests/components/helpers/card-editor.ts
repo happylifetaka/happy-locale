@@ -143,7 +143,7 @@ export function deferred<T>() {
 
 export function seedProject(ids = ['one', 'two', 'three']) {
   const project: FolderProjectDocument = {
-    version: 3,
+    version: 4,
     name: 'cards',
     activeCardId: ids[0]!,
     cards: ids.map(id => ({

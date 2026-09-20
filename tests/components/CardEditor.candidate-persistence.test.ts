@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import type { OCRResult, RegionCandidate } from '~/services/ocr/types'
+import type { AssetDiscoveryState } from '~/types/asset-discovery'
 import type { FolderProjectDocument } from '~/types/editor'
 import { flushPromises } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
@@ -104,16 +105,39 @@ it('includes draft candidates in the first project save', async () => {
   wrapper.findComponent({ name: 'RegionCandidatePanel' }).vm.$emit('detect')
   await flushPromises()
   expect(useProjectStore().draftOCRCandidates).toHaveLength(1)
-  vi.mocked(createFolderProject).mockImplementationOnce(async (_directory, card, _file, id, _assets, _fonts, _dictionary, _writes, _glossary, candidates) => ({
+  const draftId = wrapper.findComponent({ name: 'CardList' }).props('activeCardId') as string
+  const discovery: AssetDiscoveryState = {
+    occurrences: [{
+      id: 'draft-icon',
+      cardId: draftId,
+      imageDigest: 'a'.repeat(64),
+      imageSize: { width: useProjectStore().activeCard.imageWidth, height: useProjectStore().activeCard.imageHeight },
+      bounds: { x: 40, y: 50, width: 10, height: 10 },
+      detectedBounds: null,
+      origin: 'manual',
+      detectorRevision: 'manual',
+      decision: 'pending',
+      assetId: null,
+      approval: null,
+      owner: null,
+    }],
+    groups: [],
+  }
+  useProjectStore().setAssetDiscovery(discovery, draftId)
+  vi.mocked(createFolderProject).mockImplementationOnce(async (_directory, card, _file, id, _assets, _fonts, _dictionary, _writes, _glossary, candidates, assetDiscovery) => ({
     ...project,
     activeCardId: id,
     cards: [{ ...project.cards[0]!, ...card, id, ocrCandidates: candidates }],
+    assetDiscovery,
   }))
   toolbar.vm.$emit('save-project')
   await flushPromises()
   expect(createFolderProject).toHaveBeenCalledOnce()
   expect(useProjectStore().document!.cards[0]!.ocrCandidates).toEqual(canvas.props('regionCandidates'))
   expect(useProjectStore().draftOCRCandidates).toEqual([])
+  expect(vi.mocked(createFolderProject).mock.calls[0]![10]).toEqual(discovery)
+  expect(useProjectStore().document!.assetDiscovery).toEqual(discovery)
+  expect(useProjectStore().draftAssetDiscovery).toBeUndefined()
   expect(toolbar.props('saveStatus')).toBe('saved')
 })
 

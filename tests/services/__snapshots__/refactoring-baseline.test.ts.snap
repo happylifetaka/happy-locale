@@ -96,7 +96,7 @@ Draw two cards.",
 
 exports[`pre-refactoring behavior contracts > freezes serialized candidate data and restores it without any runtime resources 1`] = `
 "{
-  "version": 3,
+  "version": 4,
   "name": "Synthetic regression project",
   "activeCardId": "synthetic-1",
   "cards": [
@@ -220,7 +220,7 @@ exports[`pre-refactoring behavior contracts > freezes serialized candidate data 
 
 exports[`pre-refactoring behavior contracts > freezes serialized candidate data and restores it without any runtime resources 2`] = `
 "{
-  "version": 3,
+  "version": 4,
   "name": "Synthetic regression project",
   "activeCardId": "synthetic-1",
   "cards": [

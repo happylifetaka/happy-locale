@@ -61,7 +61,7 @@ describe('layout templates', () => {
   it('persists templates and includes edits in the unsaved signature', () => {
     const { template } = fixture()
     const doc: FolderProjectDocument = {
-      version: 3,
+      version: 4,
       name: 'test',
       activeCardId: 'c',
       cards: [{ id: 'c', imagePath: 'images/c.png', imageName: 'c.png', imageWidth: 200, imageHeight: 300, regions: [], printArea: null, sourceDpi: null }],
