@@ -40,6 +40,7 @@ import { useEditorImageAdoption } from '~/features/cards/useEditorImageAdoption'
 import { useEditorNotifications } from '~/features/cards/useEditorNotifications'
 import { useProjectActivity } from '~/features/cards/useProjectActivity'
 import { useProjectAdoption } from '~/features/cards/useProjectAdoption'
+import { useQuickRegionApply } from '~/features/cards/useQuickRegionApply'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import {
@@ -523,10 +524,7 @@ watch(projectRuntime.projectGeneration, () => {
 })
 const iconAnalysisOpen = ref(false)
 function detectRegionCandidates() {
-  if (projectStore.assetDiscovery?.occurrences.some(item => item.cardId === currentImageId.value && item.assetId && item.decision !== 'excluded'))
-    iconAnalysisOpen.value = true
-  else
-    void detectPlainRegionCandidates()
+  void detectPlainRegionCandidates()
 }
 function editAnalysisRegions() {
   iconAnalysisOpen.value = false
@@ -550,9 +548,30 @@ const discoveryOptions: DiscoveryWorkspaceOptions = {
   createAsset: createSourceIconAsset,
   selectCard: selectProjectCard,
 }
+const quickRegionApply = useQuickRegionApply(discoveryOptions, setMessage)
+const batchAutoApply = ref(true)
+const reflectCandidateIcons = ref(true)
+const autoApplyEnabled = computed(() => !isDemo.value && batchAutoApply.value)
+const canReflectCandidateIcons = computed(() => !isDemo.value && Boolean(projectStore.assetDiscovery?.occurrences.some(item => item.cardId === currentImageId.value && item.assetId && item.decision !== 'excluded')))
+const combinedBatchStates = computed(() => autoApplyEnabled.value ? new Map([...batchOCRStates.value, ...quickRegionApply.states.value]) : batchOCRStates.value)
+async function startRegionBatch() {
+  if (autoApplyEnabled.value)
+    await quickRegionApply.start(quickRegionApply.eligible.value.map(card => card.id))
+  else
+    await startBatchOCR()
+}
+async function confirmCandidatesWithIcons() {
+  if (!canReflectCandidateIcons.value || !reflectCandidateIcons.value) {
+    confirmRegionCandidates()
+    return
+  }
+  await quickRegionApply.start([currentImageId.value])
+  if (!regionCandidates.value.length)
+    switchInspectorTab('text')
+}
 
 useEditorHistoryShortcuts({
-  enabled: () => !projectBusy.value && currentView.value === 'card',
+  enabled: () => !projectBusy.value && !ocrRunning.value && currentView.value === 'card',
   undo: editor.undo,
   redo: editor.redo,
 })
@@ -778,7 +797,7 @@ provideCardTranslation({
       :current-view="currentView"
       :diagnostic-count="diagnostics.length"
       :discovery-available="!isDemo && Boolean(image)"
-      :discovery-working="discoveryWorking"
+      :discovery-working="discoveryWorking || quickRegionApply.running.value"
       @open-project="openProject"
       @save-project="saveProject"
       @import-csv="importCsv"
@@ -913,14 +932,18 @@ provideCardTranslation({
           :add-cards-disabled-reason="isDemo ? 'デモではサンプルカードのみ編集できます。' : undefined"
           :thumbnails="cardThumbnails"
           :pending-deletion-ids="pendingCardDeletionIds"
-          :batch-ocr-running="batchOCRRunning"
-          :batch-ocr-completed="batchOCRCompleted"
-          :batch-ocr-total="batchOCRTotal"
-          :batch-ocr-eligible-count="batchOCREligibleCards.length"
-          :batch-ocr-states="batchOCRStates"
+          :batch-ocr-running="batchOCRRunning || quickRegionApply.running.value"
+          :batch-ocr-completed="autoApplyEnabled ? quickRegionApply.completed.value : batchOCRCompleted"
+          :batch-ocr-total="autoApplyEnabled ? quickRegionApply.total.value : batchOCRTotal"
+          :batch-ocr-eligible-count="autoApplyEnabled ? quickRegionApply.eligible.value.length : batchOCREligibleCards.length"
+          :batch-ocr-states="combinedBatchStates"
+          :batch-auto-apply-available="!isDemo"
+          :batch-auto-apply="autoApplyEnabled"
+          :batch-apply-issues="quickRegionApply.issues.value"
           :batch-translation-available="true"
           :batch-translation-count="translationReviewCards.filter(card => card.regions.length).length"
           :translation-running="translationRunning"
+          @update:batch-auto-apply="batchAutoApply = $event"
           @start-batch-translation="openTranslationReview(undefined, false, isDemo)"
           @select="selectProjectCard"
           @add="addProjectCards"
@@ -935,8 +958,8 @@ provideCardTranslation({
           @export-all="exportAllCardImages"
           @select-region="selectProjectRegion"
           @request-thumbnail="requestCardThumbnail"
-          @start-batch-ocr="startBatchOCR"
-          @cancel-batch-ocr="requestBatchOCRCancellation"
+          @start-batch-ocr="startRegionBatch"
+          @cancel-batch-ocr="quickRegionApply.running.value ? quickRegionApply.cancel() : requestBatchOCRCancellation()"
           @open-print-layout="openPrintLayout"
         />
       </template>
@@ -977,16 +1000,21 @@ provideCardTranslation({
           :has-image="Boolean(image)"
           :running="ocrRunning"
           :progress="ocrProgress"
-          :status="ocrStatus"
+          :status="quickRegionApply.running.value ? quickRegionApply.status.value : ocrStatus"
           :candidates="regionCandidates"
           :selected-candidate-id="selectedCandidateId"
           :can-undo-change="regionCandidateEditHistory.length > 0"
+          :icon-reflection-available="canReflectCandidateIcons"
+          :reflect-icons="reflectCandidateIcons"
+          :cancellable="quickRegionApply.running.value"
+          @update:reflect-icons="reflectCandidateIcons = $event"
+          @stop="quickRegionApply.cancel"
           @detect="detectRegionCandidates"
           @toggle="toggleRegionCandidate"
           @split="splitCandidate"
           @undo-change="undoCandidateChange"
           @select-all="selectAllRegionCandidates"
-          @confirm="confirmRegionCandidates"
+          @confirm="confirmCandidatesWithIcons"
           @cancel="discardRegionCandidates"
         />
       </template>

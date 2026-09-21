@@ -113,6 +113,8 @@ PDF専用UIとcomposable、その単体テストは`app/features/pdf/`へまと�
 
 カード用OCR Providerは`CardEditor`が生成・破棄し、単一領域・候補検出・一括OCRで同じWorkerを再利用します。Workerは`useProjectRuntime`の管理対象ではありません。
 
+`useQuickRegionApply`は、通常プロジェクトの一括領域追加・アイコン反映と単一カードの候補追加を接続します。`analyzeIconRegions`と同じ画像照合・小拡張・タグ付きOCRを使い、確実な対応をプレビューなしで反映します。元画像は1枚ずつデコードし、結果の対象カード・候補・共有設定・アセット実体・プロジェクト世代を再検証します。中止・変更後の遅延結果は破棄し、完了カードは残します。既存領域のエラーは書き換えず、新規領域のアイコン処理エラーは検出時の枠・原文へ戻して追加し、要確認をカード別に通知します。表示カードを移動せず`applyIconAnalysisToCard`で保存・候補消費を原子的に適用し、`useKeyedHistory.commitTo`で非表示カードも通常のUndo/Redoへ接続します。保存形式に実行状態やブラウザ資源は追加しません。
+
 TesseractのWorkerは同一アプリの配信ファイルを直接起動し、ライブラリ側のBlob URLラッパーを作りません。WASM・学習データと合わせてNuxtのbaseURLを付け、CDNへフォールバックしません。
 
 ## Canvas描画

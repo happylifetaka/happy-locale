@@ -40,9 +40,13 @@ onMounted(() => dialog.value?.showModal())
         閉じる
       </button>
     </header>
-    <p>確認・分類したアイコンの位置を再利用します。既存の領域は作り直さず、領域も候補もないカードだけ新規検出します。元画像は変更しません。</p>
-    <p>割当済み・除外していない候補を使い、OCR用のコピーだけを塗りつぶして [icon:アセット名] を原文へ挿入します。下のプレビューを確認して反映してください。</p>
-    <p>小さなはみ出しは、他の領域と重ならない場合だけ枠を最小限広げます。灰色の破線が元の枠、青が反映後の枠、オレンジがアイコンです。枠と原文は一緒に反映し、Undoで戻せます。</p>
+    <p>割当済みアイコンを原文に反映します。既存領域・訳文は保持します。</p>
+    <details>
+      <summary>反映の仕組み</summary>
+      <p>領域も候補もないカードだけ新規検出します。OCR用コピーのアイコンを塗りつぶし、[icon:アセット名] に置き換えます。元画像は変更しません。</p>
+      <p>小さなはみ出しは他領域と重ならない範囲で拡張します。元の枠＝灰色の破線、反映後＝青、アイコン＝オレンジ。反映はUndoで戻せます。</p>
+      <p>カード切替・閉じる・反映後に未反映案を破棄します。</p>
+    </details>
     <label>対象カード<select :value="options.currentImageId.value" :disabled="busy" @change="options.selectCard(($event.target as HTMLSelectElement).value)"><option v-for="card in cards" :key="card.id" :value="card.id">{{ card.imageName }}</option></select></label>
     <button type="button" :disabled="busy" @click="model.analyze">
       領域とアイコンを解析
@@ -50,7 +54,6 @@ onMounted(() => dialog.value?.showModal())
     <button v-if="model.running.value" type="button" :disabled="model.cancelled.value" @click="model.cancel">
       解析を中止
     </button>
-    <p>カード切替・閉じる操作、選択した案の反映後は、未反映の案を破棄します。反映済みの編集は保持します。カードごとに解析・確認してください。</p>
     <p role="status">
       {{ model.status.value }}
     </p>
@@ -99,7 +102,6 @@ onMounted(() => dialog.value?.showModal())
     <button type="button" :disabled="busy" @click="emit('editRegions')">
       通常の領域候補で枠を調整する
     </button>
-    <p>反映後はプロジェクト保存 → まとめて翻訳 → 仕上がり確認・印刷へ進めます。同じアイコンの枠を指定し直す必要はありません。</p>
   </dialog>
 </template>
 

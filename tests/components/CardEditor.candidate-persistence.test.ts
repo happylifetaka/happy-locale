@@ -73,6 +73,7 @@ it('keeps batch candidates when saving fails and removes confirmed or discarded 
   const { wrapper, toolbar } = await mountSavedEditor(false)
   vi.stubGlobal('createImageBitmap', vi.fn().mockImplementation(async () => ({ width: 100, height: 140, close: vi.fn() })))
   ocrIO.recognize.mockResolvedValue(result)
+  wrapper.findComponent({ name: 'CardList' }).vm.$emit('update:batchAutoApply', false)
   wrapper.findComponent({ name: 'CardList' }).vm.$emit('start-batch-ocr')
   await flushPromises()
   expect(useProjectStore().document!.cards.every(card => card.ocrCandidates?.length === 1)).toBe(true)
@@ -200,9 +201,13 @@ it.each([false, true])('persists unchecked noise and word-refined headings for b
       { text: '4', x: 150, y: 20, width: 30, height: 30, confidence: 58 },
     ],
   })
-  if (batch)
+  if (batch) {
+    wrapper.findComponent({ name: 'CardList' }).vm.$emit('update:batchAutoApply', false)
     wrapper.findComponent({ name: 'CardList' }).vm.$emit('start-batch-ocr')
-  else wrapper.findComponent({ name: 'RegionCandidatePanel' }).vm.$emit('detect')
+  }
+  else {
+    wrapper.findComponent({ name: 'RegionCandidatePanel' }).vm.$emit('detect')
+  }
   await flushPromises()
   const saved = parseFolderProject(serializeFolderProject(useProjectStore().snapshot()!))
   for (const card of batch ? saved.cards : saved.cards.slice(0, 1)) {

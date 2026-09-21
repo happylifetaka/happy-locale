@@ -59,6 +59,8 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
   const regions = [...card.regions, ...additions.map(item => item.region)]
   if (regions.length > 200)
     throw new Error('一度に解析できる領域は200件までです。対象を整理してください。')
+  if (!regions.length && candidates.length)
+    return { rows: [], warnings, candidates }
   if (!regions.length)
     throw new Error('解析対象の領域がありません。領域候補の選択や手動追加を確認してください。')
   const mapping = mapDiscoveryToRegions(discovery, card.id, regions, imageDigest, { width: card.imageWidth, height: card.imageHeight }, assets, assetDigests)
@@ -108,5 +110,5 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
       row.error = error instanceof Error ? error.message : String(error)
     }
   }
-  return { rows, warnings }
+  return { rows, warnings, candidates }
 }

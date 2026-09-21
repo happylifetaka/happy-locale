@@ -24,26 +24,30 @@ const props = defineProps<{
   batchOcrTotal: number
   batchOcrEligibleCount: number
   batchOcrStates: ReadonlyMap<string, OCRQueueCardState>
+  batchAutoApplyAvailable?: boolean
+  batchAutoApply?: boolean
+  batchApplyIssues?: readonly { cardId: string, cardName: string, messages: readonly string[] }[]
 }>()
 
 const emit = defineEmits<{
-  select: [id: string]
-  add: [files: File[]]
-  addFolder: []
-  exportPng: [id: string]
-  exportJpeg: [id: string]
-  exportCsv: [id: string]
-  delete: [id: string]
-  cancelDelete: [id: string]
-  rename: [id: string, name: string]
-  move: [id: string, direction: -1 | 1]
-  exportAll: [format: 'png' | 'jpeg']
-  selectRegion: [cardId: string, regionId: string]
-  requestThumbnail: [cardId: string]
-  startBatchOcr: []
-  startBatchTranslation: []
-  cancelBatchOcr: []
-  openPrintLayout: []
+  'select': [id: string]
+  'add': [files: File[]]
+  'addFolder': []
+  'exportPng': [id: string]
+  'exportJpeg': [id: string]
+  'exportCsv': [id: string]
+  'delete': [id: string]
+  'cancelDelete': [id: string]
+  'rename': [id: string, name: string]
+  'move': [id: string, direction: -1 | 1]
+  'exportAll': [format: 'png' | 'jpeg']
+  'selectRegion': [cardId: string, regionId: string]
+  'requestThumbnail': [cardId: string]
+  'startBatchOcr': []
+  'update:batchAutoApply': [value: boolean]
+  'startBatchTranslation': []
+  'cancelBatchOcr': []
+  'openPrintLayout': []
 }>()
 
 /** カード一覧のスクロール領域。 */
@@ -91,6 +95,7 @@ const batchOCRResultSummary = computed(() => {
   let review = 0
   let empty = 0
   let errors = 0
+  let applied = 0
   props.batchOcrStates.forEach((state) => {
     if (state.status === 'review')
       review += 1
@@ -98,11 +103,14 @@ const batchOCRResultSummary = computed(() => {
       empty += 1
     else if (state.status === 'error')
       errors += 1
+    else if (state.status === 'applied')
+      applied += 1
   })
   return [
     review > 0 ? `確認待ち${review}枚` : '',
     empty > 0 ? `候補なし${empty}枚` : '',
     errors > 0 ? `失敗${errors}枚` : '',
+    applied > 0 ? `反映済み${applied}枚` : '',
   ].filter(Boolean).join('、')
 })
 
@@ -118,6 +126,8 @@ function batchOCRStateLabel(state: OCRQueueCardState | undefined) {
     return `OCR候補 ${state.candidates}件`
   if (state.status === 'empty')
     return 'OCR候補なし'
+  if (state.status === 'applied')
+    return state.issues ? `反映済み・要確認${state.issues}件` : `反映済み・アイコン${state.icons}個`
   return 'OCR失敗'
 }
 
@@ -274,21 +284,23 @@ onBeforeUnmount(() => {
       </small>
     </button>
     <section
-      v-if="activeCount > 1 && (batchOcrEligibleCount > 1 || batchOcrTotal > 0)"
+      v-if="(activeCount > 1 && (batchAutoApplyAvailable || batchOcrEligibleCount > 1 || batchOcrTotal > 0)) || batchApplyIssues?.length"
       class="card-list-batch-ocr"
       aria-label="複数カードのOCR"
     >
+      <label v-if="batchAutoApplyAvailable && !batchOcrRunning && activeCount > 1"><input type="checkbox" :checked="batchAutoApply" @change="$emit('update:batchAutoApply', ($event.target as HTMLInputElement).checked)">追加・アイコン反映まで実行</label>
       <template v-if="batchOcrRunning">
         <div class="card-list-batch-ocr-progress" aria-live="polite">
           <span>一括OCR {{ batchOcrCompleted }}/{{ batchOcrTotal }}枚</span>
           <progress :value="batchOcrCompleted" :max="batchOcrTotal" />
         </div>
         <button type="button" @click="$emit('cancelBatchOcr')">
-          現在のカード後に中止
+          {{ batchAutoApply ? '中止（完了分は保持）' : '現在のカード後に中止' }}
         </button>
       </template>
       <template v-else-if="batchOcrEligibleCount > 1">
-        <p>領域未作成の{{ batchOcrEligibleCount }}枚を1枚ずつ解析します。</p>
+        <p>{{ batchAutoApply ? '対象' : '領域未作成' }} {{ batchOcrEligibleCount }}枚</p>
+        <small v-if="batchAutoApply">既存領域・訳文は保持。割当済みアイコンを反映します。</small>
         <button
           type="button"
           :disabled="loadingCardId !== null || addingCards || exportingCards || batchOcrRunning"
@@ -300,6 +312,20 @@ onBeforeUnmount(() => {
       <p v-else>
         一括OCR: {{ batchOCRResultSummary || '処理済み' }}
       </p>
+      <small v-if="batchAutoApply && !batchOcrRunning && batchOcrTotal">{{ batchOcrCompleted }}/{{ batchOcrTotal }}枚処理済み</small>
+      <details v-if="batchApplyIssues?.length && !batchOcrRunning">
+        <summary>要確認 {{ batchApplyIssues.length }}枚</summary>
+        <div v-for="issue in batchApplyIssues" :key="issue.cardId">
+          <button type="button" @click="$emit('select', issue.cardId)">
+            {{ issue.cardName }}を開く
+          </button>
+          <ul>
+            <li v-for="(message, index) in issue.messages" :key="index">
+              {{ message }}
+            </li>
+          </ul>
+        </div>
+      </details>
     </section>
     <section v-if="batchTranslationAvailable" class="card-list-batch-ocr" aria-label="複数カードの翻訳">
       <p>{{ batchTranslationCount ?? 0 }}枚の原文・訳文をまとめて確認します。</p>

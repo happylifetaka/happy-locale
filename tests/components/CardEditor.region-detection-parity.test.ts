@@ -27,6 +27,7 @@ it('produces identical geometry, text, confidence, selection and lines in single
   expect(single.map(candidate => candidate.selected)).toEqual([true, true, true, false])
   panel.vm.$emit('cancel')
   await flushPromises()
+  wrapper.getComponent({ name: 'CardList' }).vm.$emit('update:batchAutoApply', false)
   wrapper.getComponent({ name: 'CardList' }).vm.$emit('start-batch-ocr')
   await flushPromises()
   expect(ocrIO.recognize).toHaveBeenCalledTimes(4)

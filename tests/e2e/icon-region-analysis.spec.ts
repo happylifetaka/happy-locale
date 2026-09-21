@@ -17,6 +17,11 @@ for (const [fresh, protrusion] of [[false, false], [true, false], [false, true],
       const directory = await (await navigator.storage.getDirectory()).getDirectoryHandle(name)
       return JSON.parse(await (await (await directory.getFileHandle('project.json')).getFile()).text()) as import('../../app/types/editor').FolderProjectDocument
     }, fixture.name)
+    async function save() {
+      await page.getByRole('button', { name: 'プロジェクト保存', exact: true }).click()
+      await expect(page.locator('.project-operation-status')).toHaveCount(0)
+      await expect(page.locator('.save-status')).toHaveText('保存済み')
+    }
     try {
       await page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true }).click()
       async function open() {
@@ -43,7 +48,7 @@ for (const [fresh, protrusion] of [[false, false], [true, false], [false, true],
       await dialog.getByRole('button', { name: '選択した領域へ位置と原文を反映', exact: true }).click()
       await expect(dialog.getByRole('status')).toContainText('反映しました')
       await dialog.getByRole('button', { name: '閉じる', exact: true }).click()
-      await page.getByRole('button', { name: 'プロジェクト保存', exact: true }).click()
+      await save()
       await expect.poll(async () => (await read()).cards[0]!.regions[0]?.originalText).toContain('[icon:token]')
       const saved = await read()
       const region = saved.cards[0]!.regions[0]!
@@ -53,11 +58,11 @@ for (const [fresh, protrusion] of [[false, false], [true, false], [false, true],
       expect(saved.assetDiscovery).toEqual(fixture.project.assetDiscovery)
       expect(saved.cards[0]!.ocrCandidates ?? []).toEqual([])
       await page.getByRole('button', { name: '元に戻す', exact: true }).click()
-      await page.getByRole('button', { name: 'プロジェクト保存', exact: true }).click()
+      await save()
       await expect.poll(async () => (await read()).cards[0]!.regions).toEqual(fixture.project.cards[0]!.regions)
       expect((await read()).cards[0]!.ocrCandidates ?? []).toEqual(fixture.project.cards[0]!.ocrCandidates ?? [])
       await page.getByRole('button', { name: 'やり直す', exact: true }).click()
-      await page.getByRole('button', { name: 'プロジェクト保存', exact: true }).click()
+      await save()
       await expect.poll(async () => (await read()).cards[0]!.regions).toEqual(saved.cards[0]!.regions)
       await open()
       await dialog.getByRole('button', { name: '領域とアイコンを解析', exact: true }).click()

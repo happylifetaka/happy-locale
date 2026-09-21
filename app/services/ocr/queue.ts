@@ -5,6 +5,7 @@ export type OCRQueueCardState
     | { status: 'processing' }
     | { status: 'review', candidates: number }
     | { status: 'empty' }
+    | { status: 'applied', regions: number, icons: number, issues: number }
     | { status: 'error', message: string }
 
 export interface OCRQueueProgress {
