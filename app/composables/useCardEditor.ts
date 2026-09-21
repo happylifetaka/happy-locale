@@ -5,7 +5,10 @@ import type { MergeOptions } from '~/utils/merge-regions'
 import type { SplitAxis, SplitText } from '~/utils/split-region'
 import { computed, ref } from 'vue'
 import { useKeyedHistory } from '~/composables/useHistory'
+import { intersectionArea } from '~/services/asset-discovery/geometry'
 import { rebaseRegionBounds } from '~/services/asset-discovery/region-comparison'
+import { minimalIconExpansion } from '~/services/asset-discovery/region-fit'
+import { withoutTransferredIcons } from '~/services/asset-discovery/region-transfer'
 import { containsBounds, sameBounds } from '~/services/asset-discovery/review'
 import { applyCandidateEdits, candidateEdits, consumedCandidateEdits } from '~/services/ocr/candidate-edits'
 import { parseRegionCandidates } from '~/services/ocr/candidate-format'
@@ -337,9 +340,15 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
       }
       const existing = current.regions.find(item => item.id === region.id)
       if (existing) {
-        if (!sameBounds(existing, region))
-          throw new Error('既存領域の枠はこの操作では変更できません。')
-        updates.set(region.id, { ...existing, sourceIcons: region.sourceIcons ?? [], originalText: region.originalText, translationStatus: region.originalText !== existing.originalText && existing.translationStatus === 'reviewed' ? statusForTranslation(existing.translatedText) : existing.translationStatus })
+        let boundsPatch: Partial<TextRegion> = {}
+        if (!sameBounds(existing, region)) {
+          const icons = (region.sourceIcons ?? []).filter(icon => icon.id.startsWith('discovery-')).map(icon => ({ ...icon, x: region.x + icon.x, y: region.y + icon.y }))
+          const fitted = minimalIconExpansion(existing, icons)
+          if (!fitted || !sameBounds(fitted, region))
+            throw new Error('アイコンに合わせた小さな拡張だけを反映できます。')
+          boundsPatch = rebaseRegionBounds(withoutTransferredIcons(existing), fitted, current.imageWidth, current.imageHeight)
+        }
+        updates.set(region.id, { ...existing, ...boundsPatch, sourceIcons: region.sourceIcons ?? [], originalText: region.originalText, translationStatus: region.originalText !== existing.originalText && existing.translationStatus === 'reviewed' ? statusForTranslation(existing.translatedText) : existing.translationStatus })
       }
       else {
         additions.push(region)
@@ -348,6 +357,11 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
     if (current.regions.length + additions.length > FILE_LIMITS.projectRegionsPerCard)
       throw new Error('領域数の上限を超えます。')
     const next = { ...current, regions: [...current.regions.map(region => updates.get(region.id) ?? region), ...additions] }
+    for (const region of next.regions) {
+      const old = current.regions.find(item => item.id === region.id)
+      if (old && !sameBounds(old, region) && next.regions.some(other => other.id !== region.id && intersectionArea(region, other) > 0))
+        throw new Error('拡張すると別の領域と重なります。')
+    }
     parseRegionCandidates(beforeCandidates, current.imageWidth, current.imageHeight)
     parseRegionCandidates(afterCandidates, current.imageWidth, current.imageHeight)
     const edits = consumedCandidateEdits(beforeCandidates, afterCandidates)

@@ -1,19 +1,21 @@
 import type { OCRProvider } from '~/services/ocr/types'
 import type { AssetDiscoveryState } from '~/types/asset-discovery'
-import type { FolderProjectCard, ImageAsset, TextRegion } from '~/types/editor'
+import type { FolderProjectCard, ImageAsset, RegionDraft, TextRegion } from '~/types/editor'
 import { detectRegions } from '~/services/ocr/detect-regions'
 import { prepareRegionForOCR } from '~/services/ocr/image'
 import { assertImageDimensions } from '~/utils/file-limits'
 import { regionTextLayout } from '~/utils/region-text-layout'
 import { intersectionArea } from './geometry'
 import { regionFromCandidate } from './new-region'
-import { mapDiscoveryToRegions, withoutTransferredIcons } from './region-transfer'
+import { mapDiscoveryToRegions } from './region-transfer'
+import { sameBounds } from './review'
 import { checkedSourceIconText, prepareSourceIconOCR, recognizeSourceIconOCR, sourceIconOCRPatch } from './source-ocr'
 
 export interface IconRegionRow {
   region: TextRegion
   before: TextRegion | null
   candidateId?: string
+  boundsBefore?: RegionDraft
   iconCount: number
   error?: string
 }
@@ -30,7 +32,7 @@ interface AnalyzeIconRegionsOptions {
   status: (text: string) => void
 }
 
-/** 枠は再配置せず、領域が無い場合だけ検出する。全結果は確認待ちの独立コピー。 */
+/** 小さなはみ出しだけを最小拡張し、領域が無い場合だけ検出する。結果は確認待ちのコピー。 */
 export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
   const { card, discovery, assets, image, imageDigest, assetDigests, provider, isCurrent, status } = options
   const warnings: string[] = []
@@ -62,7 +64,7 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
   const mapping = mapDiscoveryToRegions(discovery, card.id, regions, imageDigest, { width: card.imageWidth, height: card.imageHeight }, assets, assetDigests)
   warnings.push(...mapping.warnings)
   const rows: IconRegionRow[] = []
-  const cleaned = regions.map(withoutTransferredIcons)
+  const cleaned = mapping.regions
   for (const [index, region] of cleaned.entries()) {
     current()
     const before = card.regions.find(item => item.id === region.id) ?? null
@@ -71,6 +73,9 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
     if (before && !occurrences.length && !before.sourceIcons?.some(icon => icon.id.startsWith('discovery-')) && !mapping.blocked.has(region.id))
       continue
     const row: IconRegionRow = { region: structuredClone(region), before: before ? structuredClone(before) : null, candidateId: added?.candidateId, iconCount: occurrences.length }
+    const previous = regions[index]!
+    if (!sameBounds(previous, region))
+      row.boundsBefore = { x: previous.x, y: previous.y, width: previous.width, height: previous.height }
     rows.push(row)
     if (mapping.blocked.has(region.id)) {
       row.error = '対応を確定できないアイコンがあります。候補または領域の枠を調整して再解析してください。'

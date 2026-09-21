@@ -134,7 +134,7 @@ export function useIconRegionAnalysis(options: DiscoveryWorkspaceOptions) {
         return
       rows.value = result.rows
       warnings.value = result.warnings
-      status.value = result.rows.length ? '変更案を確認してください。既存領域の枠・訳文は変更しません。' : '反映する変更案はありません。必要ならアイコン候補の収集・割当や領域を確認してください。'
+      status.value = result.rows.length ? '変更案を確認してください。小さなはみ出しは枠の拡張案に含めます。訳文は保持します。反映するまで編集内容は変わりません。' : '反映する変更案はありません。必要ならアイコン候補の収集・割当や領域を確認してください。'
     }
     catch (cause) {
       if (current())

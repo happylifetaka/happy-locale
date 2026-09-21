@@ -67,3 +67,22 @@ it('ignores excluded candidates, and removes only prior generated relative posit
   expect(withoutTransferredIcons(s.region).sourceIcons).toEqual([icon])
   expect(s.region.sourceIcons).toHaveLength(2)
 })
+
+it.each(['excluded', 'unassigned', 'image-changed', 'missing-png'] as const)('does not expand from an %s candidate', (reason) => {
+  const s = setup()
+  s.region.height = 47
+  const item = s.state.occurrences[0]!
+  if (reason === 'excluded')
+    item.decision = 'excluded'
+  if (reason === 'unassigned')
+    item.assetId = null
+  if (reason === 'image-changed')
+    item.imageDigest = 'c'.repeat(64)
+  if (reason === 'missing-png')
+    s.hashes.clear()
+  const result = s.map()
+  expect(result.regions[0]!.height).toBe(47)
+  expect(result.mapped.size).toBe(0)
+  if (reason !== 'excluded')
+    expect(result.warnings[0]).toContain(reason === 'unassigned' ? 'Synthetic group' : 'synthetic-icon')
+})

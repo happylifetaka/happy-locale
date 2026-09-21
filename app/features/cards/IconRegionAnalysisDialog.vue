@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DiscoveryWorkspaceOptions } from './useDiscoveryWorkspace'
+import type { IconRegionRow } from '~/services/asset-discovery/analyze-regions'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useIconRegionAnalysis } from './useIconRegionAnalysis'
 
@@ -12,6 +13,14 @@ const focused = ref('')
 const busy = computed(() => model.running.value || props.options.busy.value || props.options.ocrRunning.value)
 const cards = computed(() => props.options.store.document?.cards.filter(card => !props.options.pendingDeletionIds.value.has(card.id)) ?? [model.card.value])
 const selected = computed(() => model.rows.value.find(row => row.region.id === focused.value))
+function expansionLabel(row: IconRegionRow) {
+  const before = row.boundsBefore
+  if (!before)
+    return ''
+  const after = row.region
+  const edges: [string, number][] = [['左', before.x - after.x], ['上', before.y - after.y], ['右', after.x + after.width - before.x - before.width], ['下', after.y + after.height - before.y - before.height]]
+  return `アイコンに合わせて${edges.filter(([, value]) => value > 0).map(([edge, value]) => `${edge}へ${Number(value.toFixed(2))}px`).join('・')}拡張（元画像基準）`
+}
 watch(model.rows, (rows) => {
   checked.value = rows.filter(row => !row.error).map(row => row.region.id)
   focused.value = rows[0]?.region.id ?? ''
@@ -33,6 +42,7 @@ onMounted(() => dialog.value?.showModal())
     </header>
     <p>確認・分類したアイコンの位置を再利用します。既存の領域は作り直さず、領域も候補もないカードだけ新規検出します。元画像は変更しません。</p>
     <p>割当済み・除外していない候補を使い、OCR用のコピーだけを塗りつぶして [icon:アセット名] を原文へ挿入します。下のプレビューを確認して反映してください。</p>
+    <p>小さなはみ出しは、他の領域と重ならない場合だけ枠を最小限広げます。灰色の破線が元の枠、青が反映後の枠、オレンジがアイコンです。枠と原文は一緒に反映し、Undoで戻せます。</p>
     <label>対象カード<select :value="options.currentImageId.value" :disabled="busy" @change="options.selectCard(($event.target as HTMLSelectElement).value)"><option v-for="card in cards" :key="card.id" :value="card.id">{{ card.imageName }}</option></select></label>
     <button type="button" :disabled="busy" @click="model.analyze">
       領域とアイコンを解析
@@ -63,6 +73,9 @@ onMounted(() => dialog.value?.showModal())
             {{ row.error }}
           </p>
           <template v-else>
+            <p v-if="row.boundsBefore" class="bounds-adjustment">
+              {{ expansionLabel(row) }}
+            </p>
             <p v-if="row.before">
               変更前：{{ row.before.originalText }}
             </p>
@@ -76,6 +89,7 @@ onMounted(() => dialog.value?.showModal())
       <svg v-if="selected" :viewBox="`${Math.max(0, selected.region.x - 15)} ${Math.max(0, selected.region.y - 15)} ${selected.region.width + 30} ${selected.region.height + 30}`" role="img" aria-label="領域と引き継ぐアイコンの位置">
         <image :href="options.runtime.cardImage.value?.src" :width="model.card.value.imageWidth" :height="model.card.value.imageHeight" />
         <rect :x="selected.region.x" :y="selected.region.y" :width="selected.region.width" :height="selected.region.height" fill="none" stroke="#2563eb" stroke-width="2" vector-effect="non-scaling-stroke" />
+        <rect v-if="selected.boundsBefore" :x="selected.boundsBefore.x" :y="selected.boundsBefore.y" :width="selected.boundsBefore.width" :height="selected.boundsBefore.height" fill="none" stroke="#64748b" stroke-dasharray="5 4" stroke-width="1" vector-effect="non-scaling-stroke" />
         <rect v-for="icon in selected.region.sourceIcons" :key="icon.id" :x="selected.region.x + icon.x" :y="selected.region.y + icon.y" :width="icon.width" :height="icon.height" fill="#f9731640" stroke="#f97316" stroke-width="2" vector-effect="non-scaling-stroke" />
       </svg>
     </div>

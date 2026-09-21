@@ -71,7 +71,7 @@ export async function prepareDiscoveryUIProject(groupCount = 0) {
 }
 
 /** Invented pre-classified icon without a region owner. */
-export async function prepareIconRegionUIProject(fresh = false) {
+export async function prepareIconRegionUIProject(fresh = false, protrusion = false) {
   const fixture = await prepareDiscoveryUIProject(1)
   const directory = await (await navigator.storage.getDirectory()).getDirectoryHandle(fixture.name)
   const handle = await directory.getFileHandle('project.json')
@@ -93,6 +93,8 @@ export async function prepareIconRegionUIProject(fresh = false) {
   const assetWriter = await (await assets.getFileHandle('token.png', { create: true })).createWritable()
   await assetWriter.write(png)
   await assetWriter.close()
+  if (protrusion)
+    project.cards[0]!.regions[0]!.height = 73
   if (fresh) {
     const region = project.cards[0]!.regions[0]!
     project.cards[0]!.ocrCandidates = [{ id: 'saved-candidate', x: region.x, y: region.y, width: region.width, height: region.height, selected: true, text: 'Gain two tokens', confidence: 90, lines: [] }]

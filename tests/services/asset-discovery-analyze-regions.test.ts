@@ -46,6 +46,18 @@ it('adds selected saved candidates without fresh detection and skips candidates 
   expect(detectRegions).not.toHaveBeenCalled()
 })
 
+it('previews a 3px expansion with tagged OCR without modifying saved frames', async () => {
+  const s = setup()
+  s.region.height = 47
+  const before = JSON.stringify(s.options.card)
+  const result = await analyzeIconRegions(s.options)
+  expect(result.warnings).toEqual([])
+  expect(result.rows[0]).toMatchObject({ boundsBefore: { height: 47 }, region: { height: 50, originalText: 'Gain [icon:synthetic-icon]' } })
+  expect(result.rows[0]!.error).toBeUndefined()
+  expect(result.rows[0]!.region.sourceIcons![0]).toMatchObject({ x: 30, y: 30, width: 20, height: 20 })
+  expect(JSON.stringify(s.options.card)).toBe(before)
+})
+
 it('detects only for a card without regions or candidates and returns independent proposals', async () => {
   const s = setup()
   s.options.card.regions = []
