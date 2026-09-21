@@ -2,16 +2,15 @@
 import type { DiscoveryWorkspaceOptions } from './useDiscoveryWorkspace'
 import type { IconProposalChoice } from '~/services/asset-discovery/proposal-review'
 import type { IconOccurrence } from '~/types/asset-discovery'
-import { computed, onMounted, ref, useId, watch } from 'vue'
+import { computed, onScopeDispose, ref, useId, watch } from 'vue'
 import AssetCreationPanel from '~/components/AssetCreationPanel.vue'
 import { groupAssetState } from '~/services/asset-discovery/group-asset'
 import DiscoveryBoundsEditor from './DiscoveryBoundsEditor.vue'
 import { useDiscoveryWorkspace } from './useDiscoveryWorkspace'
 
 const props = defineProps<{ options: DiscoveryWorkspaceOptions, requestThumbnail: (id: string) => unknown }>()
-const emit = defineEmits<{ close: [], analyzeRegions: [] }>()
+const emit = defineEmits<{ working: [value: boolean], analyzeRegions: [] }>()
 const model = useDiscoveryWorkspace(props.options)
-const dialog = ref<HTMLDialogElement | null>(null)
 const titleId = useId()
 const optedIn = ref(false)
 const cardIds = ref([props.options.currentImageId.value])
@@ -23,7 +22,7 @@ const adding = ref(false)
 const groupPage = ref(0)
 const occurrencePage = ref(0)
 const diffIds = ref<string[]>([])
-const closePending = ref(false)
+const discardPending = ref(false)
 const groupPageSize = 8
 const groupLabels = computed(() => new Map(model.groups.value.map((group, index) => [group.id, group.name.trim() || `グループ${index + 1}`])))
 const groupLabel = (id: string) => groupLabels.value.get(id) ?? ''
@@ -57,17 +56,12 @@ function action(fn: () => unknown) {
   if (!model.working.value)
     void model.run(fn)
 }
-function close() {
-  if (model.working.value) {
-    model.collection.cancel()
-    model.notice.value = '中止を要求しました。実行中の処理が終わってから閉じてください。'
+function discardProposals() {
+  if (model.working.value)
     return
-  }
-  if (model.pending.value.size) {
-    closePending.value = true
-    return
-  }
-  emit('close')
+  model.pending.value = new Map()
+  model.comparison.value = null
+  discardPending.value = false
 }
 function moveChecked() {
   if (!destination.value)
@@ -124,34 +118,28 @@ watch(() => [...visible.value, ...visibleGroups.value.flatMap(group => represent
     void props.requestThumbnail(id)
   })
 }, { immediate: true })
-onMounted(() => dialog.value?.showModal())
+watch(model.working, value => emit('working', value), { immediate: true, flush: 'sync' })
+onScopeDispose(() => emit('working', false))
 </script>
 
 <template>
-  <dialog ref="dialog" class="discovery-dialog" :aria-labelledby="titleId" @cancel.prevent="close">
+  <section class="discovery-workspace" :aria-labelledby="titleId">
     <header>
       <h2 :id="titleId">
-        アイコン候補の収集・確認
+        アセット検出
       </h2>
-      <button type="button" @click="close">
-        閉じる
+      <button type="button" :disabled="model.working.value || model.pending.value.size > 0 || Boolean(model.creation.value)" @click="emit('analyzeRegions')">
+        次へ：領域検出・アイコン反映
       </button>
     </header>
-    <section v-if="closePending" role="alert">
-      <p>未適用の再収集案は破棄されます。保存対象の候補・調整内容は残ります。閉じますか？</p>
-      <button type="button" :disabled="model.working.value" @click="emit('close')">
-        再収集案を破棄して閉じる
-      </button>
-      <button type="button" @click="closePending = false">
-        確認に戻る
-      </button>
-    </section>
-    <p>画像は端末内で処理します。候補の整理・登録だけでは、原文・訳文・カードの描画を変更しません。</p>
-    <p>候補と調整内容は「プロジェクト保存」で保存できます。この画面の編集は即時に保存対象へ反映され、「候補編集を戻す」で取り消せます。</p>
-    <button type="button" :disabled="model.working.value || model.pending.value.size > 0 || Boolean(model.creation.value)" @click="emit('analyzeRegions')">
-      次へ：領域検出・アイコン反映
-    </button>
-    <p>分類・アセット割当後は「次へ」で位置を引き継ぎ、アイコンタグ付きの原文を確認できます。</p>
+    <p>アイコン候補の収集・確認 → グループ整理・登録 → 領域へ反映。登録済みアセットの調整は「アセット編集」で行えます。</p>
+    <details class="help">
+      <summary>使い方・保存について</summary>
+      <p>画像は端末内で処理します。候補の整理・登録だけでは、原文・訳文・カードの描画を変更しません。</p>
+      <p>候補と調整内容は「プロジェクト保存」で保存できます。この画面の編集は即時に保存対象へ反映され、「候補編集を戻す」で取り消せます。</p>
+      <p>画面を切り替えても選択・比較案は保持します。処理中は画面切替と保存を待ってください。未適用の再収集案は保存されず、別プロジェクトを開く・ページを閉じると破棄されます。</p>
+      <p>分類・アセット割当後は「次へ」で位置を引き継ぎ、アイコンタグ付きの原文を確認できます。</p>
+    </details>
     <details :open="model.occurrences.value.length === 0">
       <summary>収集するカードを選ぶ</summary>
       <fieldset :disabled="model.working.value">
@@ -197,6 +185,18 @@ onMounted(() => dialog.value?.showModal())
     </div>
     <section v-if="model.pending.value.size">
       <h3>再収集の比較待ち</h3>
+      <button type="button" :disabled="model.working.value" @click="discardPending = true">
+        再収集案をすべて破棄
+      </button>
+      <section v-if="discardPending" role="alert">
+        <p>未適用の再収集案を破棄しますか？保存対象の候補・調整内容は残ります。</p>
+        <button type="button" :disabled="model.working.value" @click="discardProposals">
+          再収集案を破棄
+        </button>
+        <button type="button" @click="discardPending = false">
+          確認に戻る
+        </button>
+      </section>
       <button v-for="id in model.pending.value.keys()" :key="id" type="button" :disabled="model.working.value" @click="model.compare(id)">
         {{ cardName(id) }}の案を比較
       </button>
@@ -342,12 +342,13 @@ onMounted(() => dialog.value?.showModal())
         </p>
       </section>
     </div>
-  </dialog>
+  </section>
 </template>
 
 <style scoped>
-.discovery-dialog { width: min(1400px, 96vw); max-width: 96vw; max-height: 94vh; padding: 20px; overflow: auto; }
-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.discovery-workspace { flex: 1; min-height: 0; padding: 20px; overflow: auto; background: #fff; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.help { margin-bottom: 12px; }
 h2, h3 { margin: 8px 0; }
 p { font-size: 0.85rem; }
 button, input, select { font-size: 0.85rem; }

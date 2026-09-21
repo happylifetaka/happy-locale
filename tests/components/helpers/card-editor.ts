@@ -179,7 +179,7 @@ export async function mountEditor(pinia = createPinia(), realInspector = false) 
         EditorConfirmDialog: false,
         EditorInspectorPanel: false,
         DiagnosticsDialog: false,
-        EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus'], template: '<div />' },
+        EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus', 'currentView', 'discoveryWorking'], template: '<div />' },
         AssetEditor: { name: 'AssetEditor', props: ['creationDraft', 'creationRunning'], template: '<div />' },
         CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId', 'selectedExclusionId'], methods: { backgroundColorForBounds: () => '#ffffff', exportPng: canvasIO.exportPng, exportJpeg: canvasIO.exportJpeg }, template: '<div />' },
         CardList: { name: 'CardList', props: ['activeCardId', 'loadingCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal', 'pendingDeletionIds'], template: '<div />' },

@@ -4,6 +4,7 @@ import type { RuntimeLoadedImage, useProjectRuntime } from '~/composables/usePro
 import type { OpenedFolderProject } from '~/composables/useProjectSession'
 import type { useProjectStore } from '~/stores/project'
 import type { FolderProjectCard, FontReference } from '~/types/editor'
+import type { EditorView } from '~/types/editor-view'
 import { nextTick } from 'vue'
 
 interface ProjectAdoptionOptions {
@@ -11,7 +12,7 @@ interface ProjectAdoptionOptions {
   projectStore: Pick<ReturnType<typeof useProjectStore>, 'clearProject' | 'replaceProject'>
   projectRuntime: Pick<ReturnType<typeof useProjectRuntime>, 'setDirectory' | 'replaceAssetImages' | 'replaceAssetFiles' | 'clearPendingAssetWrites' | 'replaceLoadedFonts'>
   currentImageId: Ref<string>
-  currentView: Ref<'card' | 'assets' | 'print'>
+  currentView: Ref<EditorView>
   pendingCardDeletionIds: Ref<Set<string>>
   cardPendingDeletionConfirmation: Ref<FolderProjectCard | null>
   cachedFontIds: Ref<Set<string>>

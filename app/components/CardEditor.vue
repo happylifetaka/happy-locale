@@ -8,6 +8,7 @@ import type {
   LayoutTemplate,
   TextRegion,
 } from '~/types/editor'
+import type { EditorTabView, EditorView } from '~/types/editor-view'
 import { storeToRefs } from 'pinia'
 import { useBatchOCR } from '~/composables/useBatchOCR'
 import { useCardImageExport } from '~/composables/useCardImageExport'
@@ -26,7 +27,7 @@ import { useProjectSession } from '~/composables/useProjectSession'
 import { useRegionCandidates } from '~/composables/useRegionCandidates'
 import { useTranslationReuse } from '~/composables/useTranslationReuse'
 import { useTranslationReview } from '~/composables/useTranslationReview'
-import AssetDiscoveryDialog from '~/features/cards/AssetDiscoveryDialog.vue'
+import AssetDiscoveryWorkspace from '~/features/cards/AssetDiscoveryWorkspace.vue'
 import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTranslation } from '~/features/cards/cardEditingContext'
 import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
 import IconRegionAnalysisDialog from '~/features/cards/IconRegionAnalysisDialog.vue'
@@ -131,8 +132,8 @@ const {
 const pendingCardDeletionIds = shallowRef(new Set<string>())
 /** カード上でアセットの切り出し範囲を指定しているか。 */
 const assetEditing = ref(false)
-/** カード・アセット・印刷のうち現在表示する作業画面。 */
-const currentView = ref<'card' | 'assets' | 'print'>('card')
+/** カード・アセット編集・アセット検出・印刷のうち現在表示する作業画面。 */
+const currentView = ref<EditorView>('card')
 /** 配置雛形ダイアログの保存・適用モード。nullなら閉じている。 */
 const layoutTemplateMode = ref<'capture' | 'apply' | null>(null)
 /** 単一・全体・一括OCRで共有する実行状態。 */
@@ -514,7 +515,12 @@ const candidateReview = useCandidateReview({
 })
 const { discardRegionCandidates, confirmRegionCandidates } = candidateReview
 
-const discoveryOpen = ref(false)
+const discoveryVisited = ref(false)
+const discoveryWorking = ref(false)
+watch(projectRuntime.projectGeneration, () => {
+  discoveryVisited.value = false
+  discoveryWorking.value = false
+})
 const iconAnalysisOpen = ref(false)
 function detectRegionCandidates() {
   if (projectStore.assetDiscovery?.occurrences.some(item => item.cardId === currentImageId.value && item.assetId && item.decision !== 'excluded'))
@@ -524,6 +530,7 @@ function detectRegionCandidates() {
 }
 function editAnalysisRegions() {
   iconAnalysisOpen.value = false
+  switchView('card')
   switchInspectorTab('ocr')
   if (batchOCRResults.value.get(currentImageId.value)?.length)
     candidateReview.showBatchOCRCandidates(currentImageId.value)
@@ -709,8 +716,12 @@ async function openProject(sample = false) {
   await openProjectSession(sample)
 }
 
-/** カード編集とアセット編集を切り替える。 */
-function switchView(view: 'card' | 'assets') {
+/** 同一プロジェクト内ではアセット検出の選択・比較案を保持して切り替える。 */
+function switchView(view: EditorTabView) {
+  if (discoveryWorking.value || (view === 'discovery' && (isDemo.value || !image.value)))
+    return
+  if (view === 'discovery')
+    discoveryVisited.value = true
   currentView.value = view
   workspace.stopEditing()
   assetEditing.value = false
@@ -767,6 +778,7 @@ provideCardTranslation({
       :current-view="currentView"
       :diagnostic-count="diagnostics.length"
       :discovery-available="!isDemo && Boolean(image)"
+      :discovery-working="discoveryWorking"
       @open-project="openProject"
       @save-project="saveProject"
       @import-csv="importCsv"
@@ -778,14 +790,6 @@ provideCardTranslation({
       @open-translation-settings="translationSettingsOpen = true"
       @open-glossary="glossaryOpen = true"
       @open-diagnostics="diagnosticsOpen = true"
-      @open-discovery="discoveryOpen = true"
-    />
-    <AssetDiscoveryDialog
-      v-if="discoveryOpen"
-      :options="discoveryOptions"
-      :request-thumbnail="requestCardThumbnail"
-      @close="discoveryOpen = false"
-      @analyze-regions="discoveryOpen = false; iconAnalysisOpen = true"
     />
     <IconRegionAnalysisDialog v-if="iconAnalysisOpen" :options="discoveryOptions" @close="iconAnalysisOpen = false" @edit-regions="editAnalysisRegions" />
     <GlossaryDialog
@@ -1013,6 +1017,15 @@ provideCardTranslation({
         />
       </template>
     </CardEditingWorkspace>
+    <AssetDiscoveryWorkspace
+      v-if="discoveryVisited && projectDirectory && !isDemo"
+      v-show="currentView === 'discovery'"
+      :key="projectRuntime.projectGeneration.value"
+      :options="discoveryOptions"
+      :request-thumbnail="requestCardThumbnail"
+      @working="discoveryWorking = $event"
+      @analyze-regions="switchView('card'); iconAnalysisOpen = true"
+    />
     <AssetEditor
       v-show="currentView === 'assets'"
       v-model:zoom="assetZoom"

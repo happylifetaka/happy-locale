@@ -4,6 +4,7 @@ import type { useCardThumbnails } from '~/composables/useCardThumbnails'
 import type { RuntimeLoadedImage } from '~/composables/useProjectRuntime'
 import type { ProjectActivity } from '~/features/cards/useProjectActivity'
 import type { useProjectStore } from '~/stores/project'
+import type { EditorView } from '~/types/editor-view'
 import { computed, readonly, ref } from 'vue'
 import { activateProjectCard } from '~/services/project/cards'
 import { loadFolderProjectCardImage } from '~/services/project/folder'
@@ -17,7 +18,7 @@ interface ProjectNavigationOptions {
   ocrRunning: Ref<boolean>
   currentImageId: Ref<string>
   pendingCardDeletionIds: Ref<Set<string>>
-  currentView: Ref<'card' | 'assets' | 'print'>
+  currentView: Ref<EditorView>
   clearOCRCandidate: () => void
   resetCardSelection: () => void
   isActive: () => boolean
@@ -138,7 +139,9 @@ export function useProjectNavigation({
         return
       if (thumbnail)
         void persistCardThumbnail(directory, cardId, thumbnail)
-      currentView.value = 'card'
+      // 候補から別カードの元画像を開いても、アセット検出画面は維持する。
+      if (currentView.value !== 'discovery')
+        currentView.value = 'card'
       logDiagnostic('編集対象カードを切り替えました', {
         cardId,
         regions: target.regions.length,

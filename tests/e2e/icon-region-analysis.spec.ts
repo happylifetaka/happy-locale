@@ -20,8 +20,7 @@ for (const [fresh, protrusion] of [[false, false], [true, false], [false, true],
     try {
       await page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true }).click()
       async function open() {
-        await page.getByText('ツール', { exact: true }).click()
-        await page.getByRole('button', { name: 'アイコン候補を収集・確認', exact: true }).click()
+        await page.getByRole('button', { name: 'アセット検出', exact: true }).click()
         await page.getByRole('button', { name: '次へ：領域検出・アイコン反映', exact: true }).click()
       }
       await open()

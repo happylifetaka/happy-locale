@@ -1,6 +1,7 @@
 import type { Ref } from 'vue'
 import type { CardCanvasApi } from './cardEditingContracts'
 import type { useCardEditor } from '~/composables/useCardEditor'
+import type { EditorView } from '~/types/editor-view'
 import { storeToRefs } from 'pinia'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useInspectorTabs } from '~/composables/useInspectorTabs'
@@ -15,7 +16,7 @@ interface CardWorkspaceOptions {
   image: Ref<HTMLImageElement | null>
   hasProject: Ref<boolean>
   currentImageId: Ref<string>
-  currentView: Ref<'card' | 'assets' | 'print'>
+  currentView: Ref<EditorView>
   projectBusy: Ref<boolean>
   ocrRunning: Ref<boolean>
   assetEditing: Ref<boolean>

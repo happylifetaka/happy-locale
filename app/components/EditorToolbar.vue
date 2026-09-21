@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { EditorTabView, EditorView } from '~/types/editor-view'
 import { consumeSelectedFile } from '~/utils/file-input'
 
 const props = defineProps<{
@@ -10,9 +11,10 @@ const props = defineProps<{
   hasSavedProject: boolean
   isDemo?: boolean
   saveStatus: 'none' | 'saved' | 'unsaved'
-  currentView: 'card' | 'assets' | 'print'
+  currentView: EditorView
   diagnosticCount: number
   discoveryAvailable?: boolean
+  discoveryWorking?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -23,11 +25,10 @@ const emit = defineEmits<{
   undo: []
   redo: []
   diagnostic: [message: string]
-  view: [value: 'card' | 'assets']
+  view: [value: EditorTabView]
   openTranslationSettings: []
   openGlossary: []
   openDiagnostics: []
-  openDiscovery: []
 }>()
 
 /** 翻訳CSVを選ぶための入力要素。 */
@@ -104,6 +105,8 @@ function pickCsv(event: Event) {
         <button
           type="button"
           :class="{ selected: currentView === 'card' }"
+          :aria-pressed="currentView === 'card'"
+          :disabled="discoveryWorking"
           @click="$emit('view', 'card')"
         >
           カード
@@ -111,10 +114,20 @@ function pickCsv(event: Event) {
         <button
           type="button"
           :class="{ selected: currentView === 'assets' }"
-          :disabled="!hasOpenProject"
+          :aria-pressed="currentView === 'assets'"
+          :disabled="!hasOpenProject || discoveryWorking"
           @click="$emit('view', 'assets')"
         >
           アセット編集
+        </button>
+        <button
+          type="button"
+          :class="{ selected: currentView === 'discovery' }"
+          :aria-pressed="currentView === 'discovery'"
+          :disabled="!discoveryAvailable || discoveryWorking"
+          @click="$emit('view', 'discovery')"
+        >
+          アセット検出
         </button>
       </nav>
     </div>
@@ -144,7 +157,7 @@ function pickCsv(event: Event) {
       >
         <button
           type="button"
-          :disabled="isDemo || !hasCardImage || !folderProjectsSupported"
+          :disabled="isDemo || !hasCardImage || !folderProjectsSupported || discoveryWorking"
           :title="isDemo ? undefined : hasSavedProject
             ? '編集中のプロジェクトへ保存します'
             : '選択したフォルダへ新しいプロジェクトを作成します'"
@@ -178,7 +191,7 @@ function pickCsv(event: Event) {
         <button
           v-if="hasOpenProject"
           type="button"
-          :disabled="!folderProjectsSupported"
+          :disabled="!folderProjectsSupported || discoveryWorking"
           @click="$emit('openProject')"
         >
           別のプロジェクトを開く
@@ -213,9 +226,6 @@ function pickCsv(event: Event) {
           @click="$emit('openTranslationSettings')"
         >
           翻訳設定
-        </button>
-        <button v-if="hasOpenProject" type="button" :disabled="!discoveryAvailable" @click="$emit('openDiscovery')">
-          アイコン候補を収集・確認
         </button>
         <button type="button" @click="$emit('openDiagnostics')">
           診断ログ（{{ diagnosticCount }}件）

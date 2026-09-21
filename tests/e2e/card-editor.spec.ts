@@ -4,6 +4,7 @@ test('retains independent card and asset zoom settings and switches the preview 
   await page.goto('/cards?demo=1')
   const canvas = page.getByLabel('カード編集キャンバス')
   await expect(canvas).toBeVisible()
+  await expect(page.getByRole('button', { name: 'アセット検出', exact: true })).toBeDisabled()
   const image = await canvas.screenshot()
   await page.getByRole('combobox', { name: '表示倍率', exact: true }).selectOption('100')
   await expect.poll(() => canvas.evaluate((element: HTMLCanvasElement) => element.getBoundingClientRect().width / element.width)).toBe(1)
