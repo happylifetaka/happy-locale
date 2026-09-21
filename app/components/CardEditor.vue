@@ -1022,7 +1022,7 @@ provideCardTranslation({
       v-show="currentView === 'discovery'"
       :key="projectRuntime.projectGeneration.value"
       :options="discoveryOptions"
-      :request-thumbnail="requestCardThumbnail"
+      :active="currentView === 'discovery'"
       @working="discoveryWorking = $event"
       @analyze-regions="switchView('card'); iconAnalysisOpen = true"
     />

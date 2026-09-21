@@ -56,15 +56,14 @@ test('all 32 groups are reachable and share editable human-readable names', asyn
     await page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true }).click()
     await page.getByRole('button', { name: 'アセット検出', exact: true }).click()
     const dialog = page.getByRole('region', { name: 'アセット検出', exact: true })
-    const navigation = dialog.getByRole('navigation', { name: 'グループのページ' })
     const list = dialog.locator('.group-list')
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'アセット検出', exact: true })).toHaveAttribute('aria-pressed', 'true')
     await page.keyboard.press('Escape')
     await expect(dialog).toBeVisible()
     await expect(dialog.getByRole('heading', { name: 'グループ（32）', exact: true })).toBeVisible()
-    await expect(navigation).toContainText('1–8 / 32件')
-    await expect(list.getByRole('button')).toHaveCount(8)
+    await expect(dialog.getByRole('navigation', { name: 'グループのページ' })).toHaveCount(0)
+    await expect(list.getByRole('button')).toHaveCount(32)
     await expect(dialog.getByLabel('候補の移動先').locator('option')).toHaveText([
       '移動先グループを選択',
       '新しいグループへ分ける',
@@ -83,18 +82,11 @@ test('all 32 groups are reachable and share editable human-readable names', asyn
     await selectAll.check()
     await selectAll.uncheck()
     await expect(dialog.locator('.occurrence input:checked')).toHaveCount(0)
-    for (let pageIndex = 0; pageIndex < 4; pageIndex++) {
-      for (let index = 1; index <= 8; index++) {
-        const number = pageIndex * 8 + index
-        await list.getByRole('button', { name: new RegExp(`^グループ${number}：`) }).click()
-        await expect(dialog.getByLabel('グループ名', { exact: true })).toHaveValue(`グループ${number}`)
-        await expect(selectAll).not.toBeChecked()
-      }
-      if (pageIndex < 3)
-        await navigation.getByRole('button', { name: '次へ', exact: true }).click()
+    for (let number = 1; number <= 32; number++) {
+      await list.getByRole('button', { name: new RegExp(`^グループ${number}：`) }).click()
+      await expect(dialog.getByLabel('グループ名', { exact: true })).toHaveValue(`グループ${number}`)
+      await expect(selectAll).not.toBeChecked()
     }
-    await expect(navigation).toContainText('25–32 / 32件')
-    await expect(navigation.getByRole('button', { name: '次へ', exact: true })).toBeDisabled()
     const name = dialog.getByLabel('グループ名', { exact: true })
     await name.fill('防御アイコン')
     await name.press('Tab')
@@ -111,7 +103,7 @@ test('all 32 groups are reachable and share editable human-readable names', asyn
     await expect(page.getByLabel('カード編集キャンバス')).toBeVisible()
     await page.getByRole('button', { name: 'アセット検出', exact: true }).click()
     await expect(name).toHaveValue('防御アイコン')
-    await expect(navigation).toContainText('25–32 / 32件')
+    await expect(list.getByRole('button')).toHaveCount(32)
     await expect(selectAll).toBeChecked()
     await page.screenshot({ path: testInfo.outputPath('asset-detection-workspace.png') })
     await page.setViewportSize({ width: 800, height: 900 })

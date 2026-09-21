@@ -15,3 +15,6 @@ node_modules
 
 # Local notes and private verification material; never include in public commits.
 /docs/local/
+
+# Regenerable project previews can contain private source images.
+**/temp/asset-thumbnails/

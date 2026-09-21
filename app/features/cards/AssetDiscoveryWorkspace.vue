@@ -6,11 +6,14 @@ import { computed, onScopeDispose, ref, useId, watch } from 'vue'
 import AssetCreationPanel from '~/components/AssetCreationPanel.vue'
 import { groupAssetState } from '~/services/asset-discovery/group-asset'
 import DiscoveryBoundsEditor from './DiscoveryBoundsEditor.vue'
+import DiscoveryThumbnail from './DiscoveryThumbnail.vue'
+import { useDiscoveryThumbnails } from './useDiscoveryThumbnails'
 import { useDiscoveryWorkspace } from './useDiscoveryWorkspace'
 
-const props = defineProps<{ options: DiscoveryWorkspaceOptions, requestThumbnail: (id: string) => unknown }>()
+const props = withDefaults(defineProps<{ options: DiscoveryWorkspaceOptions, active?: boolean }>(), { active: true })
 const emit = defineEmits<{ working: [value: boolean], analyzeRegions: [] }>()
 const model = useDiscoveryWorkspace(props.options)
+const thumbnails = useDiscoveryThumbnails(props.options)
 const titleId = useId()
 const optedIn = ref(false)
 const cardIds = ref([props.options.currentImageId.value])
@@ -19,14 +22,11 @@ const checked = ref<string[]>([])
 const destination = ref('')
 const newGroupName = ref('')
 const adding = ref(false)
-const groupPage = ref(0)
 const occurrencePage = ref(0)
 const diffIds = ref<string[]>([])
 const discardPending = ref(false)
-const groupPageSize = 8
 const groupLabels = computed(() => new Map(model.groups.value.map((group, index) => [group.id, group.name.trim() || `グループ${index + 1}`])))
 const groupLabel = (id: string) => groupLabels.value.get(id) ?? ''
-const visibleGroups = computed(() => model.groups.value.slice(groupPage.value * groupPageSize, (groupPage.value + 1) * groupPageSize))
 const activeGroup = computed(() => model.groups.value.find(group => group.id === groupId.value))
 const groupAsset = ref('')
 const assignment = computed(() => activeGroup.value ? groupAssetState({ groups: model.groups.value, occurrences: model.occurrences.value }, activeGroup.value) : null)
@@ -47,11 +47,12 @@ const editableCard = computed(() => model.activeCard.value)
 const assets = computed(() => props.options.store.assets)
 const stateLabel = (item: IconOccurrence) => item.decision === 'excluded' ? '除外' : '候補'
 const cardName = (id: string) => model.cards.value.find(card => card.id === id)?.imageName ?? id
-const viewBox = (item: IconOccurrence) => `${item.bounds.x} ${item.bounds.y} ${item.bounds.width} ${item.bounds.height}`
-function preview(item: IconOccurrence) {
-  return item.cardId === props.options.currentImageId.value ? currentImage.value?.src : props.options.runtime.cardThumbnails.value.get(item.cardId)
-}
-const representative = (id: string) => model.occurrences.value.find(item => item.id === id)
+const occurrencesById = computed(() => new Map(model.occurrences.value.map(item => [item.id, item])))
+const representative = (id: string) => occurrencesById.value.get(id)
+const groupStats = computed(() => new Map(model.groups.value.map((group) => {
+  const items = group.memberIds.flatMap(id => occurrencesById.value.get(id) ?? [])
+  return [group.id, { cards: new Set(items.map(item => item.cardId)).size, excluded: items.filter(item => item.decision === 'excluded').length }]
+})))
 function action(fn: () => unknown) {
   if (!model.working.value)
     void model.run(fn)
@@ -103,7 +104,6 @@ watch(() => model.occurrences.value, (items) => {
   occurrencePage.value = Math.min(occurrencePage.value, Math.max(0, Math.ceil(filtered.value.length / 24) - 1))
 })
 watch(() => model.groups.value, (groups) => {
-  groupPage.value = Math.min(groupPage.value, Math.max(0, Math.ceil(groups.length / groupPageSize) - 1))
   if (!['all', 'ungrouped'].includes(groupId.value) && !groups.some(group => group.id === groupId.value))
     groupId.value = 'all'
   if (destination.value && !['new', 'ungrouped'].includes(destination.value) && !groups.some(group => group.id === destination.value))
@@ -113,11 +113,6 @@ async function splitCandidate(axis: 'horizontal' | 'vertical', ratio: number) {
   if (await model.split(axis, ratio))
     groupId.value = 'ungrouped'
 }
-watch(() => [...visible.value, ...visibleGroups.value.flatMap(group => representative(group.representativeId) ?? [])], (items) => {
-  new Set(items.map(item => item.cardId)).forEach((id) => {
-    void props.requestThumbnail(id)
-  })
-}, { immediate: true })
 watch(model.working, value => emit('working', value), { immediate: true, flush: 'sync' })
 onScopeDispose(() => emit('working', false))
 </script>
@@ -217,15 +212,7 @@ onScopeDispose(() => emit('working', false))
     <div class="review-columns">
       <section class="groups">
         <h3>グループ（{{ model.groups.value.length }}）</h3>
-        <nav aria-label="グループのページ">
-          <button type="button" :disabled="groupPage === 0" @click="groupPage--">
-            前へ
-          </button>
-          <span aria-live="polite">{{ model.groups.value.length ? groupPage * groupPageSize + 1 : 0 }}–{{ Math.min((groupPage + 1) * groupPageSize, model.groups.value.length) }} / {{ model.groups.value.length }}件</span>
-          <button type="button" :disabled="(groupPage + 1) * groupPageSize >= model.groups.value.length" @click="groupPage++">
-            次へ
-          </button>
-        </nav>
+        <p>全{{ model.groups.value.length }}件。スクロールして確認できます。</p>
         <button type="button" :aria-pressed="groupId === 'all'" @click="groupId = 'all'">
           すべての候補
         </button>
@@ -254,12 +241,10 @@ onScopeDispose(() => emit('working', false))
           <small>全{{ activeGroup.memberIds.length }}候補に同じアセットを使います。原文への反映は「次へ：領域検出・アイコン反映」で確認します。除外した候補は反映しません。</small>
         </fieldset>
         <div class="group-list" tabindex="0" aria-label="グループ一覧（スクロールできます）">
-          <button v-for="group in visibleGroups" :key="group.id" type="button" :aria-pressed="groupId === group.id" @click="groupId = group.id">
-            <svg v-if="representative(group.representativeId)" :viewBox="viewBox(representative(group.representativeId)!)" aria-hidden="true">
-              <image :href="preview(representative(group.representativeId)!)" :width="representative(group.representativeId)!.imageSize.width" :height="representative(group.representativeId)!.imageSize.height" />
-            </svg>
-            {{ groupLabel(group.id) }}：{{ group.memberIds.length }}件・{{ new Set(model.occurrences.value.filter(item => group.memberIds.includes(item.id)).map(item => item.cardId)).size }}枚
-            <small>除外 {{ model.occurrences.value.filter(item => group.memberIds.includes(item.id) && item.decision === 'excluded').length }}件</small>
+          <button v-for="group in model.groups.value" :key="group.id" type="button" :aria-pressed="groupId === group.id" @click="groupId = group.id">
+            <DiscoveryThumbnail v-if="representative(group.representativeId)" :item="representative(group.representativeId)!" :thumbnails="thumbnails" :active="active" />
+            {{ groupLabel(group.id) }}：{{ group.memberIds.length }}件・{{ groupStats.get(group.id)?.cards }}枚
+            <small>除外 {{ groupStats.get(group.id)?.excluded }}件</small>
           </button>
         </div>
       </section>
@@ -293,7 +278,7 @@ onScopeDispose(() => emit('working', false))
         <div v-for="item in visible" :key="item.id" class="occurrence">
           <input v-model="checked" type="checkbox" :value="item.id" :aria-label="`${cardName(item.cardId)}の候補を整理対象にする ${item.id}`" :disabled="model.working.value">
           <button type="button" :disabled="model.working.value" :aria-pressed="model.selectedId.value === item.id" @click="model.select(item.id)">
-            <svg :viewBox="`${item.bounds.x} ${item.bounds.y} ${item.bounds.width} ${item.bounds.height}`" aria-hidden="true"><image :href="preview(item)" :width="item.imageSize.width" :height="item.imageSize.height" /></svg>
+            <DiscoveryThumbnail :item="item" :thumbnails="thumbnails" :active="active" />
             {{ cardName(item.cardId) }}・{{ stateLabel(item) }}
             <small>{{ item.assetId ? assets.find(asset => asset.id === item.assetId)?.name : 'アセット未割当' }}</small>
           </button>
@@ -360,11 +345,9 @@ fieldset { border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; display
 .groups { min-width: 0; }
 .groups input { min-width: 0; width: 100%; box-sizing: border-box; }
 .group-list { max-height: 55vh; overflow-y: auto; padding: 3px; }
-.groups nav { align-items: center; flex-wrap: wrap; }
 small { display: block; }
 .occurrence { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
 .occurrence button { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }
-.occurrence svg, .groups svg { width: 48px; height: 48px; vertical-align: middle; background: #e2e8f0; margin-right: 6px; }
 [aria-pressed="true"] { outline: 2px solid #2563eb; }
 .error { color: #b91c1c; white-space: pre-wrap; }
 .history, nav { display: flex; gap: 8px; margin: 10px 0; }
