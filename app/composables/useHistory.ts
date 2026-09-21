@@ -175,5 +175,21 @@ export function useKeyedHistory<T, E = never>(initialValue: T, limit = 100) {
     activeKey = key
   }
 
-  return { ...history, reset, switchTo, bindKey, mapStates }
+  /** 非表示カードへの一括処理もカード別のUndoへ記録する。表示カードは切り替えない。 */
+  function commitTo(key: string, previous: T, next: T, effect: E | null, before: BeforeTransition<T, E>) {
+    if (key === activeKey) {
+      if (JSON.stringify(history.state.value) !== JSON.stringify(previous))
+        throw new Error('処理中にカードが変更されました。')
+      history.commit(next, effect, before)
+      return
+    }
+    const target = useHistory<T, E>(previous, limit)
+    const saved = timelines.get(key)
+    if (saved && JSON.stringify(saved.state) === JSON.stringify(previous))
+      target.restore(saved)
+    target.commit(next, effect, before)
+    timelines.set(key, target.snapshot())
+  }
+
+  return { ...history, reset, switchTo, bindKey, mapStates, commitTo }
 }

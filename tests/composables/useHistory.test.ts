@@ -148,6 +148,35 @@ describe('useHistory', () => {
 })
 
 describe('history transition effects', () => {
+  it('commits inactive cards without changing the visible timeline and preserves earlier effects', () => {
+    const history = useKeyedHistory<{ count: number }, string>({ count: 0 })
+    history.reset('a', { count: 0 })
+    history.commit({ count: 1 }, 'first')
+    history.switchTo('b', { count: 10 })
+    const visible = history.snapshot()
+    history.commitTo('a', { count: 1 }, { count: 2 }, 'batch', vi.fn())
+    expect(history.snapshot()).toEqual(visible)
+    history.switchTo('a', { count: 2 })
+    const undo = vi.fn()
+    history.undo(undo)
+    history.undo(undo)
+    expect(undo.mock.calls).toEqual([[{ count: 1 }, 'batch'], [{ count: 0 }, 'first']])
+  })
+
+  it('leaves inactive history untouched when publication fails', () => {
+    const history = useKeyedHistory({ count: 0 })
+    history.reset('a', { count: 0 })
+    history.commit({ count: 1 })
+    history.switchTo('b', { count: 10 })
+    expect(() => history.commitTo('a', { count: 1 }, { count: 2 }, null, () => {
+      throw new Error('failed')
+    })).toThrow('failed')
+    expect(history.state.value).toEqual({ count: 10 })
+    history.switchTo('a', { count: 1 })
+    history.undo()
+    expect(history.state.value).toEqual({ count: 0 })
+  })
+
   it('keeps effects on the matching edge, including changes with identical main state', () => {
     const history = useHistory<{ count: number }, { candidate: string }>({ count: 0 })
     const publish = vi.fn()

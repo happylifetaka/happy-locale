@@ -283,14 +283,14 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
     publishProject()
   }
 
-  function publishCandidateTransition(next: CardProject, edits: CandidateEdit[], direction: 'forward' | 'backward') {
+  function publishCandidateTransition(next: CardProject, edits: CandidateEdit[], direction: 'forward' | 'backward', cardId = activeCardId, previous = history.state.value) {
     if (!candidates)
       throw new Error('OCR候補を含む編集の保存先が接続されていません。')
-    const stored = candidates.read(activeCardId)
+    const stored = candidates.read(cardId)
     parseRegionCandidates(stored.candidates, next.imageWidth, next.imageHeight)
     const nextCandidates = applyCandidateEdits(stored.candidates, edits, direction)
     parseRegionCandidates(nextCandidates, next.imageWidth, next.imageHeight)
-    candidates.apply(activeCardId, { project: history.state.value, candidates: stored.candidates }, { project: next, candidates: nextCandidates })
+    candidates.apply(cardId, { project: previous, candidates: stored.candidates }, { project: next, candidates: nextCandidates })
   }
 
   /** 比較サービスで選んだ枠・候補をまとめて確定する。原文の再OCR適用とは別操作。 */
@@ -323,8 +323,20 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
 
   /** 確認したアイコン位置と原文、新規領域を候補消費と同じ履歴で反映する。 */
   function applyIconAnalysis(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], expectedCardId: string | null) {
-    const current = history.state.value
-    if (expectedCardId !== activeCardId || JSON.stringify(current) !== JSON.stringify(before))
+    commitIconAnalysis(before, proposals, beforeCandidates, afterCandidates, expectedCardId, false)
+  }
+
+  /** 一括反映用。非表示カードの履歴も保持し、対象の保存状態を直前に再検証する。 */
+  function applyIconAnalysisToCard(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], cardId: string | null) {
+    commitIconAnalysis(before, proposals, beforeCandidates, afterCandidates, cardId, true)
+  }
+
+  function commitIconAnalysis(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], expectedCardId: string | null, background: boolean) {
+    const inactive = expectedCardId !== activeCardId
+    if (inactive && (!background || !expectedCardId || !candidates))
+      throw new Error('解析後にカード・領域が変更されました。もう一度解析してください。')
+    const current = inactive ? candidates!.read(expectedCardId).project : history.state.value
+    if (JSON.stringify(current) !== JSON.stringify(before))
       throw new Error('解析後にカード・領域が変更されました。もう一度解析してください。')
     if (new Set(proposals.map(region => region.id)).size !== proposals.length)
       throw new Error('適用する領域が重複しています。')
@@ -364,13 +376,20 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
     }
     parseRegionCandidates(beforeCandidates, current.imageWidth, current.imageHeight)
     parseRegionCandidates(afterCandidates, current.imageWidth, current.imageHeight)
-    const edits = consumedCandidateEdits(beforeCandidates, afterCandidates)
-    if (candidates && JSON.stringify(candidates.read(activeCardId).candidates) !== JSON.stringify(beforeCandidates))
+    // 初回の自動検出では、追加対象外だった候補も同じ履歴で保存する。
+    const edits = background && !current.regions.length && !beforeCandidates.length
+      ? candidateEdits(beforeCandidates, afterCandidates)
+      : consumedCandidateEdits(beforeCandidates, afterCandidates)
+    if (candidates && JSON.stringify(candidates.read(expectedCardId).candidates) !== JSON.stringify(beforeCandidates))
       throw new Error('解析後に領域候補が変更されました。もう一度解析してください。')
     if (!edits.length && JSON.stringify(next) === JSON.stringify(current))
       return
     if (edits.length || candidates) {
-      history.commit(next, edits, (value, effect) => publishCandidateTransition(value, effect!, 'forward'))
+      const publish = (value: CardProject, effect: CandidateEdit[] | null) => publishCandidateTransition(value, effect!, 'forward', expectedCardId, current)
+      if (inactive)
+        history.commitTo(expectedCardId!, current, next, edits, publish)
+      else
+        history.commit(next, edits, publish)
     }
     else {
       history.commit(next)
@@ -530,6 +549,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
     applyRegionBounds,
     applyRegionDetection,
     applyIconAnalysis,
+    applyIconAnalysisToCard,
     appendTemplateRegions,
     splitRegion,
     mergeRegions,
