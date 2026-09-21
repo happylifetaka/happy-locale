@@ -6,6 +6,7 @@ import { computed, onScopeDispose, ref, useId, watch } from 'vue'
 import AssetCreationPanel from '~/components/AssetCreationPanel.vue'
 import { groupAssetState } from '~/services/asset-discovery/group-asset'
 import DiscoveryBoundsEditor from './DiscoveryBoundsEditor.vue'
+import DiscoveryProposalComparison from './DiscoveryProposalComparison.vue'
 import DiscoveryThumbnail from './DiscoveryThumbnail.vue'
 import { useDiscoveryThumbnails } from './useDiscoveryThumbnails'
 import { useDiscoveryWorkspace } from './useDiscoveryWorkspace'
@@ -44,6 +45,7 @@ const selectedGroup = computed(() => model.groups.value.find(group => group.memb
 const currentSelection = computed(() => model.selected.value?.cardId === props.options.currentImageId.value ? model.selected.value : undefined)
 const currentImage = computed(() => props.options.runtime.cardImage.value)
 const editableCard = computed(() => model.activeCard.value)
+const comparisonCard = computed(() => model.cards.value.find(card => card.id === model.comparison.value?.cardId))
 const assets = computed(() => props.options.store.assets)
 const stateLabel = (item: IconOccurrence) => item.decision === 'excluded' ? '除外' : '候補'
 const cardName = (id: string) => model.cards.value.find(card => card.id === id)?.imageName ?? id
@@ -196,14 +198,7 @@ onScopeDispose(() => emit('working', false))
         {{ cardName(id) }}の案を比較
       </button>
       <section v-if="model.comparison.value">
-        <p>選んだ新規候補・枠の変更だけを採用します。未検出・変更なしは保持します。曖昧な対応・画像差替えはこの一覧から自動採用せず、候補を個別に確認してください。</p>
-        <label v-for="(difference, index) in model.comparison.value.differences" :key="index" class="difference">
-          <input v-model="diffIds" type="checkbox" :value="difference.detectedId" :disabled="model.working.value || !difference.detectedId || !['new', 'changed'].includes(difference.status)">
-          {{ { "new": '新規', "changed": '枠の変更', "unchanged": '変更なし', "missing": '今回未検出', "ambiguous": '対応要確認', 'source-changed': '元画像が変更されています' }[difference.status] }}
-          <span v-if="difference.hasUserReview">（手動確認済みの候補）</span>
-          <span v-for="id in difference.occurrenceIds" :key="id">現在: {{ representative(id)?.bounds }}</span>
-          <span v-if="difference.detectedId">提案: {{ model.comparison.value.occurrences.find(item => item.id === difference.detectedId)?.bounds }}</span>
-        </label>
+        <DiscoveryProposalComparison v-if="comparisonCard" v-model:selected-ids="diffIds" :review="model.comparison.value" :occurrences="model.occurrences.value" :groups="model.groups.value" :assets="assets" :card="comparisonCard" :image-url="comparisonCard.id === options.currentImageId.value ? currentImage?.src : undefined" :thumbnails="thumbnails" :active="active" :disabled="model.working.value" />
         <button type="button" :disabled="model.working.value || !diffIds.length" @click="applyDifference">
           選択した再収集案を採用
         </button>
@@ -351,7 +346,5 @@ small { display: block; }
 [aria-pressed="true"] { outline: 2px solid #2563eb; }
 .error { color: #b91c1c; white-space: pre-wrap; }
 .history, nav { display: flex; gap: 8px; margin: 10px 0; }
-.difference { display: block; border-bottom: 1px solid #e2e8f0; padding: 8px; font-size: 0.85rem; }
-.difference span { display: block; }
 @media (max-width: 950px) { .review-columns { grid-template-columns: 1fr; } }
 </style>

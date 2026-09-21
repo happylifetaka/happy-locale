@@ -1,6 +1,65 @@
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 
+test('visually compares new and changed icons and adopts only checked proposals', async ({ page }, testInfo) => {
+  await page.goto('/cards')
+  await expect(page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true })).toBeVisible()
+  const url = `/_nuxt/@fs${fileURLToPath(new URL('./helpers/discovery-ui-project.ts', import.meta.url))}`
+  const fixture = await page.evaluate(async (url) => {
+    const { prepareIconRegionUIProject } = await import(/* @vite-ignore */ url) as typeof import('./helpers/discovery-ui-project')
+    return prepareIconRegionUIProject()
+  }, url)
+  try {
+    await page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true }).click()
+    await page.getByRole('button', { name: 'アセット検出', exact: true }).click()
+    const workspace = page.getByRole('region', { name: 'アセット検出', exact: true })
+    await workspace.getByText('収集するカードを選ぶ', { exact: true }).click()
+    await workspace.getByLabel('アイコン候補を収集する（追加のOCRを実行）').check()
+    await workspace.getByRole('button', { name: '選択したカードから収集', exact: true }).click()
+    await expect(workspace.getByText(/収集完了：新規0枚、比較待ち1枚/)).toBeVisible({ timeout: 30000 })
+    await workspace.getByRole('button', { name: 'one.pngの案を比較', exact: true }).click()
+    const comparison = workspace.getByRole('region', { name: '再収集候補の画像比較', exact: true })
+    const changed = comparison.locator('.difference').filter({ hasText: '枠の変更' })
+    const added = comparison.locator('.difference').filter({ hasText: '新しい候補' })
+    await expect(changed).toHaveCount(1)
+    await expect(added).toHaveCount(1)
+    await changed.scrollIntoViewIfNeeded()
+    await expect(changed.locator('.snapshot img')).toHaveCount(2)
+    await added.scrollIntoViewIfNeeded()
+    await expect(added.locator('.snapshot img')).toHaveCount(1)
+    await changed.getByRole('button', { name: '位置と枠を確認', exact: true }).click()
+    await expect(changed.locator('.change-summary')).toContainText('px拡張')
+    await comparison.screenshot({ path: testInfo.outputPath('changed-and-new-comparison.png') })
+    await added.getByRole('button', { name: '位置と枠を確認', exact: true }).click()
+    await expect(changed.locator('svg')).toHaveCount(0)
+    await page.setViewportSize({ width: 500, height: 900 })
+    await expect(added.getByRole('img', { name: '候補周辺の拡大比較', exact: true })).toBeVisible()
+    expect(await comparison.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await added.screenshot({ path: testInfo.outputPath('new-comparison-narrow.png') })
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await added.getByRole('checkbox').check()
+    await workspace.getByRole('button', { name: '選択した再収集案を採用', exact: true }).click()
+    await expect(comparison).toHaveCount(0)
+    await expect(workspace.locator('.occurrence')).toHaveCount(2)
+    await page.getByRole('button', { name: 'プロジェクト保存', exact: true }).click()
+    const saved = () => page.evaluate(async (name) => {
+      const directory = await (await navigator.storage.getDirectory()).getDirectoryHandle(name)
+      return JSON.parse(await (await (await directory.getFileHandle('project.json')).getFile()).text()) as import('../../app/types/editor').FolderProjectDocument
+    }, fixture.name)
+    await expect.poll(async () => (await saved()).assetDiscovery!.occurrences.length).toBe(2)
+    const result = await saved()
+    expect(result.assetDiscovery!.occurrences[0]).toEqual(fixture.project.assetDiscovery!.occurrences[0])
+    expect(result.assetDiscovery!.occurrences[1]!.assetId).toBeNull()
+    expect(result.cards).toEqual(fixture.project.cards)
+    expect(result.assetDiscovery!.groups).toEqual(fixture.project.assetDiscovery!.groups)
+  }
+  finally {
+    await page.evaluate(async (name) => {
+      await (await navigator.storage.getDirectory()).removeEntry(name, { recursive: true })
+    }, fixture.name)
+  }
+})
+
 test('keeps legacy approval data while omitting approval controls and badges', async ({ page }) => {
   await page.goto('/cards')
   await expect(page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true })).toBeVisible()
@@ -245,6 +304,14 @@ test('collects, reviews, registers and saves icons through the ordinary UI witho
     await dialog.getByRole('button', { name: /^(one|two)\.pngの案を比較$/ }).click()
     await expect(dialog.locator('.difference')).toHaveCount(2)
     await expect(dialog.locator('.difference')).toContainText(['変更なし', '変更なし'])
+    const comparison = dialog.getByRole('region', { name: '再収集候補の画像比較', exact: true })
+    const difference = comparison.locator('.difference').first()
+    await expect(difference.locator('.snapshot img')).toHaveCount(2)
+    await difference.getByRole('button', { name: '位置と枠を確認', exact: true }).click()
+    await expect(difference.getByRole('img', { name: 'カード全体での候補位置', exact: true })).toBeVisible()
+    await expect(difference.getByRole('img', { name: '候補周辺の拡大比較', exact: true })).toBeVisible()
+    await expect(difference.locator('.coordinate-details')).not.toHaveAttribute('open')
+    await difference.screenshot({ path: testInfo.outputPath('recollection-visual-comparison.png') })
     await expect(dialog.getByRole('button', { name: '選択した再収集案を採用', exact: true })).toBeDisabled()
     await page.getByRole('button', { name: 'アセット編集', exact: true }).click()
     await expect(dialog).toBeHidden()
