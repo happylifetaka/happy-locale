@@ -579,7 +579,7 @@ describe('project card state', () => {
     expect(removeEntry).toHaveBeenCalledWith('card-2.jpg')
   })
 
-  it('updates the project document before deleting card image files', async () => {
+  it('commits card removal without deleting recovery images', async () => {
     const events: string[] = []
     const document = projectDocument()
     const deletedCard = document.cards[1]!
@@ -611,12 +611,11 @@ describe('project card state', () => {
       [deletedCard],
     )
 
-    expect(events.indexOf('write:project.json')).toBeLessThan(
-      events.indexOf('remove:card-2.png'),
-    )
+    expect(events).toContain('write:project.json')
+    expect(events.some(event => event.startsWith('remove:'))).toBe(false)
   })
 
-  it('updates the project document before deleting asset files', async () => {
+  it('commits asset removal without deleting recovery images', async () => {
     const events: string[] = []
     const document = projectDocument()
     document.assets = [{
@@ -655,9 +654,8 @@ describe('project card state', () => {
       new Map(),
     )
 
-    expect(events.indexOf('write:project.json')).toBeLessThan(
-      events.indexOf('remove:coin.png'),
-    )
+    expect(events).toContain('write:project.json')
+    expect(events.some(event => event.startsWith('remove:'))).toBe(false)
   })
 
   it('keeps removed asset files when writing the project document fails', async () => {
@@ -834,22 +832,22 @@ describe('asset save transactions', () => {
     expect(files.get('assets/coin.png')).toBe(original)
   })
 
-  it('commits a new asset path and cleans up the replaced image', async () => {
+  it('commits a new asset path and retains the replaced image for recovery', async () => {
     const { document, files, directory } = fixture()
     const saved = await saveFolderProject(directory, document, document.cards[0]!, document.assets, [], [], new Map([['coin', new Blob(['recropped'])]]))
     const path = saved.assets[0]!.imagePath
     expect(path).not.toBe('assets/coin.png')
     expect(await (files.get(path) as Blob).text()).toBe('recropped')
     expect(JSON.parse(files.get('project.json') as string).assets[0].imagePath).toBe(path)
-    expect(files.has('assets/coin.png')).toBe(false)
+    expect(files.has('assets/coin.png')).toBe(true)
     expect(document.assets[0]!.imagePath).toBe('assets/coin.png')
   })
 
-  it('uses persisted assets for deletion even after the editor removes the definition', async () => {
+  it('retains saved asset images after the editor removes the definition', async () => {
     const { document, files, directory } = fixture()
     document.assets = []
     await saveFolderProject(directory, document, document.cards[0]!, [], [], [], new Map())
-    expect(files.has('assets/coin.png')).toBe(false)
+    expect(files.has('assets/coin.png')).toBe(true)
     expect(JSON.parse(files.get('project.json') as string).assets).toEqual([])
   })
 })

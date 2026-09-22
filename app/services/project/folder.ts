@@ -301,7 +301,7 @@ export async function createFolderProject(
   return document
 }
 
-/** 新しい画像パスへ退避してから文書を更新する。旧画像の削除は文書の保存成功後に行う。 */
+/** 新しい画像パスへ退避して文書を確定する。旧画像はバックアップの復旧用に保持する。 */
 export async function saveFolderProject(
   directory: FileSystemDirectoryHandle,
   document: FolderProjectDocument,
@@ -310,11 +310,11 @@ export async function saveFolderProject(
   fonts: FontReference[],
   ocrDictionary: FolderProjectDocument['ocrDictionary'],
   assetBlobs: ReadonlyMap<string, Blob>,
-  deletedCards: readonly FolderProjectCard[] = [],
+  _deletedCards: readonly FolderProjectCard[] = [],
   glossary: FolderProjectDocument['glossary'] = document.glossary,
 ): Promise<FolderProjectDocument> {
-  // Read the persisted snapshot: the editor document already omits deleted assets.
-  const previous = parseFolderProject(await readTextFile(directory, 'project.json'))
+  // Validate the persisted snapshot before replacing it or its backup.
+  parseFolderProject(await readTextFile(directory, 'project.json'))
   const stagedAssets = assets.map(asset => assetBlobs.has(asset.id)
     ? { ...asset, imagePath: `assets/${crypto.randomUUID()}.png` }
     : asset)
@@ -338,8 +338,9 @@ export async function saveFolderProject(
       .catch(() => { /* Keep the original save error if cleanup also fails. */ })
     throw error
   }
-  await removeFolderProjectAssetImages(directory, previous.assets, stagedAssets)
-  await removeFolderProjectCardImages(directory, deletedCards)
+  // project.jsonの確定が保存の成功境界。以降に失敗し得るファイル削除を行わない。
+  // 削除済みカード・再切り出し前の画像も、バックアップから復元するため保持する。
+  // _deletedCardsは既存呼出元の引数位置を維持するために残す。
   return updated
 }
 

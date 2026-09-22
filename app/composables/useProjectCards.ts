@@ -119,7 +119,7 @@ export function useProjectCards({
     cardPendingDeletionConfirmation.value = null
   }
 
-  /** 削除はまず予定として記録する。画像ファイルの削除はプロジェクト保存の成功後まで遅らせる。 */
+  /** 削除はまず予定として記録する。文書からの除外は保存成功時に確定し、元画像は復旧用に保持する。 */
   async function confirmProjectCardDeletion() {
     const card = cardPendingDeletionConfirmation.value
     cardPendingDeletionConfirmation.value = null

@@ -107,7 +107,7 @@ export function useProjectPersistence({
         if (snapshot.deletedCards.length > 0) {
           for (const card of snapshot.deletedCards)
             removeCardThumbnail(card.id)
-          logDiagnostic('削除予定のカードをファイルから削除しました', {
+          logDiagnostic('削除予定のカードをプロジェクトから除外しました（元画像は保持）', {
             deleted: snapshot.deletedCards.length,
           })
         }

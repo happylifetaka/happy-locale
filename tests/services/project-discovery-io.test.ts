@@ -1,5 +1,5 @@
-import { expect, it } from 'vitest'
-import { createFolderProject, saveFolderProject } from '~/services/project/folder'
+import { expect, it, vi } from 'vitest'
+import { createFolderProject, loadFolderProjectCardImage, openFolderProject, saveFolderProject } from '~/services/project/folder'
 import { parseFolderProject, serializeFolderProject } from '~/services/project/format'
 import { discoveryProject } from '../fixtures/asset-discovery'
 
@@ -8,11 +8,14 @@ function memoryFolder() {
   const files = new Map<string, string | Blob>()
   const writes: string[] = []
   const failures = new Set<string>()
+  const remove = vi.fn((path: string) => {
+    files.delete(path)
+  })
   function directory(prefix = ''): FileSystemDirectoryHandle {
     return {
       name: 'Synthetic folder',
       async getDirectoryHandle(name: string) { return directory(`${prefix}${name}/`) },
-      async removeEntry(name: string) { files.delete(`${prefix}${name}`) },
+      async removeEntry(name: string) { remove(`${prefix}${name}`) },
       async getFileHandle(name: string, options?: { create?: boolean }) {
         const path = `${prefix}${name}`
         if (!files.has(path) && !options?.create)
@@ -38,8 +41,53 @@ function memoryFolder() {
       },
     } as unknown as FileSystemDirectoryHandle
   }
-  return { files, writes, failures, directory: directory() }
+  return { files, writes, failures, remove, directory: directory() }
 }
+
+it.each(['recrop', 'remove-asset', 'remove-card'] as const)('restores backup images after %s even when file deletion is denied', async (operation) => {
+  const io = memoryFolder()
+  const project = discoveryProject()
+  delete project.assetDiscovery
+  project.cards.push({ ...structuredClone(project.cards[0]!), id: 'second', imagePath: 'images/second.png' })
+  const previous = serializeFolderProject(project)
+  io.files.set('project.json', previous)
+  for (const card of project.cards)
+    io.files.set(card.imagePath, new Blob([card.id]))
+  io.files.set('assets/asset-1.png', new Blob(['original asset']))
+  io.files.set('thumbnails/second.jpg', new Blob(['thumbnail']))
+  io.remove.mockImplementation(() => {
+    throw new DOMException('Deletion denied', 'NotAllowedError')
+  })
+
+  const updated = structuredClone(project)
+  if (operation === 'remove-asset')
+    updated.assets = []
+  if (operation === 'remove-card')
+    updated.cards = [updated.cards[0]!]
+  const writes = operation === 'recrop' ? new Map([['asset-1', new Blob(['new asset'])]]) : new Map<string, Blob>()
+  const saved = await saveFolderProject(io.directory, updated, updated.cards[0]!, updated.assets, [], [], writes, operation === 'remove-card' ? [project.cards[1]!] : [])
+  expect(parseFolderProject(io.files.get('project.json') as string)).toEqual(parseFolderProject(serializeFolderProject(saved)))
+  expect(io.files.get('project.backup.json')).toBe(previous)
+  expect(io.remove).not.toHaveBeenCalled()
+  const backup = io.files.get('project.backup.json')!
+
+  // A subsequent save must remain usable and must not invalidate an earlier recovery copy.
+  await saveFolderProject(io.directory, saved, saved.cards[0]!, saved.assets, [], [], new Map())
+  const reopened = await openFolderProject(io.directory)
+  expect(reopened.document.cards).toHaveLength(updated.cards.length)
+  expect(reopened.document.assets).toHaveLength(updated.assets.length)
+  if (operation === 'recrop')
+    expect(await reopened.assetFiles.get('asset-1')!.text()).toBe('new asset')
+
+  io.files.set('project.json', backup)
+  const restored = await openFolderProject(io.directory)
+  expect(restored.document.cards).toHaveLength(2)
+  for (const card of restored.document.cards)
+    expect(await (await loadFolderProjectCardImage(io.directory, card)).text()).toBe(card.id)
+  expect(await restored.assetFiles.get('asset-1')!.text()).toBe('original asset')
+  expect(io.files.has('thumbnails/second.jpg')).toBe(true)
+  expect(io.remove).not.toHaveBeenCalled()
+})
 
 it('persists first-save discovery JSON after its asset PNG and restores identical review state', async () => {
   const io = memoryFolder()
