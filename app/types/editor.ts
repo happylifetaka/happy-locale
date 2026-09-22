@@ -61,6 +61,8 @@ export interface TextRegion {
   width: number
   height: number
   originalText: string
+  /** 最後に明示採用または自動反映したOCR原文。手修正の上書き防止に使う。旧形式は未設定。 */
+  lastOcrText?: string
   ocrLayout?: 'single-line' | 'sparse-text' | 'text-block'
   translatedText: string
   translationStatus: TranslationStatus

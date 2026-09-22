@@ -231,7 +231,8 @@ describe('source OCR and explicit application', () => {
     const assetsBefore = JSON.stringify(s.context.assets)
     const preview = (await recognizeSourceIconOCR(s.prepare(), s.options))!
     const patch = sourceIconOCRPatch(s.context, preview, s.scope)
-    expect(Object.keys(patch).sort()).toEqual(['originalText', 'sourceIcons'])
+    expect(Object.keys(patch).sort()).toEqual(['lastOcrText', 'originalText', 'sourceIcons'])
+    expect(patch.lastOcrText).toBe(preview.originalText)
     expect(() => sourceIconOCRPatch(s.context, { ...preview }, s.scope)).toThrow('セッション')
     s.editor.updateRegion(s.regionId, patch)
     expect(s.editor.project.value.regions[0]).toMatchObject({ originalText: preview.originalText, sourceIcons: patch.sourceIcons, translatedText: '既存の訳', translationStatus: 'draft' })

@@ -34,6 +34,17 @@ function document(): FolderProjectDocument {
 }
 
 describe('folder project format', () => {
+  it('preserves OCR baselines without inventing one for legacy or invalid values', () => {
+    const value = document()
+    value.cards[0]!.regions = [
+      { id: 'tracked', originalText: 'Corrected source', lastOcrText: 'OCR source' },
+      { id: 'legacy', originalText: 'Unknown source' },
+      { id: 'invalid', originalText: 'Unknown source', lastOcrText: 42 },
+    ] as never
+    const parsed = parseFolderProject(JSON.stringify(value))
+    expect(parsed.cards[0]!.regions.map(region => region.lastOcrText)).toEqual(['OCR source', undefined, undefined])
+    expect(parseFolderProject(serializeFolderProject(parsed))).toEqual(parsed)
+  })
   it('round trips source icon anchors and rejects malformed markers', () => {
     const value = document()
     value.cards[0]!.regions = [{ id: 'r', ruby: true, rubyFontSize: 12, rubyGap: -3, sourceIcons: [{ id: 'i', assetId: 'a', x: 10, y: 20, width: 30, height: 40 }] }] as never

@@ -297,7 +297,7 @@ export function useEditorOCR({
       setMessage('領域が変更されたため、OCR候補を反映しませんでした。認識し直してください。')
       return
     }
-    editor.updateRegion(regionId, { originalText: ocrCandidate.value.trim() })
+    editor.updateRegion(regionId, { originalText: ocrCandidate.value.trim(), lastOcrText: ocrCandidate.value.trim() })
     finishOCRCandidate()
     setMessage('OCR候補を元テキストへ反映しました。')
   }

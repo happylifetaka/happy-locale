@@ -167,6 +167,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
         displayName: `領域 ${sequence}`,
         ...draft.bounds,
         originalText: draft.originalText,
+        lastOcrText: draft.originalText,
         translatedText: '',
         translationStatus: 'untranslated',
         textStyles: [],
@@ -360,7 +361,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
             throw new Error('アイコンに合わせた小さな拡張だけを反映できます。')
           boundsPatch = rebaseRegionBounds(withoutTransferredIcons(existing), fitted, current.imageWidth, current.imageHeight)
         }
-        updates.set(region.id, { ...existing, ...boundsPatch, sourceIcons: region.sourceIcons ?? [], originalText: region.originalText, translationStatus: region.originalText !== existing.originalText && existing.translationStatus === 'reviewed' ? statusForTranslation(existing.translatedText) : existing.translationStatus })
+        updates.set(region.id, { ...existing, ...boundsPatch, sourceIcons: region.sourceIcons ?? [], originalText: region.originalText, lastOcrText: region.originalText, translationStatus: region.originalText !== existing.originalText && existing.translationStatus === 'reviewed' ? statusForTranslation(existing.translatedText) : existing.translationStatus })
       }
       else {
         additions.push(region)

@@ -1,3 +1,4 @@
+import type { RegionApplyIssue } from './apply-issues'
 import type { OCRProvider } from '~/services/ocr/types'
 import type { AssetDiscoveryState } from '~/types/asset-discovery'
 import type { FolderProjectCard, ImageAsset, RegionDraft, TextRegion } from '~/types/editor'
@@ -18,6 +19,8 @@ export interface IconRegionRow {
   boundsBefore?: RegionDraft
   iconCount: number
   error?: string
+  /** 自動反映は原文を保護し、明示プレビューへ案内する。 */
+  needsTextReview?: boolean
 }
 
 interface AnalyzeIconRegionsOptions {
@@ -30,12 +33,14 @@ interface AnalyzeIconRegionsOptions {
   provider: OCRProvider
   isCurrent: () => boolean
   status: (text: string) => void
+  preserveEditedText?: boolean
 }
 
 /** 小さなはみ出しだけを最小拡張し、領域が無い場合だけ検出する。結果は確認待ちのコピー。 */
 export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
   const { card, discovery, assets, image, imageDigest, assetDigests, provider, isCurrent, status } = options
   const warnings: string[] = []
+  const issues: RegionApplyIssue[] = []
   const current = () => {
     if (!isCurrent())
       throw new Error('解析対象が変更されたか中止されました。')
@@ -50,8 +55,10 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
     candidates = detection.candidates
   }
   const additions = candidates.filter(candidate => candidate.selected).filter((candidate) => {
-    if (card.regions.some(region => intersectionArea(region, candidate) > 0)) {
+    const overlapping = card.regions.find(region => intersectionArea(region, candidate) > 0)
+    if (overlapping) {
       warnings.push('既存領域と重なる領域候補は追加しません。既存の枠を優先します。')
+      issues.push({ message: warnings.at(-1)!, regionId: overlapping.id })
       return false
     }
     return true
@@ -60,11 +67,12 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
   if (regions.length > 200)
     throw new Error('一度に解析できる領域は200件までです。対象を整理してください。')
   if (!regions.length && candidates.length)
-    return { rows: [], warnings, candidates }
+    return { rows: [], warnings, candidates, issues }
   if (!regions.length)
     throw new Error('解析対象の領域がありません。領域候補の選択や手動追加を確認してください。')
   const mapping = mapDiscoveryToRegions(discovery, card.id, regions, imageDigest, { width: card.imageWidth, height: card.imageHeight }, assets, assetDigests)
   warnings.push(...mapping.warnings)
+  issues.push(...mapping.issues)
   const rows: IconRegionRow[] = []
   const cleaned = mapping.regions
   for (const [index, region] of cleaned.entries()) {
@@ -81,6 +89,13 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
     rows.push(row)
     if (mapping.blocked.has(region.id)) {
       row.error = '対応を確定できないアイコンがあります。候補または領域の枠を調整して再解析してください。'
+      continue
+    }
+    if (options.preserveEditedText && before && (before.lastOcrText !== undefined || before.originalText.trim()) && before.originalText !== before.lastOcrText) {
+      row.region = structuredClone(before)
+      delete row.boundsBefore
+      row.needsTextReview = true
+      row.error = '原文を保持（手修正済み／OCR履歴なし）'
       continue
     }
     try {
@@ -103,6 +118,7 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
         const result = await provider.recognize(blob, { language: 'eng', layout: regionTextLayout(region) })
         current()
         row.region.originalText = checkedSourceIconText(result, region, assets)
+        row.region.lastOcrText = row.region.originalText
       }
     }
     catch (error) {
@@ -110,5 +126,5 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
       row.error = error instanceof Error ? error.message : String(error)
     }
   }
-  return { rows, warnings, candidates }
+  return { rows, warnings, candidates, issues }
 }

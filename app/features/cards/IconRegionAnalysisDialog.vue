@@ -4,7 +4,7 @@ import type { IconRegionRow } from '~/services/asset-discovery/analyze-regions'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useIconRegionAnalysis } from './useIconRegionAnalysis'
 
-const props = defineProps<{ options: DiscoveryWorkspaceOptions }>()
+const props = defineProps<{ options: DiscoveryWorkspaceOptions, initialRegionId?: string }>()
 const emit = defineEmits<{ close: [], editRegions: [] }>()
 const model = useIconRegionAnalysis(props.options)
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -23,7 +23,9 @@ function expansionLabel(row: IconRegionRow) {
 }
 watch(model.rows, (rows) => {
   checked.value = rows.filter(row => !row.error).map(row => row.region.id)
-  focused.value = rows[0]?.region.id ?? ''
+  focused.value = rows.find(row => row.region.id === props.initialRegionId)?.region.id ?? rows[0]?.region.id ?? ''
+  if (props.initialRegionId)
+    checked.value = rows.filter(row => !row.error && row.region.id === props.initialRegionId).map(row => row.region.id)
 })
 function close() {
   if (model.running.value)
@@ -40,7 +42,7 @@ onMounted(() => dialog.value?.showModal())
         閉じる
       </button>
     </header>
-    <p>割当済みアイコンを原文に反映します。既存領域・訳文は保持します。</p>
+    <p>原文を再OCRします。手修正も置き換わるため、変更前後を比較して反映してください。訳文は保持します。</p>
     <details>
       <summary>反映の仕組み</summary>
       <p>領域も候補もないカードだけ新規検出します。OCR用コピーのアイコンを塗りつぶし、[icon:アセット名] に置き換えます。元画像は変更しません。</p>
@@ -100,7 +102,7 @@ onMounted(() => dialog.value?.showModal())
       選択した領域へ位置と原文を反映
     </button>
     <button type="button" :disabled="busy" @click="emit('editRegions')">
-      通常の領域候補で枠を調整する
+      カードで領域枠を調整
     </button>
   </dialog>
 </template>

@@ -1,3 +1,4 @@
+import type { RegionApplyIssue } from './apply-issues'
 import type { AssetDiscoveryState, IconOccurrence } from '~/types/asset-discovery'
 import type { ImageAsset, TextRegion } from '~/types/editor'
 import { intersectionArea } from './geometry'
@@ -10,6 +11,7 @@ export function mapDiscoveryToRegions(state: AssetDiscoveryState, cardId: string
   const mapped = new Map<string, IconOccurrence[]>()
   const blocked = new Set<string>()
   const warnings: string[] = []
+  const issues: RegionApplyIssue[] = []
   const items = state.occurrences.filter(item => item.cardId === cardId && item.decision !== 'excluded')
   const eligible = items.filter((item) => {
     const group = state.groups.find(group => group.memberIds.includes(item.id))
@@ -37,6 +39,7 @@ export function mapDiscoveryToRegions(state: AssetDiscoveryState, cardId: string
     if (problem) {
       const name = assets.find(asset => asset.id === item.assetId)?.name || group?.name || '未割当アイコン'
       warnings.push(`${name} (${Math.round(item.bounds.x)}, ${Math.round(item.bounds.y)}): ${problem}。候補は保持しています。`)
+      issues.push({ message: `${name}: ${problem}`, occurrenceId: item.id, regionId: touching[0]?.id })
       touching.forEach(region => blocked.add(region.id))
       continue
     }
@@ -45,7 +48,7 @@ export function mapDiscoveryToRegions(state: AssetDiscoveryState, cardId: string
     const occurrence = approveOccurrence({ ...item, owner: { kind: 'region', id: owner.id } }, imageDigest, assetDigests.get(item.assetId!)!)
     mapped.set(owner.id, [...mapped.get(owner.id) ?? [], occurrence])
   }
-  return { mapped, blocked, warnings, regions: fitted.regions }
+  return { mapped, blocked, warnings, issues, regions: fitted.regions }
 }
 
 /** 自動反映した古い相対座標だけを外す。手動指定は残して重複・衝突を検証する。 */

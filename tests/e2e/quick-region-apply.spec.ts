@@ -15,6 +15,11 @@ for (const [batch, detectFresh] of [[true, false], [true, true], [false, false]]
       const formatURL = '/_nuxt/services/project/format.ts'
       const { serializeFolderProject } = await import(/* @vite-ignore */ formatURL) as typeof import('../../app/services/project/format')
       const fixture = await prepareIconRegionUIProject(!batch, true)
+      // このケースは未修正のOCR原文。手修正・旧形式の保持はworkflow specで別に検証する。
+      for (const card of fixture.project.cards) {
+        for (const region of card.regions)
+          region.lastOcrText = region.originalText
+      }
       const second = fixture.project.cards[1]!
       const region = second.regions[0]!
       second.ocrCandidates = [{ id: 'second-candidate', x: region.x, y: region.y, width: region.width, height: region.height, selected: true, text: 'Gain two tokens', confidence: 90, lines: [] }]
@@ -44,6 +49,8 @@ for (const [batch, detectFresh] of [[true, false], [true, true], [false, false]]
       if (batch) {
         await expect(page.getByLabel('追加・アイコン反映まで実行')).toBeChecked()
         await page.getByRole('button', { name: 'まとめて領域検出', exact: true }).click()
+        await page.getByRole('dialog', { name: '領域・アイコンを反映', exact: true }).getByRole('button', { name: 'すべて', exact: true }).click()
+        await page.getByRole('button', { name: '選択した2枚に反映', exact: true }).click()
         await expect(page.getByText('2/2枚処理済み', { exact: true })).toBeVisible({ timeout: 45000 })
       }
       else {
@@ -68,6 +75,8 @@ for (const [batch, detectFresh] of [[true, false], [true, true], [false, false]]
         await expect(page.getByLabel('追加・アイコン反映まで実行')).toBeVisible()
         await page.getByLabel('追加・アイコン反映まで実行').check()
         await page.getByRole('button', { name: 'まとめて領域検出', exact: true }).click()
+        await page.getByRole('dialog', { name: '領域・アイコンを反映', exact: true }).getByRole('button', { name: 'すべて', exact: true }).click()
+        await page.getByRole('button', { name: '選択した2枚に反映', exact: true }).click()
         await expect(page.getByRole('button', { name: '中止（完了分は保持）', exact: true })).toHaveCount(0, { timeout: 45000 })
         await save()
         await expect.poll(async () => (await saved()).cards.map(card => card.regions.length)).toEqual([1, 1])

@@ -29,7 +29,7 @@ it('applies multiple regions and consumes candidates atomically with one Undo, p
   const s = setup()
   const snapshot = s.store.snapshot()
   s.editor.applyIconAnalysis(s.before, [s.updated, s.added], s.candidates, [], s.id)
-  expect(s.store.activeCard.regions[0]).toEqual({ ...s.before.regions[0], originalText: s.updated.originalText, sourceIcons: s.updated.sourceIcons, translationStatus: 'draft' })
+  expect(s.store.activeCard.regions[0]).toEqual({ ...s.before.regions[0], originalText: s.updated.originalText, lastOcrText: s.updated.originalText, sourceIcons: s.updated.sourceIcons, translationStatus: 'draft' })
   expect(s.store.readCardCandidateEdit(s.id).candidates).toEqual([])
   expect(s.store.activeCard.regions.at(-1)).toEqual(s.added)
   // owner is a disposable hint; adopting its candidate clears this stale reference.

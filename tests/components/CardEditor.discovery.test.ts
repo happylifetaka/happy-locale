@@ -29,7 +29,7 @@ it('lazily retains the discovery workspace across tabs but not project generatio
   expect(wrapper.findComponent({ name: 'AssetDiscoveryWorkspace' }).vm === discovery.vm).toBe(false)
 })
 
-it('blocks tab changes while discovery is working, then connects Next to the card preview', async () => {
+it('blocks tab changes while discovery is working, then offers the optional card preview', async () => {
   const { wrapper, toolbar } = await mountSavedEditor()
   toolbar.vm.$emit('view', 'discovery')
   await nextTick()
@@ -42,8 +42,21 @@ it('blocks tab changes while discovery is working, then connects Next to the car
   expect(toolbar.props('currentView')).toBe('discovery')
   discovery.vm.$emit('working', false)
   discovery.vm.$emit('analyze-regions')
-  await nextTick()
+  await flushPromises()
   expect(toolbar.props('currentView')).toBe('card')
   expect(discovery.isVisible()).toBe(false)
   expect(wrapper.findComponent({ name: 'IconRegionAnalysisDialog' }).exists()).toBe(true)
+})
+
+it('connects Next to target selection and resets it after a project change', async () => {
+  const { wrapper, toolbar } = await mountSavedEditor()
+  toolbar.vm.$emit('view', 'discovery')
+  await nextTick()
+  wrapper.findComponent({ name: 'AssetDiscoveryWorkspace' }).vm.$emit('apply-regions', ['two'])
+  await nextTick()
+  expect(wrapper.findComponent({ name: 'RegionApplyDialog' }).props('initialIds')).toEqual(['two'])
+  expect(wrapper.findComponent({ name: 'IconRegionAnalysisDialog' }).exists()).toBe(false)
+  editorRuntime().setDirectory({ name: 'another-project' } as FileSystemDirectoryHandle)
+  await nextTick()
+  expect(wrapper.findComponent({ name: 'RegionApplyDialog' }).exists()).toBe(false)
 })

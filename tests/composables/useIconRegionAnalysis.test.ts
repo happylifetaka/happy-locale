@@ -40,7 +40,7 @@ function setup() {
   const model = scope.run(() => useIconRegionAnalysis(options))!
   cleanup.push(() => scope.stop())
   const region = JSON.parse(JSON.stringify(editor.project.value.regions[0]!))
-  const result = { rows: [{ before: region, region: { ...region, originalText: 'Gain [icon:synthetic-icon]' }, iconCount: 1 }], warnings: [], candidates: [] }
+  const result = { rows: [{ before: region, region: { ...region, originalText: 'Gain [icon:synthetic-icon]' }, iconCount: 1 }], warnings: [], candidates: [], issues: [] }
   vi.mocked(analyzeIconRegions).mockResolvedValue(result)
   return { store, runtime, editor, options, model, result, scope, bitmap }
 }

@@ -214,7 +214,7 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
       await verify()
       const result = await registration.register(id, draft, { groupId, linkGroupMembers: true, isCurrent: () => creation.value === draft && selectedId.value === id && creationGroupId.value === groupId })
       if (result) {
-        notice.value = result.warning ?? 'アセットを登録し、グループ全体に関連付けました。「次へ：領域検出・アイコン反映」で位置と原文を確認してください。'
+        notice.value = result.warning ?? 'グループに登録しました。「次へ」で対象カードに反映できます。'
         creation.value = null
       }
     })

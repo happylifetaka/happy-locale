@@ -140,6 +140,7 @@ export function normalizeRegion(value: unknown, index: number): TextRegion | nul
     width: Math.max(0, number(value.width)),
     height: Math.max(0, number(value.height)),
     originalText: string(value.originalText),
+    ...(typeof value.lastOcrText === 'string' ? { lastOcrText: string(value.lastOcrText) } : {}),
     translatedText,
     translationStatus,
     textStyles: Array.isArray(value.textStyles)

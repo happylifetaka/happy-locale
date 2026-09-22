@@ -31,6 +31,7 @@ import AssetDiscoveryWorkspace from '~/features/cards/AssetDiscoveryWorkspace.vu
 import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTranslation } from '~/features/cards/cardEditingContext'
 import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
 import IconRegionAnalysisDialog from '~/features/cards/IconRegionAnalysisDialog.vue'
+import RegionApplyDialog from '~/features/cards/RegionApplyDialog.vue'
 import { useCandidateReview } from '~/features/cards/useCandidateReview'
 import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
 import { useDiscoveryImageIdentity } from '~/features/cards/useDiscoveryImageIdentity'
@@ -41,6 +42,7 @@ import { useEditorNotifications } from '~/features/cards/useEditorNotifications'
 import { useProjectActivity } from '~/features/cards/useProjectActivity'
 import { useProjectAdoption } from '~/features/cards/useProjectAdoption'
 import { useQuickRegionApply } from '~/features/cards/useQuickRegionApply'
+import { useRegionApplyFlow } from '~/features/cards/useRegionApplyFlow'
 import { TesseractOCRProvider } from '~/services/ocr/tesseract'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import {
@@ -529,6 +531,10 @@ function detectRegionCandidates() {
 function editAnalysisRegions() {
   iconAnalysisOpen.value = false
   switchView('card')
+  if (editor.project.value.regions.length) {
+    switchInspectorTab('list')
+    return
+  }
   switchInspectorTab('ocr')
   if (batchOCRResults.value.get(currentImageId.value)?.length)
     candidateReview.showBatchOCRCandidates(currentImageId.value)
@@ -549,14 +555,22 @@ const discoveryOptions: DiscoveryWorkspaceOptions = {
   selectCard: selectProjectCard,
 }
 const quickRegionApply = useQuickRegionApply(discoveryOptions, setMessage)
-const batchAutoApply = ref(true)
+const { applyTargetIds, iconAnalysisRegionId, discoveryFocus, batchAutoApply, openApplyTargets, applyTargetCards, previewCard, resolveApplyIssue } = useRegionApplyFlow({
+  discovery: discoveryOptions,
+  quickApply: quickRegionApply,
+  discoveryWorking,
+  iconAnalysisOpen,
+  switchView,
+  selectRegion: selectProjectRegion,
+  setMessage,
+})
 const reflectCandidateIcons = ref(true)
 const autoApplyEnabled = computed(() => !isDemo.value && batchAutoApply.value)
 const canReflectCandidateIcons = computed(() => !isDemo.value && Boolean(projectStore.assetDiscovery?.occurrences.some(item => item.cardId === currentImageId.value && item.assetId && item.decision !== 'excluded')))
 const combinedBatchStates = computed(() => autoApplyEnabled.value ? new Map([...batchOCRStates.value, ...quickRegionApply.states.value]) : batchOCRStates.value)
 async function startRegionBatch() {
   if (autoApplyEnabled.value)
-    await quickRegionApply.start(quickRegionApply.eligible.value.map(card => card.id))
+    openApplyTargets()
   else
     await startBatchOCR()
 }
@@ -565,7 +579,7 @@ async function confirmCandidatesWithIcons() {
     confirmRegionCandidates()
     return
   }
-  await quickRegionApply.start([currentImageId.value])
+  await applyTargetCards([currentImageId.value])
   if (!regionCandidates.value.length)
     switchInspectorTab('text')
 }
@@ -812,7 +826,8 @@ provideCardTranslation({
       @open-glossary="glossaryOpen = true"
       @open-diagnostics="diagnosticsOpen = true"
     />
-    <IconRegionAnalysisDialog v-if="iconAnalysisOpen" :options="discoveryOptions" @close="iconAnalysisOpen = false" @edit-regions="editAnalysisRegions" />
+    <IconRegionAnalysisDialog v-if="iconAnalysisOpen" :options="discoveryOptions" :initial-region-id="iconAnalysisRegionId" @close="iconAnalysisOpen = false" @edit-regions="editAnalysisRegions" />
+    <RegionApplyDialog v-if="applyTargetIds" :cards="quickRegionApply.eligible.value" :initial-ids="applyTargetIds" :active-card-id="currentImageId" @close="applyTargetIds = null" @apply="applyTargetCards" @preview="previewCard" />
     <GlossaryDialog
       :open="glossaryOpen"
       :entries="glossary"
@@ -947,6 +962,8 @@ provideCardTranslation({
           :batch-translation-count="translationReviewCards.filter(card => card.regions.length).length"
           :translation-running="translationRunning"
           @update:batch-auto-apply="batchAutoApply = $event"
+          @apply-current-card="applyTargetCards([currentImageId])"
+          @resolve-apply-issue="resolveApplyIssue"
           @start-batch-translation="openTranslationReview(undefined, false, isDemo)"
           @select="selectProjectCard"
           @add="addProjectCards"
@@ -1054,8 +1071,10 @@ provideCardTranslation({
       :key="projectRuntime.projectGeneration.value"
       :options="discoveryOptions"
       :active="currentView === 'discovery'"
+      :focus-occurrence="discoveryFocus"
       @working="discoveryWorking = $event"
-      @analyze-regions="switchView('card'); iconAnalysisOpen = true"
+      @analyze-regions="previewCard(currentImageId)"
+      @apply-regions="openApplyTargets"
     />
     <AssetEditor
       v-show="currentView === 'assets'"

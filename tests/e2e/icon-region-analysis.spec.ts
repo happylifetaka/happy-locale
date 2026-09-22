@@ -26,7 +26,9 @@ for (const [fresh, protrusion] of [[false, false], [true, false], [false, true],
       await page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true }).click()
       async function open() {
         await page.getByRole('button', { name: 'アセット検出', exact: true }).click()
-        await page.getByRole('button', { name: '次へ：領域検出・アイコン反映', exact: true }).click()
+        if (!await page.getByRole('button', { name: '反映前に個別プレビュー', exact: true }).isVisible())
+          await page.getByText('使い方・保存について', { exact: true }).click()
+        await page.getByRole('button', { name: '反映前に個別プレビュー', exact: true }).click()
       }
       await open()
       const dialog = page.getByRole('dialog', { name: '領域検出・アイコン反映', exact: true })

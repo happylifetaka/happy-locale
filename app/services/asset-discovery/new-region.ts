@@ -13,6 +13,7 @@ export function regionFromCandidate(candidate: RegionCandidate, index: number): 
     width: candidate.width,
     height: candidate.height,
     originalText: candidate.text,
+    lastOcrText: candidate.text,
     translatedText: '',
     translationStatus: 'untranslated',
     textStyles: [],

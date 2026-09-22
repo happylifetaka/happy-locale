@@ -1,4 +1,5 @@
 import type { DiscoveryWorkspaceOptions } from './useDiscoveryWorkspace'
+import type { CardApplyIssues, RegionApplyIssue } from '~/services/asset-discovery/apply-issues'
 import type { OCRQueueCardState } from '~/services/ocr/queue'
 import type { AssetDiscoveryState } from '~/types/asset-discovery'
 import type { CardProject, FolderProjectCard, ImageAsset } from '~/types/editor'
@@ -20,7 +21,7 @@ export function useQuickRegionApply(options: DiscoveryWorkspaceOptions, setMessa
   const total = ref(0)
   const status = ref('')
   const states = shallowRef(new Map<string, OCRQueueCardState>())
-  const issues = shallowRef<{ cardId: string, cardName: string, messages: string[] }[]>([])
+  const issues = shallowRef<CardApplyIssues[]>([])
   const digestCache = createImageDigestCache()
   let disposed = false
   let applying = false
@@ -59,6 +60,7 @@ export function useQuickRegionApply(options: DiscoveryWorkspaceOptions, setMessa
     const directory = runtime.directory.value
     const selectedCard = options.currentImageId.value
     const selectedFile = runtime.cardSourceFile.value
+    const previousStates = states.value
     const shared = JSON.stringify(store.assets)
     const assets = clone(store.assets) as ImageAsset[]
     const sources = new Map(assets.map(asset => [asset.id, runtime.pendingAssetWrites.value.get(asset.id) ?? runtime.assetFiles.value.get(asset.id)]))
@@ -70,8 +72,7 @@ export function useQuickRegionApply(options: DiscoveryWorkspaceOptions, setMessa
     completed.value = 0
     total.value = targets.length
     status.value = '領域とアイコンを解析しています…'
-    issues.value = []
-    states.value = new Map(targets.map(card => [card.id, { status: 'queued' }]))
+    states.value = new Map([...previousStates, ...targets.map(card => [card.id, { status: 'queued' }] as const)])
     try {
       for (const target of targets) {
         if (!validRun())
@@ -112,7 +113,7 @@ export function useQuickRegionApply(options: DiscoveryWorkspaceOptions, setMessa
           assertImageDimensions(bitmap.width, bitmap.height)
           if (bitmap.width !== target.imageWidth || bitmap.height !== target.imageHeight)
             throw new Error('元画像の寸法が変わっています。')
-          const result = await analyzeIconRegions({ card: target, discovery, assets, image: bitmap, imageDigest, assetDigests, provider: options.provider, isCurrent: current, status: (value) => {
+          const result = await analyzeIconRegions({ card: target, discovery, assets, image: bitmap, imageDigest, assetDigests, provider: options.provider, preserveEditedText: true, isCurrent: current, status: (value) => {
             if (current())
               status.value = `${completed.value + 1}/${targets.length} ${target.imageName}: ${value}`
           } })
@@ -131,9 +132,15 @@ export function useQuickRegionApply(options: DiscoveryWorkspaceOptions, setMessa
               editor.applyIconAnalysisToCard(projectOf(target), chosen.map(row => row.region), beforeCandidates, result.candidates.filter(candidate => !consumed.has(candidate.id)), store.document ? target.id : null)
           }
           finally { applying = false }
-          const messages = [...result.warnings, ...result.rows.filter(row => row.error).map(row => `${row.region.displayName}: ${row.error}`)]
-          if (messages.length)
-            issues.value = [...issues.value, { cardId: target.id, cardName: target.imageName, messages }]
+          const details: RegionApplyIssue[] = [
+            ...result.issues ?? result.warnings.map(message => ({ message })),
+            ...result.rows.filter(row => row.error).map(row => ({ message: `${row.region.displayName}: ${row.error}`, regionId: row.region.id, preview: row.needsTextReview })),
+          ]
+          const messages = details.map(issue => issue.message)
+          issues.value = [
+            ...issues.value.filter(issue => issue.cardId !== target.id),
+            ...messages.length ? [{ cardId: target.id, cardName: target.imageName, messages, details }] : [],
+          ]
           state(target.id, { status: 'applied', regions: chosen.length, icons: chosen.reduce((sum, row) => sum + row.iconCount, 0), issues: messages.length })
         }
         catch (error) {
@@ -141,7 +148,7 @@ export function useQuickRegionApply(options: DiscoveryWorkspaceOptions, setMessa
             break
           const message = error instanceof Error ? error.message : String(error)
           state(target.id, { status: 'error', message })
-          issues.value = [...issues.value, { cardId: target.id, cardName: target.imageName, messages: [message] }]
+          issues.value = [...issues.value.filter(issue => issue.cardId !== target.id), { cardId: target.id, cardName: target.imageName, messages: [message] }]
         }
         finally {
           activeRequest.value = null
@@ -154,7 +161,10 @@ export function useQuickRegionApply(options: DiscoveryWorkspaceOptions, setMessa
       running.value = false
       options.ocrRunning.value = false
       if (!disposed && generation === runtime.projectGeneration.value) {
-        states.value = new Map([...states.value].filter(([, value]) => value.status !== 'queued' && value.status !== 'processing'))
+        states.value = new Map([...states.value].flatMap(([id, value]) => {
+          const retained = value.status === 'queued' || value.status === 'processing' ? previousStates.get(id) : value
+          return retained ? [[id, retained] as const] : []
+        }))
         status.value = `${completed.value}/${total.value}枚処理${completed.value < total.value ? '（中止）' : '完了'}${issues.value.length ? `・要確認${issues.value.length}枚` : ''}。各領域で修正できます。`
         setMessage(status.value)
       }

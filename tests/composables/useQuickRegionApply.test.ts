@@ -57,6 +57,7 @@ function setup() {
       { before: null, region: regionFromCandidate(card.ocrCandidates![0]!, 1), candidateId: 'new-candidate', iconCount: 0 },
     ],
     warnings: [],
+    issues: [],
     candidates: card.ocrCandidates ?? [],
   }))
   return { store, runtime, editor, options, model, bitmap, message, scope, first }
@@ -84,6 +85,34 @@ it('applies each card without switching, retains unchecked candidates and undoes
   expect(s.store.readCardCandidateEdit('second')).toEqual(secondAfter)
 })
 
+it('only processes selected eligible cards and explicitly enables original-text protection', async () => {
+  const s = setup()
+  const before = s.store.readCardCandidateEdit(s.first.id)
+  await s.model.start(['second', 'missing'])
+  expect(analyzeIconRegions).toHaveBeenCalledOnce()
+  expect(vi.mocked(analyzeIconRegions).mock.calls[0]![0]).toMatchObject({ card: { id: 'second' }, preserveEditedText: true })
+  expect(s.store.readCardCandidateEdit(s.first.id)).toEqual(before)
+  expect(s.model.total.value).toBe(1)
+})
+
+it('retains other cards issues and replaces only the completed target result', async () => {
+  const s = setup()
+  const original = vi.mocked(analyzeIconRegions).getMockImplementation()!
+  vi.mocked(analyzeIconRegions).mockImplementation(async (args) => {
+    const result = await original(args)
+    return { ...result, issues: [{ message: '確認が必要', regionId: args.card.regions[0]!.id }] }
+  })
+  await s.model.start([s.first.id])
+  expect(s.model.issues.value.map(issue => issue.cardId)).toEqual([s.first.id])
+  vi.mocked(analyzeIconRegions).mockImplementation(async args => ({ rows: [], warnings: [], issues: [], candidates: args.card.ocrCandidates ?? [] }))
+  await s.model.start(['second'])
+  expect(s.model.issues.value.map(issue => issue.cardId)).toEqual([s.first.id])
+  expect(s.model.states.value.get(s.first.id)).toMatchObject({ status: 'applied', issues: 1 })
+  await s.model.start([s.first.id])
+  expect(s.model.issues.value).toEqual([])
+  expect(s.model.states.value.get('second')).toMatchObject({ status: 'applied', issues: 0 })
+})
+
 it('keeps failed existing regions intact but adds failed new regions without unsafe icon changes', async () => {
   const s = setup()
   const previous = s.store.readCardCandidateEdit(s.first.id)
@@ -91,7 +120,7 @@ it('keeps failed existing regions intact but adds failed new regions without uns
   vi.mocked(analyzeIconRegions).mockResolvedValue({ rows: [
     { before: previous.project.regions[0]!, region: { ...previous.project.regions[0]!, originalText: 'must not apply' }, iconCount: 0, error: '曖昧' },
     { before: null, candidateId: 'new-candidate', region: { ...base, y: base.y - 2, height: base.height + 2 }, boundsBefore: base, iconCount: 0, error: 'OCR失敗' },
-  ], warnings: ['候補の位置を確認'], candidates: previous.candidates })
+  ], warnings: ['候補の位置を確認'], issues: [{ message: '候補の位置を確認' }], candidates: previous.candidates })
   await s.model.start([s.first.id])
   expect(s.store.activeCard.regions[0]).toEqual(previous.project.regions[0])
   expect(s.store.activeCard.regions[1]).toEqual({ ...base, sourceIcons: [] })
@@ -193,6 +222,7 @@ it.each([true, false])('keeps newly detected unchecked candidates atomically, in
   vi.mocked(analyzeIconRegions).mockResolvedValue({
     rows: selected ? [{ before: null, region: regionFromCandidate(found[0]!, 0), candidateId: found[0]!.id, iconCount: 0 }] : [],
     warnings: [],
+    issues: [],
     candidates: found,
   })
   await s.model.start([s.first.id])

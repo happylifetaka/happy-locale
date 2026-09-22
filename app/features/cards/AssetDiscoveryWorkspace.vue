@@ -11,8 +11,8 @@ import DiscoveryThumbnail from './DiscoveryThumbnail.vue'
 import { useDiscoveryThumbnails } from './useDiscoveryThumbnails'
 import { useDiscoveryWorkspace } from './useDiscoveryWorkspace'
 
-const props = withDefaults(defineProps<{ options: DiscoveryWorkspaceOptions, active?: boolean }>(), { active: true })
-const emit = defineEmits<{ working: [value: boolean], analyzeRegions: [] }>()
+const props = withDefaults(defineProps<{ options: DiscoveryWorkspaceOptions, active?: boolean, focusOccurrence?: { id: string, request: number } | null }>(), { active: true })
+const emit = defineEmits<{ working: [value: boolean], analyzeRegions: [], applyRegions: [ids: string[]] }>()
 const model = useDiscoveryWorkspace(props.options)
 const thumbnails = useDiscoveryThumbnails(props.options)
 const titleId = useId()
@@ -42,6 +42,16 @@ function checkAll(event: Event) {
   checked.value = (event.target as HTMLInputElement).checked ? filtered.value.map(item => item.id) : []
 }
 const selectedGroup = computed(() => model.groups.value.find(group => group.memberIds.includes(model.selectedId.value ?? '')))
+watch(() => props.focusOccurrence, async (request) => {
+  if (!request)
+    return
+  const item = model.occurrences.value.find(item => item.id === request.id)
+  if (!item)
+    return
+  groupId.value = model.groups.value.find(group => group.memberIds.includes(item.id))?.id ?? 'ungrouped'
+  await model.select(item.id)
+  occurrencePage.value = Math.max(0, Math.floor(filtered.value.findIndex(candidate => candidate.id === item.id) / 24))
+}, { immediate: true })
 const currentSelection = computed(() => model.selected.value?.cardId === props.options.currentImageId.value ? model.selected.value : undefined)
 const currentImage = computed(() => props.options.runtime.cardImage.value)
 const editableCard = computed(() => model.activeCard.value)
@@ -125,17 +135,20 @@ onScopeDispose(() => emit('working', false))
       <h2 :id="titleId">
         アセット検出
       </h2>
-      <button type="button" :disabled="model.working.value || model.pending.value.size > 0 || Boolean(model.creation.value)" @click="emit('analyzeRegions')">
+      <button type="button" class="primary" :disabled="model.working.value || model.pending.value.size > 0 || Boolean(model.creation.value)" @click="emit('applyRegions', cardIds)">
         次へ：領域検出・アイコン反映
       </button>
     </header>
-    <p>アイコン候補の収集・確認 → グループ整理・登録 → 領域へ反映。登録済みアセットの調整は「アセット編集」で行えます。</p>
+    <p>グループにアセットを割り当てたら「次へ」。枠の微調整は反映後に行えます。</p>
     <details class="help">
       <summary>使い方・保存について</summary>
       <p>画像は端末内で処理します。候補の整理・登録だけでは、原文・訳文・カードの描画を変更しません。</p>
       <p>候補と調整内容は「プロジェクト保存」で保存できます。この画面の編集は即時に保存対象へ反映され、「候補編集を戻す」で取り消せます。</p>
       <p>画面を切り替えても選択・比較案は保持します。処理中は画面切替と保存を待ってください。未適用の再収集案は保存されず、別プロジェクトを開く・ページを閉じると破棄されます。</p>
-      <p>分類・アセット割当後は「次へ」で位置を引き継ぎ、アイコンタグ付きの原文を確認できます。</p>
+      <p>「次へ」で対象カードを選び、アイコンタグ付きの原文をまとめて反映します。</p>
+      <button type="button" :disabled="model.working.value || model.pending.value.size > 0 || Boolean(model.creation.value)" @click="emit('analyzeRegions')">
+        反映前に個別プレビュー
+      </button>
     </details>
     <details :open="model.occurrences.value.length === 0">
       <summary>収集するカードを選ぶ</summary>
@@ -233,7 +246,7 @@ onScopeDispose(() => emit('working', false))
           <button type="button" :disabled="Boolean(model.creation.value) || representative(activeGroup.representativeId)?.decision === 'excluded'" @click="model.prepareRegistration(activeGroup!.id)">
             代表候補からグループ用アセットを登録
           </button>
-          <small>全{{ activeGroup.memberIds.length }}候補に同じアセットを使います。原文への反映は「次へ：領域検出・アイコン反映」で確認します。除外した候補は反映しません。</small>
+          <small>全{{ activeGroup.memberIds.length }}候補に共通。除外した候補は反映しません。</small>
         </fieldset>
         <div class="group-list" tabindex="0" aria-label="グループ一覧（スクロールできます）">
           <button v-for="group in model.groups.value" :key="group.id" type="button" :aria-pressed="groupId === group.id" @click="groupId = group.id">
@@ -313,7 +326,7 @@ onScopeDispose(() => emit('working', false))
                 この候補を代表にする
               </button>
             </template>
-            <p>範囲と分類を調整し、誤検出は除外してください。位置と原文は次の画面で確認して反映します。</p>
+            <p>枠を調整し、誤検出は除外してください。</p>
           </fieldset>
           <AssetCreationPanel v-if="model.creation.value" :image="currentImage" :draft="model.creation.value" :existing-assets="assets" :running="model.registration.running.value" @update="model.creation.value = { ...model.creation.value!, ...$event }" @confirm="model.register" @cancel="model.creation.value = null" />
         </template>

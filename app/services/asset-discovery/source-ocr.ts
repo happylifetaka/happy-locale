@@ -188,8 +188,8 @@ export async function recognizeSourceIconOCR(draft: SourceIconOCRDraft, { image,
 }
 
 /** 原文と消去範囲を一つの通常編集で反映するためのパッチ。適用直前にも承認を検証する。 */
-export function sourceIconOCRPatch(context: SourceIconOCRContext, preview: SourceIconOCRPreview, scope: SourceIconOCRScope): Pick<TextRegion, 'sourceIcons' | 'originalText'> {
+export function sourceIconOCRPatch(context: SourceIconOCRContext, preview: SourceIconOCRPreview, scope: SourceIconOCRScope): Pick<TextRegion, 'sourceIcons' | 'originalText' | 'lastOcrText'> {
   if (!previews.has(preview))
     throw new Error('このセッションで確認した再OCRの結果を使用してください。')
-  return { ...sourceIconPositionPatch(context, preview.draft, scope), originalText: preview.originalText }
+  return { ...sourceIconPositionPatch(context, preview.draft, scope), originalText: preview.originalText, lastOcrText: preview.originalText }
 }

@@ -98,3 +98,29 @@ it('rejects delayed results after cancellation instead of returning an applicabl
   })
   await expect(analyzeIconRegions(s.options)).rejects.toThrow('中止')
 })
+
+it.each(['edited', 'legacy', 'cleared'])('preserves %s original text, bounds and icons during automatic application', async (kind) => {
+  const s = setup()
+  s.region.height = 47
+  s.region.originalText = kind === 'cleared' ? '' : 'Hand corrected source'
+  if (kind === 'legacy')
+    delete s.region.lastOcrText
+  const before = structuredClone(s.region)
+  const result = await analyzeIconRegions({ ...s.options, preserveEditedText: true })
+  expect(result.rows[0]).toMatchObject({ region: before, needsTextReview: true })
+  expect(result.rows[0]!.boundsBefore).toBeUndefined()
+  expect(result.rows[0]!.error).toContain('原文を保持')
+  expect(s.options.provider.recognize).not.toHaveBeenCalled()
+  // 明示プレビューでは、保存前に比較できるOCR案を作る。
+  const preview = await analyzeIconRegions(s.options)
+  expect(preview.rows[0]!.error).toBeUndefined()
+  expect(preview.rows[0]!.region.lastOcrText).toBe(preview.rows[0]!.region.originalText)
+  expect(s.region).toEqual(before)
+})
+
+it('automatically updates unchanged OCR text and records the next baseline', async () => {
+  const s = setup()
+  const result = await analyzeIconRegions({ ...s.options, preserveEditedText: true })
+  expect(result.rows[0]!.error).toBeUndefined()
+  expect(result.rows[0]!.region.lastOcrText).toBe('Gain [icon:synthetic-icon]')
+})

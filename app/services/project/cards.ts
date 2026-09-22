@@ -217,6 +217,7 @@ export function renameCardAssetTokens<T extends CardProject>(
         ...region,
         translatedText,
         originalText,
+        ...(region.lastOcrText !== undefined ? { lastOcrText: region.lastOcrText.replace(pattern, () => `[icon:${nextName}]`) } : {}),
         inlineAssetStyles: renameInlineAssetStyles(
           region.translatedText,
           translatedText,
