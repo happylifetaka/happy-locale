@@ -279,7 +279,7 @@ const {
   detectRegionCandidates: detectPlainRegionCandidates,
 } = candidateEditing
 /** 現在の翻訳設定と、ブラウザへの保存を伴う更新操作。 */
-const { settings: translationSettings, updateSettings: updateTranslationSettings }
+const { settings: translationSettings, configured: translationConfigured, updateSettings: updateTranslationSettings }
   = useTranslationSettings()
 /** 配信設定で外部の翻訳接続機能が有効になっているか。 */
 const translationEndpointEnabled
@@ -585,6 +585,8 @@ onMounted(() => {
   })
   if (props.openSampleOnMount)
     void openProject(true)
+  else if (!translationConfigured.value)
+    translationSettingsOpen.value = true
 })
 
 // 通知・キーイベントは各composableが解放し、ここでは共有runtimeとOCRを終了する。
@@ -826,6 +828,7 @@ provideCardTranslation({
       </button>
     </div>
     <TranslationSettingsDialog
+      :initial-setup="!translationConfigured"
       :endpoint-enabled="translationEndpointEnabled"
       :open="translationSettingsOpen"
       :settings="translationSettings"

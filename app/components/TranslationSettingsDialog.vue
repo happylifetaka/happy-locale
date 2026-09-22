@@ -10,6 +10,7 @@ const props = defineProps<{
   open: boolean
   settings: TranslationSettings
   endpointEnabled: boolean
+  initialSetup?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -112,6 +113,9 @@ function save() {
       <h2 id="translation-settings-title">
         翻訳
       </h2>
+      <p v-if="initialSetup">
+        初回のみ、翻訳方式を選んで保存してください。設定は他のプロジェクトでも共通で使います。
+      </p>
       <fieldset>
         <legend>翻訳プロバイダー</legend>
         <label>

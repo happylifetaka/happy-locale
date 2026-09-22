@@ -221,7 +221,6 @@ function pickCsv(event: Event) {
           用語集を編集
         </button>
         <button
-          v-if="hasOpenProject"
           type="button"
           @click="$emit('openTranslationSettings')"
         >

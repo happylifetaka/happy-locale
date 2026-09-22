@@ -188,6 +188,7 @@ export async function mountEditor(pinia = createPinia(), realInspector = false) 
         TranslationReuseDialog: { name: 'TranslationReuseDialog', props: ['region', 'candidates'], template: '<div />' },
         TranslationPreviewDialog: { name: 'TranslationPreviewDialog', props: ['originalText', 'currentTranslation', 'proposedTranslation'], template: '<div />' },
         TranslationRequestDialog: { name: 'TranslationRequestDialog', props: ['originalText', 'endpoint'], template: '<div />' },
+        TranslationSettingsDialog: { name: 'TranslationSettingsDialog', props: ['open', 'initialSetup', 'settings', 'endpointEnabled'], template: '<div />' },
         TranslationReviewDialog: { name: 'TranslationReviewDialog', props: ['cards', 'initialImport', 'error', 'appliedRows', 'loadImage'], template: '<div />' },
       },
     },
