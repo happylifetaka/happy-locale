@@ -63,10 +63,15 @@ it('defaults to unfinished cards, accepts collection targets and never includes 
 it('routes issues to their exact region, occurrence or source comparison', async () => {
   const s = setup()
   const id = s.options.currentImageId.value
+  s.flow.openApplyResults()
+  expect(s.flow.applyResultsOpen.value).toBe(true)
   await s.flow.resolveApplyIssue(id, { message: 'text', regionId: 'existing', preview: true }, 'preview')
+  expect(s.flow.applyResultsOpen.value).toBe(false)
   expect(s.flow.iconAnalysisRegionId.value).toBe('existing')
   expect(s.ui.iconAnalysisOpen.value).toBe(true)
+  s.flow.openApplyResults()
   await s.flow.resolveApplyIssue(id, { message: 'bounds', regionId: 'existing' }, 'region')
+  expect(s.flow.applyResultsOpen.value).toBe(false)
   expect(s.ui.selectRegion).toHaveBeenCalledWith(id, 'existing')
   const occurrence = s.store.assetDiscovery!.occurrences[0]!
   await s.flow.resolveApplyIssue(id, { message: 'icon', occurrenceId: occurrence.id }, 'discovery')
@@ -80,10 +85,13 @@ it('does not navigate while busy and rejects a delayed preview after a project c
   const s = setup()
   s.ui.discoveryWorking.value = true
   s.flow.openApplyTargets()
+  s.flow.openApplyResults()
+  expect(s.flow.applyResultsOpen.value).toBe(false)
   await s.flow.previewCard('new')
   expect(s.flow.applyTargetIds.value).toBeNull()
   expect(s.options.selectCard).not.toHaveBeenCalled()
   s.ui.discoveryWorking.value = false
+  s.flow.openApplyResults()
   let finish!: () => void
   vi.mocked(s.options.selectCard).mockImplementation(async (id) => {
     await new Promise<void>((resolve) => {
@@ -97,4 +105,5 @@ it('does not navigate while busy and rejects a delayed preview after a project c
   finish()
   await pending
   expect(s.ui.iconAnalysisOpen.value).toBe(false)
+  expect(s.flow.applyResultsOpen.value).toBe(false)
 })

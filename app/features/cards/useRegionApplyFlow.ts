@@ -20,11 +20,13 @@ export function useRegionApplyFlow({ discovery, quickApply, discoveryWorking, ic
   const { runtime, currentImageId, store } = discovery
   const batchAutoApply = ref(true)
   const applyTargetIds = ref<string[] | null>(null)
+  const applyResultsOpen = ref(false)
   const iconAnalysisRegionId = ref<string | undefined>()
   const discoveryFocus = ref<{ id: string, request: number } | null>(null)
   const busy = () => discovery.ocrRunning.value || discovery.busy.value || discoveryWorking.value
   watch(runtime.projectGeneration, () => {
     applyTargetIds.value = null
+    applyResultsOpen.value = false
     discoveryFocus.value = null
     iconAnalysisOpen.value = false
     iconAnalysisRegionId.value = undefined
@@ -36,10 +38,15 @@ export function useRegionApplyFlow({ discovery, quickApply, discoveryWorking, ic
     const selected = ids ?? eligible.filter(card => !card.regions.length).map(card => card.id)
     applyTargetIds.value = (selected.length ? selected : [currentImageId.value]).filter(id => eligible.some(card => card.id === id))
   }
+  function openApplyResults() {
+    if (!busy())
+      applyResultsOpen.value = true
+  }
   async function applyTargetCards(ids: string[]) {
     if (busy())
       return
     applyTargetIds.value = null
+    applyResultsOpen.value = false
     batchAutoApply.value = true
     switchView('card')
     await quickApply.start(ids)
@@ -55,6 +62,7 @@ export function useRegionApplyFlow({ discovery, quickApply, discoveryWorking, ic
     applyTargetIds.value = null
     if (!await navigate(cardId))
       return
+    applyResultsOpen.value = false
     switchView('card')
     iconAnalysisRegionId.value = regionId
     iconAnalysisOpen.value = true
@@ -66,6 +74,7 @@ export function useRegionApplyFlow({ discovery, quickApply, discoveryWorking, ic
     }
     if (!await navigate(cardId))
       return
+    applyResultsOpen.value = false
     if (target === 'discovery' && issue.occurrenceId) {
       if (!store.assetDiscovery?.occurrences.some(item => item.id === issue.occurrenceId && item.cardId === cardId)) {
         setMessage('このアイコン候補は変更済みです。必要なら再反映してください。')
@@ -74,10 +83,11 @@ export function useRegionApplyFlow({ discovery, quickApply, discoveryWorking, ic
       switchView('discovery')
       discoveryFocus.value = { id: issue.occurrenceId, request: (discoveryFocus.value?.request ?? 0) + 1 }
     }
-    else if (issue.regionId) {
+    else {
       switchView('card')
-      await selectRegion(cardId, issue.regionId)
+      if (issue.regionId)
+        await selectRegion(cardId, issue.regionId)
     }
   }
-  return { batchAutoApply, applyTargetIds, iconAnalysisRegionId, discoveryFocus, openApplyTargets, applyTargetCards, previewCard, resolveApplyIssue }
+  return { batchAutoApply, applyTargetIds, applyResultsOpen, iconAnalysisRegionId, discoveryFocus, openApplyTargets, openApplyResults, applyTargetCards, previewCard, resolveApplyIssue }
 }

@@ -10,6 +10,9 @@ it('selects only intended cards and offers unprocessed, current, all and clear p
   const wrapper = mount(RegionApplyDialog, { props: { cards, initialIds: ['new', 'deleted'], activeCardId: 'old' } })
   const button = (name: string) => wrapper.findAll('button').find(button => button.text() === name)!
   expect(wrapper.get('legend').text()).toContain('1/2枚')
+  expect(wrapper.text()).toContain('原文にアイコンタグを挿入')
+  expect(wrapper.text()).toContain('訳文・元画像は変更しません')
+  expect(wrapper.emitted('requestThumbnail')).toEqual([['old'], ['new']])
   await button('選択した1枚に反映').trigger('click')
   expect(wrapper.emitted('apply')).toEqual([[['new']]])
   await button('このカードのみ').trigger('click')

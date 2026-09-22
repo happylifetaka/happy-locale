@@ -32,6 +32,7 @@ import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTr
 import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
 import IconRegionAnalysisDialog from '~/features/cards/IconRegionAnalysisDialog.vue'
 import RegionApplyDialog from '~/features/cards/RegionApplyDialog.vue'
+import RegionApplyResultsDialog from '~/features/cards/RegionApplyResultsDialog.vue'
 import { useCandidateReview } from '~/features/cards/useCandidateReview'
 import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
 import { useDiscoveryImageIdentity } from '~/features/cards/useDiscoveryImageIdentity'
@@ -555,7 +556,7 @@ const discoveryOptions: DiscoveryWorkspaceOptions = {
   selectCard: selectProjectCard,
 }
 const quickRegionApply = useQuickRegionApply(discoveryOptions, setMessage)
-const { applyTargetIds, iconAnalysisRegionId, discoveryFocus, batchAutoApply, openApplyTargets, applyTargetCards, previewCard, resolveApplyIssue } = useRegionApplyFlow({
+const { applyTargetIds, applyResultsOpen, iconAnalysisRegionId, discoveryFocus, batchAutoApply, openApplyTargets, openApplyResults, applyTargetCards, previewCard, resolveApplyIssue } = useRegionApplyFlow({
   discovery: discoveryOptions,
   quickApply: quickRegionApply,
   discoveryWorking,
@@ -827,7 +828,8 @@ provideCardTranslation({
       @open-diagnostics="diagnosticsOpen = true"
     />
     <IconRegionAnalysisDialog v-if="iconAnalysisOpen" :options="discoveryOptions" :initial-region-id="iconAnalysisRegionId" @close="iconAnalysisOpen = false" @edit-regions="editAnalysisRegions" />
-    <RegionApplyDialog v-if="applyTargetIds" :cards="quickRegionApply.eligible.value" :initial-ids="applyTargetIds" :active-card-id="currentImageId" @close="applyTargetIds = null" @apply="applyTargetCards" @preview="previewCard" />
+    <RegionApplyDialog v-if="applyTargetIds" :cards="quickRegionApply.eligible.value" :initial-ids="applyTargetIds" :active-card-id="currentImageId" :discovery="discoveryOptions.store.assetDiscovery" :assets="discoveryOptions.store.assets" :thumbnails="cardThumbnails" @request-thumbnail="requestCardThumbnail" @close="applyTargetIds = null" @apply="applyTargetCards" @preview="previewCard" />
+    <RegionApplyResultsDialog v-if="applyResultsOpen" :issues="quickRegionApply.issues.value" :cards="quickRegionApply.eligible.value" :thumbnails="cardThumbnails" @request-thumbnail="requestCardThumbnail" @close="applyResultsOpen = false" @resolve="resolveApplyIssue" />
     <GlossaryDialog
       :open="glossaryOpen"
       :entries="glossary"
@@ -963,7 +965,7 @@ provideCardTranslation({
           :translation-running="translationRunning"
           @update:batch-auto-apply="batchAutoApply = $event"
           @apply-current-card="applyTargetCards([currentImageId])"
-          @resolve-apply-issue="resolveApplyIssue"
+          @open-apply-results="openApplyResults"
           @start-batch-translation="openTranslationReview(undefined, false, isDemo)"
           @select="selectProjectCard"
           @add="addProjectCards"

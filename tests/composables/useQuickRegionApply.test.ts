@@ -129,6 +129,37 @@ it('keeps failed existing regions intact but adds failed new regions without uns
   expect(s.store.readCardCandidateEdit(s.first.id)).toEqual(previous)
 })
 
+it.each([true, false])('deduplicates only mapping errors, not unrelated OCR failures (mapping=%s)', async (blockedByIconMapping) => {
+  const s = setup()
+  const region = s.store.activeCard.regions[0]!
+  vi.mocked(analyzeIconRegions).mockResolvedValue({
+    rows: [{ before: region, region, iconCount: 0, error: 'row failure', blockedByIconMapping }],
+    warnings: [],
+    issues: [{ message: 'specific issue', regionId: region.id, occurrenceId: 'icon' }],
+    candidates: s.first.ocrCandidates ?? [],
+  })
+  await s.model.start([s.first.id])
+  expect(s.model.issues.value[0]!.messages).toEqual(blockedByIconMapping ? ['specific issue'] : ['specific issue', 'row failure'])
+  expect(s.store.activeCard.regions[0]).toEqual(region)
+})
+
+it('reports source protection separately and preserves its reason and target', async () => {
+  const s = setup()
+  const region = s.store.activeCard.regions[0]!
+  vi.mocked(analyzeIconRegions).mockResolvedValue({
+    rows: [{ before: region, region, iconCount: 1, error: 'OCR履歴がないため、原文を保護しました', needsTextReview: true, sourceProtection: 'no-ocr-history' }],
+    warnings: [],
+    issues: [],
+    candidates: s.first.ocrCandidates ?? [],
+  })
+  await s.model.start([s.first.id])
+  expect(s.model.issues.value[0]!.details).toEqual([{ message: 'OCR履歴がないため、原文を保護しました', regionId: region.id, preview: true, sourceProtection: 'no-ocr-history' }])
+  expect(s.model.status.value).toContain('原文保護で保留1枚')
+  expect(s.model.status.value).not.toContain('検出・対応付けの問題')
+  expect(s.model.states.value.get(s.first.id)).toMatchObject({ regions: 0, icons: 0 })
+  expect(s.store.activeCard.regions[0]).toEqual(region)
+})
+
 it.each(['cancel', 'dispose', 'generation', 'card', 'asset', 'candidate', 'discovery', 'deletion', 'edit-undo'] as const)('discards delayed results after %s', async (reason) => {
   const s = setup()
   const original = vi.mocked(analyzeIconRegions).getMockImplementation()!

@@ -1,4 +1,4 @@
-import type { RegionApplyIssue } from './apply-issues'
+import type { RegionApplyIssue, SourceProtection } from './apply-issues'
 import type { OCRProvider } from '~/services/ocr/types'
 import type { AssetDiscoveryState } from '~/types/asset-discovery'
 import type { FolderProjectCard, ImageAsset, RegionDraft, TextRegion } from '~/types/editor'
@@ -6,6 +6,7 @@ import { detectRegions } from '~/services/ocr/detect-regions'
 import { prepareRegionForOCR } from '~/services/ocr/image'
 import { assertImageDimensions } from '~/utils/file-limits'
 import { regionTextLayout } from '~/utils/region-text-layout'
+import { sourceProtectionReason } from './apply-issues'
 import { intersectionArea } from './geometry'
 import { regionFromCandidate } from './new-region'
 import { mapDiscoveryToRegions } from './region-transfer'
@@ -21,6 +22,8 @@ export interface IconRegionRow {
   error?: string
   /** 自動反映は原文を保護し、明示プレビューへ案内する。 */
   needsTextReview?: boolean
+  sourceProtection?: SourceProtection
+  blockedByIconMapping?: boolean
 }
 
 interface AnalyzeIconRegionsOptions {
@@ -88,14 +91,17 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
       row.boundsBefore = { x: previous.x, y: previous.y, width: previous.width, height: previous.height }
     rows.push(row)
     if (mapping.blocked.has(region.id)) {
+      row.blockedByIconMapping = true
       row.error = '対応を確定できないアイコンがあります。候補または領域の枠を調整して再解析してください。'
       continue
     }
-    if (options.preserveEditedText && before && (before.lastOcrText !== undefined || before.originalText.trim()) && before.originalText !== before.lastOcrText) {
+    const protection = before && sourceProtectionReason(before)
+    if (options.preserveEditedText && before && protection) {
       row.region = structuredClone(before)
       delete row.boundsBefore
       row.needsTextReview = true
-      row.error = '原文を保持（手修正済み／OCR履歴なし）'
+      row.sourceProtection = protection
+      row.error = protection === 'edited' ? '編集済みの原文を保護しました' : 'OCR履歴がないため、原文を保護しました'
       continue
     }
     try {

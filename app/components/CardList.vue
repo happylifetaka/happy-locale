@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { CardApplyIssues, RegionApplyIssue } from '~/services/asset-discovery/apply-issues'
+import type { CardApplyIssues } from '~/services/asset-discovery/apply-issues'
 import type { OCRQueueCardState } from '~/services/ocr/queue'
 import type { FolderProjectCard } from '~/types/editor'
 import type { RegionStatusFilter } from '~/utils/region-filter'
+import { applyIssueCounts } from '~/services/asset-discovery/apply-issues'
 import { cardProgress, progressLabel } from '~/utils/card-progress'
 import { consumeSelectedFiles } from '~/utils/file-input'
 import { filterProjectRegions } from '~/utils/region-filter'
@@ -46,12 +47,14 @@ const emit = defineEmits<{
   'requestThumbnail': [cardId: string]
   'startBatchOcr': []
   'applyCurrentCard': []
-  'resolveApplyIssue': [cardId: string, issue: RegionApplyIssue, target: 'region' | 'discovery' | 'preview']
+  'openApplyResults': []
   'update:batchAutoApply': [value: boolean]
   'startBatchTranslation': []
   'cancelBatchOcr': []
   'openPrintLayout': []
 }>()
+
+const applyCounts = computed(() => applyIssueCounts(props.batchApplyIssues ?? []))
 
 /** カード一覧のスクロール領域。 */
 const cardListPanel = ref<HTMLElement | null>(null)
@@ -319,33 +322,17 @@ onBeforeUnmount(() => {
         このカードに反映
       </button>
       <small v-if="batchAutoApply && !batchOcrRunning && batchOcrTotal">{{ batchOcrCompleted }}/{{ batchOcrTotal }}枚処理済み</small>
-      <details v-if="batchApplyIssues?.length && !batchOcrRunning">
-        <summary>要確認 {{ batchApplyIssues.length }}枚</summary>
-        <div v-for="issue in batchApplyIssues" :key="issue.cardId">
-          <button type="button" @click="$emit('select', issue.cardId)">
-            {{ issue.cardName }}を開く
-          </button>
-          <ul v-if="issue.details?.length">
-            <li v-for="(detail, index) in issue.details" :key="index">
-              {{ detail.message }}
-              <button v-if="detail.preview" type="button" @click="$emit('resolveApplyIssue', issue.cardId, detail, 'preview')">
-                原文を比較
-              </button>
-              <button v-if="detail.regionId" type="button" @click="$emit('resolveApplyIssue', issue.cardId, detail, 'region')">
-                領域を修正
-              </button>
-              <button v-if="detail.occurrenceId" type="button" @click="$emit('resolveApplyIssue', issue.cardId, detail, 'discovery')">
-                アイコンを修正
-              </button>
-            </li>
-          </ul>
-          <ul v-else>
-            <li v-for="(message, index) in issue.messages" :key="index">
-              {{ message }}
-            </li>
-          </ul>
-        </div>
-      </details>
+      <div v-if="batchApplyIssues?.length && !batchOcrRunning">
+        <p v-if="applyCounts.protectedCards">
+          原文保護で保留 {{ applyCounts.protectedCards }}枚
+        </p>
+        <p v-if="applyCounts.problemCards">
+          検出・対応付けの問題 {{ applyCounts.problemCards }}枚
+        </p>
+        <button type="button" :disabled="loadingCardId !== null || addingCards || exportingCards" @click="$emit('openApplyResults')">
+          未反映の内容を確認
+        </button>
+      </div>
     </section>
     <section v-if="batchTranslationAvailable" class="card-list-batch-ocr" aria-label="複数カードの翻訳">
       <p>{{ batchTranslationCount ?? 0 }}枚の原文・訳文をまとめて確認します。</p>

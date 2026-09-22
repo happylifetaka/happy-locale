@@ -5,6 +5,7 @@ import type { AssetDiscoveryState } from '~/types/asset-discovery'
 import type { CardProject, FolderProjectCard, ImageAsset } from '~/types/editor'
 import { computed, onScopeDispose, ref, shallowRef, watch, watchEffect } from 'vue'
 import { analyzeIconRegions } from '~/services/asset-discovery/analyze-regions'
+import { applyIssueCounts } from '~/services/asset-discovery/apply-issues'
 import { createImageDigestCache } from '~/services/asset-discovery/digest'
 import { loadFolderProjectCardImage } from '~/services/project/folder'
 import { assertFileSize, assertImageDimensions, FILE_LIMITS } from '~/utils/file-limits'
@@ -134,7 +135,8 @@ export function useQuickRegionApply(options: DiscoveryWorkspaceOptions, setMessa
           finally { applying = false }
           const details: RegionApplyIssue[] = [
             ...result.issues ?? result.warnings.map(message => ({ message })),
-            ...result.rows.filter(row => row.error).map(row => ({ message: `${row.region.displayName}: ${row.error}`, regionId: row.region.id, preview: row.needsTextReview })),
+            // 対応付けの具体的な問題がある場合、同じ領域の汎用エラーを重ねて表示しない。
+            ...result.rows.filter(row => row.error && (!row.blockedByIconMapping || !result.issues?.some(issue => issue.regionId === row.region.id))).map(row => ({ message: row.error!, regionId: row.region.id, preview: row.needsTextReview, sourceProtection: row.sourceProtection })),
           ]
           const messages = details.map(issue => issue.message)
           issues.value = [
@@ -165,7 +167,8 @@ export function useQuickRegionApply(options: DiscoveryWorkspaceOptions, setMessa
           const retained = value.status === 'queued' || value.status === 'processing' ? previousStates.get(id) : value
           return retained ? [[id, retained] as const] : []
         }))
-        status.value = `${completed.value}/${total.value}枚処理${completed.value < total.value ? '（中止）' : '完了'}${issues.value.length ? `・要確認${issues.value.length}枚` : ''}。各領域で修正できます。`
+        const counts = applyIssueCounts(issues.value)
+        status.value = `${completed.value}/${total.value}枚処理${completed.value < total.value ? '（中止）' : '完了'}${counts.protectedCards ? `・原文保護で保留${counts.protectedCards}枚` : ''}${counts.problemCards ? `・検出・対応付けの問題${counts.problemCards}枚` : ''}。${issues.value.length ? '「未反映の内容を確認」から詳細を開けます。' : '各領域で修正できます。'}`
         setMessage(status.value)
       }
     }

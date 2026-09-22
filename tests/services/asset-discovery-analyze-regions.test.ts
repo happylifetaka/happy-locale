@@ -107,9 +107,9 @@ it.each(['edited', 'legacy', 'cleared'])('preserves %s original text, bounds and
     delete s.region.lastOcrText
   const before = structuredClone(s.region)
   const result = await analyzeIconRegions({ ...s.options, preserveEditedText: true })
-  expect(result.rows[0]).toMatchObject({ region: before, needsTextReview: true })
+  expect(result.rows[0]).toMatchObject({ region: before, needsTextReview: true, sourceProtection: kind === 'legacy' ? 'no-ocr-history' : 'edited' })
   expect(result.rows[0]!.boundsBefore).toBeUndefined()
-  expect(result.rows[0]!.error).toContain('原文を保持')
+  expect(result.rows[0]!.error).toContain('原文を保護')
   expect(s.options.provider.recognize).not.toHaveBeenCalled()
   // 明示プレビューでは、保存前に比較できるOCR案を作る。
   const preview = await analyzeIconRegions(s.options)
