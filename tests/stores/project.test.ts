@@ -7,7 +7,7 @@ import { savedProjectSignature } from '~/utils/project-save'
 
 function project(): FolderProjectDocument {
   return {
-    version: 2,
+    version: 4,
     name: 'cards',
     activeCardId: 'card-1',
     cards: [{
@@ -30,6 +30,40 @@ function project(): FolderProjectDocument {
 
 describe('project store', () => {
   beforeEach(() => setActivePinia(createPinia()))
+
+  it('retains detached candidate edits independently of normal region history and saved snapshots', () => {
+    const store = useProjectStore()
+    store.replaceProject(project())
+    const line = { text: 'Draw a card.', x: 10, y: 20, width: 50, height: 12, confidence: 90 }
+    const candidates = [{ ...line, id: 'candidate_1', selected: true, lines: [line] }]
+    const before = savedProjectSignature(store.document!)
+    store.setCardOCRCandidates('card-1', candidates)
+    expect(savedProjectSignature(store.document!)).not.toBe(before)
+    candidates[0]!.lines[0]!.text = 'External mutation'
+    expect(store.document!.cards[0]!.ocrCandidates![0]!.lines[0]!.text).toBe('Draw a card.')
+    const saved = store.snapshot()!
+    store.setCardOCRCandidates('card-1', [{ ...candidates[0]!, selected: false }])
+    store.updateCard('card-1', { ...store.activeCard, imageName: 'renamed.png' })
+    store.acceptSavedProject(saved, new Set())
+    expect(store.document!.cards[0]!.ocrCandidates![0]!.selected).toBe(false)
+    expect(savedProjectSignature(store.document!)).not.toBe(savedProjectSignature(saved))
+    store.setCardOCRCandidates('card-1', null)
+    expect(store.document!.cards[0]!.ocrCandidates).toBeUndefined()
+  })
+
+  it('keeps draft candidates through first save and normal edits, but invalidates changed image dimensions', () => {
+    const store = useProjectStore()
+    const line = { text: 'Draw a card.', x: 10, y: 20, width: 50, height: 12, confidence: 90 }
+    const candidates = [{ ...line, id: 'candidate_1', selected: false, lines: [line] }]
+    store.updateCard(null, project().cards[0]!)
+    store.setCardOCRCandidates('card-1', candidates)
+    store.updateCard(null, { ...store.activeCard, imageName: 'renamed.png' })
+    store.acceptSavedProject(project(), new Set())
+    expect(store.document!.cards[0]!.ocrCandidates).toEqual(candidates)
+    expect(store.draftOCRCandidates).toEqual([])
+    store.updateCard('card-1', { ...store.activeCard, imageWidth: 200 })
+    expect(store.document!.cards[0]!.ocrCandidates).toBeUndefined()
+  })
 
   it('keeps draft history and synchronizes edits after the first save', () => {
     const store = useProjectStore()

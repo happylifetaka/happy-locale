@@ -1,5 +1,5 @@
-import type { RegionCandidate } from '~/services/ocr/types'
 import type { FolderProjectCard, TextRegion } from '~/types/editor'
+import type { RegionCandidate } from '~/types/ocr'
 import { transformRegionContents } from '~/utils/regions'
 import hints from '../../../samples/cards/demo-regions.json'
 

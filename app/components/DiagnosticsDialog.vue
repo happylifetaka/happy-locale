@@ -1,10 +1,5 @@
 <script setup lang="ts">
-export interface DiagnosticEntry {
-  time: string
-  message: string
-  details?: string
-  level: 'info' | 'error'
-}
+import type { DiagnosticEntry } from '~/types/diagnostics'
 
 defineProps<{ entries: readonly DiagnosticEntry[] }>()
 defineEmits<{ close: [], clear: [] }>()

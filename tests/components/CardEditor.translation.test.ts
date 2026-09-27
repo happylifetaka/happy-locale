@@ -6,13 +6,49 @@ import { TRANSLATION_SETTINGS_STORAGE_KEY } from '~/composables/useTranslationSe
 import { LocalTranslationProvider } from '~/services/translator/local'
 import { SampleTranslationProvider } from '~/services/translator/sample'
 import { useProjectStore } from '~/stores/project'
-import { deferred, folderProjectExists, loadFolderProjectCardImage, mountEditor, mountSavedEditor, pickProjectDirectory, seedProject } from './helpers/card-editor'
+import { deferred, folderProjectExists, loadFolderProjectCardImage, mountEditor, mountSavedEditor, pickProjectDirectory, seedProject, unmountEditor } from './helpers/card-editor'
 
 describe('card editor translation candidates', () => {
   beforeEach(() => {
     vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/' }, public: { translationEndpointEnabled: true } }))
     localStorage.setItem(TRANSLATION_SETTINGS_STORAGE_KEY, JSON.stringify({ provider: 'local', endpoint: 'http://localhost:4578' }))
     vi.spyOn(LocalTranslationProvider.prototype, 'translate').mockResolvedValue('新しい訳')
+  })
+
+  it('opens initial settings and skips onboarding after explicit manual selection', async () => {
+    localStorage.clear()
+    const { wrapper } = await mountEditor()
+    const settings = wrapper.findComponent({ name: 'TranslationSettingsDialog' })
+    expect(settings.props()).toMatchObject({ open: true, initialSetup: true })
+    expect(localStorage.getItem(TRANSLATION_SETTINGS_STORAGE_KEY)).toBeNull()
+    settings.vm.$emit('save', settings.props('settings'))
+    await nextTick()
+    expect(settings.props()).toMatchObject({ open: false, initialSetup: false })
+    expect(JSON.parse(localStorage.getItem(TRANSLATION_SETTINGS_STORAGE_KEY)!)).toMatchObject({ provider: 'manual' })
+    seedProject()
+    await nextTick()
+    expect(settings.props('open')).toBe(false)
+    unmountEditor()
+    const next = await mountEditor()
+    expect(next.wrapper.findComponent({ name: 'TranslationSettingsDialog' }).props()).toMatchObject({ open: false, initialSetup: false })
+  })
+
+  it('does not count cancellation as completed setup', async () => {
+    localStorage.clear()
+    const { wrapper } = await mountEditor()
+    const settings = wrapper.findComponent({ name: 'TranslationSettingsDialog' })
+    settings.vm.$emit('close')
+    await nextTick()
+    expect(settings.props('open')).toBe(false)
+    expect(localStorage.getItem(TRANSLATION_SETTINGS_STORAGE_KEY)).toBeNull()
+    unmountEditor()
+    const next = await mountEditor()
+    expect(next.wrapper.findComponent({ name: 'TranslationSettingsDialog' }).props()).toMatchObject({ open: true, initialSetup: true })
+  })
+
+  it('keeps existing provider settings without opening initial setup', async () => {
+    const { wrapper } = await mountEditor()
+    expect(wrapper.findComponent({ name: 'TranslationSettingsDialog' }).props()).toMatchObject({ open: false, initialSetup: false })
   })
 
   async function setupTranslation() {

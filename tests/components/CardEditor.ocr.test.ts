@@ -204,3 +204,13 @@ it.each([
   expect(current.inspector.props('ocrCandidate')).toBe('')
   expect(current.inspector.props('ocrRunning')).toBe(false)
 })
+
+it('rejects a candidate after shared assets are renamed or removed before acceptance', async () => {
+  const { inspector, wrapper } = await recognize()
+  useProjectStore().setAssets([{ id: 'changed', name: 'new' } as import('~/types/editor').ImageAsset])
+  inspector.vm.$emit('apply-ocr-candidate')
+  await nextTick()
+  expect(inspector.props('region').originalText).toBe('Before OCR')
+  expect(inspector.props('ocrCandidate')).toBe('')
+  expect(wrapper.get('.notice').text()).toContain('OCR候補を反映しませんでした')
+})

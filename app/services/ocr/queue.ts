@@ -1,10 +1,11 @@
-import type { RegionCandidate } from './types'
+import type { RegionCandidate } from '~/types/ocr'
 
 export type OCRQueueCardState
   = | { status: 'queued' }
     | { status: 'processing' }
     | { status: 'review', candidates: number }
     | { status: 'empty' }
+    | { status: 'applied', regions: number, icons: number, issues: number }
     | { status: 'error', message: string }
 
 export interface OCRQueueProgress {

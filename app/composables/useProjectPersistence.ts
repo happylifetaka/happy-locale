@@ -6,13 +6,13 @@ import type { ProjectActivity } from '~/features/cards/useProjectActivity'
 import type { useProjectStore } from '~/stores/project'
 import type { FolderProjectDocument } from '~/types/editor'
 import { nextTick, readonly, ref } from 'vue'
-import { finalizeProjectCardDeletions } from '~/services/project/cards'
 import { createFolderProject, saveFolderProject } from '~/services/project/folder'
+import { captureProjectSave } from '~/services/project/save-snapshot'
 import { savedProjectSignature } from '~/utils/project-save'
 
 interface ProjectPersistenceOptions {
   editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'bindSavedCard'>
-  projectStore: Pick<ReturnType<typeof useProjectStore>, 'document' | 'activeCard' | 'assets' | 'fonts' | 'ocrDictionary' | 'glossary' | 'acceptSavedProject'>
+  projectStore: Pick<ReturnType<typeof useProjectStore>, 'document' | 'activeCard' | 'assets' | 'fonts' | 'ocrDictionary' | 'glossary' | 'acceptSavedProject' | 'draftOCRCandidates' | 'draftAssetDiscovery'>
   projectRuntime: Pick<ReturnType<typeof useProjectRuntime>, 'directory' | 'cardImage' | 'cardSourceFile' | 'pendingAssetWrites' | 'pendingCardThumbnailBlobs' | 'acknowledgeAssetWrites' | 'clearPendingCardThumbnails'>
   isDemo: Ref<boolean>
   activity: ProjectActivity
@@ -70,10 +70,19 @@ export function useProjectPersistence({
     if (!image.value || !sourceImageFile.value)
       return
     savingProject.value = true
-    const savedWrites = new Map(pendingAssetWrites.value)
-    const savedDeletionIds = new Set(pendingCardDeletionIds.value)
-    const wasDraft = !projectStore.document
     try {
+      const snapshot = captureProjectSave({
+        document: projectStore.document,
+        card: projectStore.activeCard,
+        cardId: currentImageId.value,
+        assets: projectStore.assets,
+        fonts: projectStore.fonts,
+        ocrDictionary: projectStore.ocrDictionary,
+        glossary: projectStore.glossary,
+        draftOCRCandidates: projectStore.draftOCRCandidates,
+        draftAssetDiscovery: projectStore.draftAssetDiscovery,
+      }, pendingAssetWrites.value, pendingCardDeletionIds.value)
+      const { assetWrites: savedWrites, deletionIds: savedDeletionIds } = snapshot
       let savedDocument: FolderProjectDocument
       logDiagnostic('プロジェクト保存を開始しました', {
         existingProject: Boolean(projectStore.document),
@@ -81,29 +90,25 @@ export function useProjectPersistence({
         regions: editor.project.value.regions.length,
         pendingAssetWrites: pendingAssetWrites.value.size,
       })
-      if (projectDirectory.value && projectStore.document) {
-        const finalized = finalizeProjectCardDeletions(
-          projectStore.document,
-          pendingCardDeletionIds.value,
-        )
+      if (projectDirectory.value && snapshot.document) {
         savedDocument = await saveFolderProject(
           projectDirectory.value,
-          finalized.document,
-          projectStore.activeCard,
-          projectStore.assets,
-          projectStore.fonts,
-          projectStore.ocrDictionary,
+          snapshot.document,
+          snapshot.card,
+          snapshot.assets,
+          snapshot.fonts,
+          snapshot.ocrDictionary,
           savedWrites,
-          finalized.deletedCards,
-          projectStore.glossary,
+          snapshot.deletedCards,
+          snapshot.glossary,
         )
         projectStore.acceptSavedProject(savedDocument, savedDeletionIds)
         pendingCardDeletionIds.value = new Set([...pendingCardDeletionIds.value].filter(id => !savedDeletionIds.has(id)))
-        if (finalized.deletedCards.length > 0) {
-          for (const card of finalized.deletedCards)
+        if (snapshot.deletedCards.length > 0) {
+          for (const card of snapshot.deletedCards)
             removeCardThumbnail(card.id)
-          logDiagnostic('削除予定のカードをファイルから削除しました', {
-            deleted: finalized.deletedCards.length,
+          logDiagnostic('削除予定のカードをプロジェクトから除外しました（元画像は保持）', {
+            deleted: snapshot.deletedCards.length,
           })
         }
       }
@@ -115,17 +120,19 @@ export function useProjectPersistence({
         }
         savedDocument = await createFolderProject(
           directory,
-          projectStore.activeCard,
+          snapshot.card,
           sourceImageFile.value,
-          currentImageId.value,
-          projectStore.assets,
-          projectStore.fonts,
-          projectStore.ocrDictionary,
+          snapshot.cardId,
+          snapshot.assets,
+          snapshot.fonts,
+          snapshot.ocrDictionary,
           savedWrites,
-          projectStore.glossary,
+          snapshot.glossary,
+          snapshot.draftOCRCandidates,
+          snapshot.draftAssetDiscovery,
         )
         projectStore.acceptSavedProject(savedDocument, savedDeletionIds)
-        if (wasDraft)
+        if (!snapshot.document)
           editor.bindSavedCard(savedDocument.activeCardId)
       }
       const thumbnailDirectory = projectDirectory.value

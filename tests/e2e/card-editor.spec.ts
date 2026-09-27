@@ -4,14 +4,15 @@ test('retains independent card and asset zoom settings and switches the preview 
   await page.goto('/cards?demo=1')
   const canvas = page.getByLabel('カード編集キャンバス')
   await expect(canvas).toBeVisible()
+  await expect(page.getByRole('button', { name: 'アイコン検出', exact: true })).toBeDisabled()
   const image = await canvas.screenshot()
   await page.getByRole('combobox', { name: '表示倍率', exact: true }).selectOption('100')
   await expect.poll(() => canvas.evaluate((element: HTMLCanvasElement) => element.getBoundingClientRect().width / element.width)).toBe(1)
   await page.getByRole('button', { name: '元画像', exact: true }).click()
   await expect(page.getByRole('button', { name: '元画像', exact: true })).toHaveClass(/selected/)
-  await page.getByRole('button', { name: 'アセット編集', exact: true }).click()
+  await page.getByRole('button', { name: 'アイコン編集', exact: true }).click()
   await page.locator('.asset-editor-layout input[type=file]').setInputFiles({ name: 'source.png', mimeType: 'image/png', buffer: image })
-  const source = page.getByLabel('アセット切り出し元画像')
+  const source = page.getByLabel('アイコン切り出し元画像')
   await expect(source).toBeVisible()
   await page.getByRole('combobox', { name: '表示倍率', exact: true }).selectOption('75')
   await expect.poll(() => source.evaluate((element: HTMLCanvasElement) => element.getBoundingClientRect().width / element.width)).toBe(0.75)
@@ -20,7 +21,7 @@ test('retains independent card and asset zoom settings and switches the preview 
   await expect(page.getByRole('button', { name: '元画像', exact: true })).toHaveClass(/selected/)
   await page.getByRole('button', { name: '編集結果', exact: true }).click()
   await expect(page.getByRole('button', { name: '編集結果', exact: true })).toHaveClass(/selected/)
-  await page.getByRole('button', { name: 'アセット編集', exact: true }).click()
+  await page.getByRole('button', { name: 'アイコン編集', exact: true }).click()
   await expect(page.getByRole('combobox', { name: '表示倍率', exact: true })).toHaveValue('75')
 })
 
@@ -193,4 +194,43 @@ test('opens source icon confirmation from the workspace and returns to OCR after
   await dialog.getByRole('button', { name: 'アイコン指定を反映', exact: true }).click()
   await expect(dialog).toBeHidden()
   await expect(page.locator('#inspector-tab-ocr')).toHaveAttribute('aria-selected', 'true')
+})
+
+test('creates a new project from multiple initially selected images and reopens every card', async ({ page }) => {
+  await page.goto('/cards')
+  const name = `initial-images-${Date.now()}`
+  async function selectFolder() {
+    await page.evaluate(async (name) => {
+      const directory = await (await navigator.storage.getDirectory()).getDirectoryHandle(name, { create: true })
+      Object.assign(window, { showDirectoryPicker: async () => directory })
+    }, name)
+    await page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true }).click()
+  }
+  try {
+    await selectFolder()
+    const input = page.getByLabel('最初のカード画像（複数選択可）', { exact: true })
+    await expect(input).toHaveAttribute('multiple', '')
+    await input.setInputFiles([
+      'public/sample-project/images/01-grove.png',
+      'public/sample-project/images/02-cloud.png',
+      'public/sample-project/images/03-compass.png',
+    ])
+    await expect(page.locator('.card-list-item')).toHaveCount(3)
+    await expect(page.locator('.save-status')).toHaveText('保存済み')
+    const saved = await page.evaluate(async (name) => {
+      const directory = await (await navigator.storage.getDirectory()).getDirectoryHandle(name)
+      return JSON.parse(await (await (await directory.getFileHandle('project.json')).getFile()).text()) as import('../../app/types/editor').FolderProjectDocument
+    }, name)
+    expect(saved.cards.map(card => card.imageName)).toEqual(['01-grove.png', '02-cloud.png', '03-compass.png'])
+    expect(saved.activeCardId).toBe(saved.cards[0]!.id)
+    await page.reload()
+    await selectFolder()
+    await expect(page.locator('.card-list-item')).toHaveCount(3)
+    await page.locator('.card-list-select').filter({ hasText: '03-compass.png' }).click()
+    await expect(page.locator('.card-list-select').filter({ hasText: '03-compass.png' })).toHaveAttribute('aria-current', 'true')
+    await expect(page.getByLabel('カード編集キャンバス')).toBeVisible()
+  }
+  finally {
+    await page.evaluate(async name => (await navigator.storage.getDirectory()).removeEntry(name, { recursive: true }), name)
+  }
 })

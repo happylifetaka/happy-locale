@@ -42,6 +42,40 @@ describe('project runtime cache', () => {
     expect(runtime.pendingAssetWrites.value.get('updated')).toBe(newer)
   })
 
+  it('retains the actual saved PNG across acknowledgement, recrop during saving, deletion and reload', () => {
+    const runtime = useProjectRuntime()
+    const original = new Blob(['original PNG'])
+    const firstImage = new FakeImageBitmap() as unknown as ImageBitmap
+    runtime.setAssetImage('asset', firstImage)
+    runtime.replaceAssetFiles(new Map([['asset', original]]))
+    expect(runtime.assetFiles.value.get('asset')).toBe(original)
+    const before = new Blob(['before save'])
+    runtime.setAssetImage('asset', new FakeImageBitmap() as unknown as ImageBitmap)
+    runtime.setPendingAssetWrite('asset', before)
+    const saved = new Map(runtime.pendingAssetWrites.value)
+    const after = new Blob(['during save'])
+    runtime.setAssetImage('asset', new FakeImageBitmap() as unknown as ImageBitmap)
+    expect(runtime.assetFiles.value.has('asset')).toBe(false)
+    expect(runtime.pendingAssetWrites.value.has('asset')).toBe(false)
+    runtime.setPendingAssetWrite('asset', after)
+    runtime.acknowledgeAssetWrites(saved)
+    expect(runtime.pendingAssetWrites.value.get('asset')).toBe(after)
+    expect(runtime.assetFiles.value.has('asset')).toBe(false)
+    runtime.acknowledgeAssetWrites(new Map([['asset', after]]))
+    expect(runtime.assetFiles.value.get('asset')).toBe(after)
+    expect(runtime.pendingAssetWrites.value.has('asset')).toBe(false)
+    runtime.removeAssetImage('asset')
+    runtime.acknowledgeAssetWrites(saved)
+    expect(runtime.assetFiles.value.has('asset')).toBe(false)
+    const folder = {} as FileSystemDirectoryHandle
+    runtime.setDirectory(folder)
+    const generation = runtime.projectGeneration.value
+    runtime.setDirectory(folder)
+    expect(runtime.projectGeneration.value).toBe(generation + 1)
+    runtime.dispose()
+    expect(runtime.assetFiles.value.size).toBe(0)
+  })
+
   it('replaces and releases the current card image', () => {
     const runtime = useProjectRuntime()
     const first = loadedImage('first.png')

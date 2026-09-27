@@ -1,6 +1,7 @@
 import type { Ref } from 'vue'
+import type { CardCanvasApi } from './cardEditingContracts'
 import type { useCardEditor } from '~/composables/useCardEditor'
-import type { RegionDraft } from '~/types/editor'
+import type { EditorView } from '~/types/editor-view'
 import { storeToRefs } from 'pinia'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useInspectorTabs } from '~/composables/useInspectorTabs'
@@ -8,18 +9,14 @@ import { usePreviewDeferral } from '~/composables/usePreviewDeferral'
 import { useRegionEditing } from '~/composables/useRegionEditing'
 import { useEditorToolsStore } from '~/stores/editor-tools'
 
-export interface CardCanvasApi {
-  exportPng: () => Promise<Blob | null>
-  exportJpeg: () => Promise<Blob | null>
-  backgroundColorForBounds: (bounds: RegionDraft) => string
-}
+export type { CardCanvasApi } from './cardEditingContracts'
 
 interface CardWorkspaceOptions {
   editor: ReturnType<typeof useCardEditor>
   image: Ref<HTMLImageElement | null>
   hasProject: Ref<boolean>
   currentImageId: Ref<string>
-  currentView: Ref<'card' | 'assets' | 'print'>
+  currentView: Ref<EditorView>
   projectBusy: Ref<boolean>
   ocrRunning: Ref<boolean>
   assetEditing: Ref<boolean>

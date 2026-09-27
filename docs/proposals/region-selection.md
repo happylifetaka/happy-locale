@@ -15,7 +15,7 @@
 - [candidates.ts](../../app/services/ocr/candidates.ts): 行間と横方向の重なりを使ってOCR行を結合する。信頼度、英字数、記号の比率、行の高さで候補を絞る。
 - 同ファイルの分割処理は、候補に含まれる行数の中央を境に上下へ分割する。
 - [useRegionCandidates.ts](../../app/composables/useRegionCandidates.ts) と [RegionCandidatePanel.vue](../../app/components/RegionCandidatePanel.vue): 候補の選択・移動・サイズ調整・分割・変更の取り消しを扱う。
-- [LayoutTemplateDialog.vue](../../app/components/LayoutTemplateDialog.vue): 既存の領域配置をテンプレートとして保存・配置する仕組みがある。
+- 当時存在した配置雛形は2026-09-25に廃止した。
 
 テンプレートやサイズ調整を新設するのではなく、既存機能を活用し、候補のまとめ方と修正導線を拡張する。
 

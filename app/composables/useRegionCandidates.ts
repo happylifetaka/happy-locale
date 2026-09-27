@@ -4,12 +4,13 @@ import type { OCRExecutionState } from '~/composables/useEditorOCR'
 import type { OCRProvider, RegionCandidate } from '~/services/ocr/types'
 import type { RegionDraft } from '~/types/editor'
 import { onBeforeUnmount, ref } from 'vue'
-import { cloneRegionCandidates, createRegionCandidates, splitRegionCandidate } from '~/services/ocr/candidates'
-import { prepareRegionForOCR } from '~/services/ocr/image'
+import { cloneRegionCandidates, splitRegionCandidate } from '~/services/ocr/candidates'
+import { detectRegions } from '~/services/ocr/detect-regions'
 
 interface RegionCandidatesOptions {
   editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'selectedRegionId'>
   image: Ref<HTMLImageElement | null>
+  currentImageId: Ref<string>
   provider: OCRProvider
   execution: OCRExecutionState
   isDemo: Ref<boolean>
@@ -24,6 +25,7 @@ interface RegionCandidatesOptions {
 export function useRegionCandidates({
   editor,
   image,
+  currentImageId,
   provider: ocrProvider,
   execution: { running: ocrRunning, progress: ocrProgress, status: ocrStatus },
   isDemo,
@@ -178,6 +180,8 @@ export function useRegionCandidates({
   async function detectRegionCandidates() {
     const source = image.value
     const project = editor.project.value
+    const cardId = currentImageId.value
+    const isCurrent = () => !regionDetectionDisposed && image.value === source && currentImageId.value === cardId
     if (!source || ocrRunning.value || regionDetectionDisposed)
       return
     if (isDemo.value)
@@ -198,39 +202,27 @@ export function useRegionCandidates({
       scale: 2,
     })
     try {
-      const scale = 2
-      const blob = await prepareRegionForOCR(
-        source,
-        {
-          x: 0,
-          y: 0,
-          width: project.imageWidth,
-          height: project.imageHeight,
-        },
-        { scale, padding: 0 },
-      )
-      if (regionDetectionDisposed)
-        return
-      const result = await ocrProvider.recognize(blob, {
-        language: 'eng',
-        layout: 'sparse-text',
+      const detection = await detectRegions({
+        image: source,
+        imageWidth: project.imageWidth,
+        imageHeight: project.imageHeight,
+        provider: ocrProvider,
+        isCurrent,
         onProgress: (progress) => {
-          if (regionDetectionDisposed)
-            return
           ocrProgress.value = progress.progress
           ocrStatus.value = progress.status
         },
+        onRefinement: () => {
+          ocrStatus.value = '文字の範囲と見出しを確認しています…'
+        },
+        onEnhancementError: error => logDiagnostic('見出しの追加確認に失敗したため全体OCRの候補を使用します', error, 'error'),
       })
-      if (regionDetectionDisposed)
+      if (!detection || !isCurrent())
         return
-      regionCandidates.value = createRegionCandidates(result.blocks, {
-        scale,
-        imageWidth: project.imageWidth,
-        imageHeight: project.imageHeight,
-        padding: 6,
-      })
+      regionCandidates.value = detection.candidates
+      persistDisplayedBatchCandidates()
       logDiagnostic('画像全体の領域候補検出が完了しました', {
-        detectedLines: result.blocks.length,
+        detectedLines: detection.detectedLines,
         candidates: regionCandidates.value.length,
         durationMs: Math.round(performance.now() - startedAt),
       })
@@ -243,7 +235,7 @@ export function useRegionCandidates({
       }
     }
     catch (error) {
-      if (regionDetectionDisposed)
+      if (!isCurrent())
         return
       clearRegionCandidates()
       logDiagnostic('領域候補の検出に失敗しました', error, 'error')

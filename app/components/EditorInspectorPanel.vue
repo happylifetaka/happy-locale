@@ -69,7 +69,7 @@ function moveInspectorTab(event: KeyboardEvent, currentIndex: number) {
       </button>
     </div>
     <p
-      v-if="selectionLabel && activeTab !== 'list'"
+      v-if="selectionLabel && activeTab !== 'list' && activeTab !== 'print'"
       class="side-panel-selection"
     >
       <span>選択中</span>

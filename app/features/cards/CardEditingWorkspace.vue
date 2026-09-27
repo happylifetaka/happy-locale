@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { RegionDraft } from '~/types/editor'
+import type { AssetCreationDraft, RegionDraft } from '~/types/editor'
 import { onBeforeUnmount } from 'vue'
 import CardCanvas from '~/components/CardCanvas.vue'
 import EditorConfirmDialog from '~/components/EditorConfirmDialog.vue'
 import EditorInspectorPanel from '~/components/EditorInspectorPanel.vue'
 import RegionList from '~/components/RegionList.vue'
+import RegionMergeDialog from '~/components/RegionMergeDialog.vue'
 import RegionSplitDialog from '~/components/RegionSplitDialog.vue'
 import SourceIconsDialog from '~/components/SourceIconsDialog.vue'
 import { provideCardSourceIcons, useCardEditing, useCardOCR, useCardResources } from './cardEditingContext'
@@ -13,11 +14,12 @@ import { useSourceIcons } from './useSourceIcons'
 
 defineProps<{
   visible: boolean
+  batch?: boolean
   hasCardList: boolean
   printArea: RegionDraft | null
 }>()
 const emit = defineEmits<{
-  image: [file: File]
+  image: [files: File[]]
   diagnostic: [message: string, details?: unknown, level?: 'info' | 'error']
   updatePrintArea: [area: RegionDraft]
 }>()
@@ -39,15 +41,19 @@ const {
   updateExclusion,
   selectRegionForEditing,
   renameRegion,
+  moveRegion,
   requestRegionSplit,
   requestRegionDeletion,
   regionSplitRequest,
+  regionMergeRequest,
+  requestRegionMerge,
+  applyRegionMerge,
   applyRegionSplit,
   regionPendingDeletionConfirmation,
   cancelRegionDeletion,
   confirmRegionDeletion,
 } = workspace
-const { image, projectSelected, assets, assetImages, fontFamilies } = useCardResources()
+const { image, projectSelected, assets, assetImages, fontFamilies, createSourceIconAsset } = useCardResources()
 const { candidates, region: ocr, execution: { running: ocrRunning } } = useCardOCR()
 const { regionCandidates, selectedCandidateId, selectRegionCandidate, updateCandidateBounds } = candidates
 // Canvas APIを登録した画面が解除も担当し、資源の所有者には触れない。
@@ -68,6 +74,16 @@ const sourceIcons = useSourceIcons({
 })
 const { request: sourceIconsRequest } = sourceIcons
 provideCardSourceIcons(sourceIcons)
+
+/** 登録開始時の画像と確認画面を固定し、閉じ直しや画像差替え後の結果を捨てる。 */
+function registerSourceAsset(draft: AssetCreationDraft, isCurrent: () => boolean) {
+  const source = image.value
+  const pending = sourceIconsRequest.value
+  if (!source || !pending)
+    return Promise.resolve(null)
+  return createSourceIconAsset(draft, source, cardId.value, () => sourceIconsRequest.value === pending
+    && image.value === source && sourceIcons.isCurrent() && isCurrent())
+}
 </script>
 
 <template>
@@ -78,10 +94,25 @@ provideCardSourceIcons(sourceIcons)
     :image-width="editor.project.value.imageWidth"
     :image-height="editor.project.value.imageHeight"
     :assets="assets"
+    :image="image"
+    :asset-images="assetImages"
+    :create-asset="registerSourceAsset"
     @apply="sourceIcons.apply"
+    @recognize="icons => { if (sourceIcons.apply(icons)) ocr.recognizeSelectedRegion() }"
     @close="sourceIcons.close"
   />
 
+  <RegionMergeDialog
+    v-if="regionMergeRequest && image"
+    :regions="regionMergeRequest.regions"
+    :base-id="regionMergeRequest.baseId"
+    :image="image"
+    :assets="assets"
+    :asset-images="assetImages"
+    :font-families="fontFamilies"
+    @apply="applyRegionMerge"
+    @close="regionMergeRequest = null"
+  />
   <RegionSplitDialog
     v-if="regionSplitRequest && image"
     :region="regionSplitRequest.region"
@@ -102,9 +133,13 @@ provideCardSourceIcons(sourceIcons)
       || regionPendingDeletionConfirmation.regionId }}」を削除します。
     元テキスト、訳文、文字設定も削除されます。
   </EditorConfirmDialog>
-  <div v-show="visible" class="editor-layout" :class="{ 'has-card-list': hasCardList }">
+  <div v-show="visible" class="editor-layout" :class="{ 'has-card-list': hasCardList, 'has-batch-workspace': batch }">
     <slot name="cards" />
+    <div v-show="batch" class="batch-workspace">
+      <slot name="batch" />
+    </div>
     <CardCanvas
+      v-show="!batch"
       ref="canvasApi"
       v-model:zoom="cardZoom"
       v-model:preview-mode="cardPreviewMode"
@@ -136,6 +171,7 @@ provideCardSourceIcons(sourceIcons)
       @update-print-area="emit('updatePrintArea', $event)"
     />
     <EditorInspectorPanel
+      v-show="!batch"
       :active-tab="inspectorTab"
       :can-open-tab="canOpenInspectorTab"
       :selection-label="editor.selectedRegion.value ? (editor.selectedRegion.value.displayName.trim() || editor.selectedRegion.value.regionId) : null"
@@ -152,14 +188,16 @@ provideCardSourceIcons(sourceIcons)
         aria-labelledby="inspector-tab-list"
       >
         <RegionList
+          :key="cardId"
           :regions="editor.project.value.regions"
           :selected-id="editor.selectedRegionId.value"
           @select="selectRegionForEditing"
           @rename="renameRegion"
+          @move="moveRegion"
           @split="requestRegionSplit"
+          @merge="requestRegionMerge"
           @remove="requestRegionDeletion"
         />
-        <slot name="layout-tools" />
         <p v-if="editor.project.value.regions.length === 0" class="muted">
           画像上をドラッグして最初の領域を追加してください。
         </p>

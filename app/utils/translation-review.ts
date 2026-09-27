@@ -45,10 +45,10 @@ export function reviewWarnings(row: TranslationReviewRow, assets: readonly Image
   warnings.push(...translationConsistencyWarnings(row.region.originalText, row.translation, assets))
   const unknownSource = findUnresolvedAssetNames(row.region.originalText, assets)
   if (unknownSource.length)
-    warnings.push(`原文の未登録アセット: ${unknownSource.join('、')}`)
+    warnings.push(`原文の未登録アイコン: ${unknownSource.join('、')}`)
   for (const [label, text] of [['原文', row.region.originalText], ['訳文', row.translation]]) {
     if (/\[\s*icon\b/iu.test(text!.replace(/\[icon:[^[\]\r\n]+\]/gu, '')))
-      warnings.push(`${label}のアセット記法が壊れています。挿入メニューから入れ直してください。`)
+      warnings.push(`${label}のアイコン記法が壊れています。挿入メニューから入れ直してください。`)
   }
   if (row.error)
     warnings.push(row.error)

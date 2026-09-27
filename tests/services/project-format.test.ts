@@ -10,7 +10,7 @@ import {
 
 function document(): FolderProjectDocument {
   return {
-    version: 2,
+    version: 4,
     name: 'カード翻訳',
     activeCardId: 'card-1',
     cards: [
@@ -34,6 +34,17 @@ function document(): FolderProjectDocument {
 }
 
 describe('folder project format', () => {
+  it('preserves OCR baselines without inventing one for legacy or invalid values', () => {
+    const value = document()
+    value.cards[0]!.regions = [
+      { id: 'tracked', originalText: 'Corrected source', lastOcrText: 'OCR source' },
+      { id: 'legacy', originalText: 'Unknown source' },
+      { id: 'invalid', originalText: 'Unknown source', lastOcrText: 42 },
+    ] as never
+    const parsed = parseFolderProject(JSON.stringify(value))
+    expect(parsed.cards[0]!.regions.map(region => region.lastOcrText)).toEqual(['OCR source', undefined, undefined])
+    expect(parseFolderProject(serializeFolderProject(parsed))).toEqual(parsed)
+  })
   it('round trips source icon anchors and rejects malformed markers', () => {
     const value = document()
     value.cards[0]!.regions = [{ id: 'r', ruby: true, rubyFontSize: 12, rubyGap: -3, sourceIcons: [{ id: 'i', assetId: 'a', x: 10, y: 20, width: 30, height: 40 }] }] as never
@@ -70,6 +81,50 @@ describe('folder project format', () => {
     expect(parseFolderProject(serializeFolderProject(document()))).toEqual(
       document(),
     )
+  })
+
+  it('round trips pending OCR bounds, text, selection, confidence and source lines separately from regions', () => {
+    const value = document()
+    const line = { text: 'First line.', x: 10, y: 20, width: 50, height: 12, confidence: 85 }
+    value.cards[0]!.ocrCandidates = [{ ...line, id: 'candidate_1', selected: false, lines: [line] }]
+    const restored = parseFolderProject(serializeFolderProject(value))
+    expect(restored).toEqual(value)
+    expect(restored.cards[0]!.regions).toEqual([])
+  })
+
+  it('migrates version 2 without losing print settings, DPI and leaves candidates absent', () => {
+    const value = document()
+    value.cards[0]!.printArea = { x: 5, y: 5, width: 70, height: 100 }
+    value.cards[0]!.sourceDpi = { x: 300, y: 300 }
+    const restored = parseFolderProject(JSON.stringify({ ...value, version: 2 }))
+    expect(restored).toEqual(value)
+    expect(restored.cards[0]!.ocrCandidates).toBeUndefined()
+  })
+
+  it.each([
+    { selected: 'yes' },
+    { width: -1 },
+    { x: 100 },
+    { confidence: 101 },
+    { lines: null },
+  ])('rejects invalid candidate data on both read and write: %j', (invalid) => {
+    const value = document()
+    const line = { text: 'First line.', x: 10, y: 20, width: 50, height: 12, confidence: 85 }
+    value.cards[0]!.ocrCandidates = [{ ...line, id: 'candidate_1', selected: false, lines: [line], ...invalid }] as never
+    expect(() => parseFolderProject(JSON.stringify(value))).toThrow('OCR領域候補')
+    expect(() => serializeFolderProject(value)).toThrow('OCR領域候補')
+  })
+
+  it('rejects duplicate candidate IDs and nonfinite or excessively many source lines', () => {
+    const value = document()
+    const line = { text: 'First line.', x: 10, y: 20, width: 50, height: 12, confidence: 85 }
+    const candidate = { ...line, id: 'candidate_1', selected: false, lines: [line] }
+    value.cards[0]!.ocrCandidates = [candidate, candidate]
+    expect(() => serializeFolderProject(value)).toThrow('OCR領域候補')
+    value.cards[0]!.ocrCandidates = [{ ...candidate, lines: [{ ...line, x: Number.NaN }] }]
+    expect(() => serializeFolderProject(value)).toThrow('OCR領域候補')
+    value.cards[0]!.ocrCandidates = [{ ...candidate, lines: Array.from<typeof line>({ length: 10001 }).fill(line) }]
+    expect(() => parseFolderProject(JSON.stringify(value))).toThrow('OCR領域候補')
   })
 
   it('uses the first card when activeCardId is missing', () => {
@@ -113,7 +168,7 @@ describe('folder project format', () => {
 
       const parsed = parseFolderProject(JSON.stringify(value))
 
-      expect(parsed.version).toBe(2)
+      expect(parsed.version).toBe(4)
       expect(parsed.activeCardId).toBe('card-1')
       expect(parsed.ocrDictionary).toEqual([])
       expect(parsed.glossary).toEqual([])
@@ -132,7 +187,7 @@ describe('folder project format', () => {
 
     const parsed = parseFolderProject(JSON.stringify(value))
 
-    expect(parsed.version).toBe(2)
+    expect(parsed.version).toBe(4)
     expect(parsed.cards[0]!.printArea).toBeNull()
     expect(parsed.cards[0]!.sourceDpi).toBeNull()
     expect(parsed.printSettings).toEqual({
@@ -146,7 +201,7 @@ describe('folder project format', () => {
   it('rejects unsupported and empty projects', () => {
     expect(() => parseFolderProject('{')).toThrow('正しいJSON')
     expect(() =>
-      parseFolderProject(JSON.stringify({ version: 3, cards: [] })),
+      parseFolderProject(JSON.stringify({ version: 5, cards: [] })),
     ).toThrow('対応していない')
     expect(() =>
       parseFolderProject(JSON.stringify({ version: 2, cards: [] })),
@@ -240,10 +295,10 @@ describe('folder project format', () => {
     ]
 
     expect(() => parseFolderProject(JSON.stringify(value))).toThrow(
-      'アセット名「coin」が重複',
+      'アイコン名「coin」が重複',
     )
     expect(() => serializeFolderProject(value)).toThrow(
-      'アセット名「coin」が重複',
+      'アイコン名「coin」が重複',
     )
   })
 

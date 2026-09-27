@@ -23,11 +23,11 @@ export function validateAssetName(
 ): string | null {
   const name = value.trim()
   if (!name)
-    return 'アセット名を入力してください。'
+    return 'アイコン名を入力してください。'
   if (/[[\]:\r\n]/u.test(name))
-    return 'アセット名に [ ] : や改行は使用できません。'
+    return 'アイコン名に [ ] : や改行は使用できません。'
   if (assets.some(asset => asset.id !== excludedId && asset.name === name))
-    return `アセット名「${name}」は既に使用されています。`
+    return `アイコン名「${name}」は既に使用されています。`
   return null
 }
 

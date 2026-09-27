@@ -1,0 +1,63 @@
+// @vitest-environment happy-dom
+import { flushPromises } from '@vue/test-utils'
+import { expect, it } from 'vitest'
+import { nextTick } from 'vue'
+import { editorRuntime, mountSavedEditor } from './helpers/card-editor'
+
+it('lazily retains the discovery workspace across tabs but not project generations', async () => {
+  const { wrapper, toolbar } = await mountSavedEditor()
+  expect(wrapper.findComponent({ name: 'AssetDiscoveryWorkspace' }).exists()).toBe(false)
+  toolbar.vm.$emit('view', 'discovery')
+  await nextTick()
+  const discovery = wrapper.findComponent({ name: 'AssetDiscoveryWorkspace' })
+  expect(discovery.isVisible()).toBe(true)
+  expect(toolbar.props('currentView')).toBe('discovery')
+  toolbar.vm.$emit('view', 'assets')
+  await nextTick()
+  expect(discovery.isVisible()).toBe(false)
+  toolbar.vm.$emit('view', 'discovery')
+  await nextTick()
+  expect(wrapper.findComponent({ name: 'AssetDiscoveryWorkspace' }).vm === discovery.vm).toBe(true)
+  await discovery.props('options').selectCard('two')
+  await flushPromises()
+  expect(toolbar.props('currentView')).toBe('discovery')
+  editorRuntime().setDirectory({ name: 'another-project' } as FileSystemDirectoryHandle)
+  await nextTick()
+  expect(wrapper.findComponent({ name: 'AssetDiscoveryWorkspace' }).exists()).toBe(false)
+  toolbar.vm.$emit('view', 'discovery')
+  await nextTick()
+  expect(wrapper.findComponent({ name: 'AssetDiscoveryWorkspace' }).vm === discovery.vm).toBe(false)
+})
+
+it('blocks tab changes while discovery is working, then opens the shared OCR workspace', async () => {
+  const { wrapper, toolbar } = await mountSavedEditor()
+  toolbar.vm.$emit('view', 'discovery')
+  await nextTick()
+  const discovery = wrapper.findComponent({ name: 'AssetDiscoveryWorkspace' })
+  discovery.vm.$emit('working', true)
+  await nextTick()
+  expect(toolbar.props('discoveryWorking')).toBe(true)
+  toolbar.vm.$emit('view', 'card')
+  await nextTick()
+  expect(toolbar.props('currentView')).toBe('discovery')
+  discovery.vm.$emit('working', false)
+  discovery.vm.$emit('open-ocr', ['two'], 'reocr')
+  await flushPromises()
+  expect(toolbar.props('currentView')).toBe('ocr')
+  expect(discovery.isVisible()).toBe(false)
+  expect(wrapper.findComponent({ name: 'RegionOCRWorkspace' }).isVisible()).toBe(true)
+})
+
+it('connects Next to target selection and resets it after a project change', async () => {
+  const { wrapper, toolbar } = await mountSavedEditor()
+  toolbar.vm.$emit('view', 'discovery')
+  await nextTick()
+  wrapper.findComponent({ name: 'AssetDiscoveryWorkspace' }).vm.$emit('open-ocr', ['two'], 'reocr')
+  await nextTick()
+  expect(wrapper.findComponent({ name: 'RegionOCRWorkspace' }).props('flow').operation.value).toBe('reocr')
+  expect(wrapper.findComponent({ name: 'RegionOCRWorkspace' }).props('flow').applyTargetIds.value).toEqual(['two'])
+  expect(wrapper.findComponent({ name: 'IconRegionAnalysisDialog' }).exists()).toBe(false)
+  editorRuntime().setDirectory({ name: 'another-project' } as FileSystemDirectoryHandle)
+  await nextTick()
+  expect(wrapper.findComponent({ name: 'RegionOCRWorkspace' }).props('flow').applyTargetIds.value).toBeNull()
+})

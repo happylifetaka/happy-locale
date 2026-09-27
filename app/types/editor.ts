@@ -1,3 +1,6 @@
+import type { AssetDiscoveryState } from './asset-discovery'
+import type { RegionCandidate } from './ocr'
+
 export type TextAlign = 'left' | 'center' | 'right'
 export type VerticalAlign = 'top' | 'middle' | 'bottom'
 export type BackgroundMode = 'auto' | 'manual' | 'solid' | 'none'
@@ -58,6 +61,8 @@ export interface TextRegion {
   width: number
   height: number
   originalText: string
+  /** 最後に明示採用または自動反映したOCR原文。手修正の上書き防止に使う。旧形式は未設定。 */
+  lastOcrText?: string
   ocrLayout?: 'single-line' | 'sparse-text' | 'text-block'
   translatedText: string
   translationStatus: TranslationStatus
@@ -150,11 +155,13 @@ export type FolderProjectCard = CardProject & {
   imagePath: string
   printArea: RegionDraft | null
   sourceDpi: ImageDpi | null
+  /** 未確定のOCR候補。通常領域のUndoスナップショットとは別に保存する。 */
+  ocrCandidates?: RegionCandidate[]
 }
 
 export interface FolderProjectDocument {
   demoPreset?: 'sample-v1'
-  version: 2
+  version: 4
   name: string
   activeCardId: string
   cards: FolderProjectCard[]
@@ -163,15 +170,8 @@ export interface FolderProjectDocument {
   ocrDictionary: OCRDictionaryEntry[]
   glossary: GlossaryEntry[]
   printSettings: PrintLayoutSettings
-  layoutTemplates?: LayoutTemplate[]
-}
-
-export interface LayoutTemplate {
-  id: string
-  name: string
-  imageWidth: number
-  imageHeight: number
-  regions: TextRegion[]
+  /** 領域の編集履歴から独立したアイコン候補と確認状態。 */
+  assetDiscovery?: AssetDiscoveryState
 }
 
 export type RegionDraft = Pick<TextRegion, 'x' | 'y' | 'width' | 'height'>

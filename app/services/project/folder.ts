@@ -9,6 +9,7 @@ import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
 import { assertFileSize, FILE_LIMITS } from '~/utils/file-limits'
 import { readImageDpi } from '~/utils/image-dpi'
 import {
+  CURRENT_PROJECT_VERSION,
   isSafeAssetImagePath,
   isSafeCardImagePath,
   parseFolderProject,
@@ -219,9 +220,9 @@ export async function openFolderProject(
   for (const asset of document.assets) {
     try {
       if (!isSafeAssetImagePath(asset.imagePath))
-        throw new Error(`安全でないアセット画像パスを拒否しました: ${asset.imagePath}`)
+        throw new Error(`安全でないアイコン画像パスを拒否しました: ${asset.imagePath}`)
       const file = await getFileByPath(directory, asset.imagePath)
-      assertFileSize(file, FILE_LIMITS.imageBytes, 'アセット画像')
+      assertFileSize(file, FILE_LIMITS.imageBytes, 'アイコン画像')
       assetFiles.set(asset.id, file)
     }
     catch (error) {
@@ -256,6 +257,8 @@ export async function createFolderProject(
   ocrDictionary: FolderProjectDocument['ocrDictionary'],
   assetBlobs: ReadonlyMap<string, Blob>,
   glossary: FolderProjectDocument['glossary'] = [],
+  ocrCandidates?: FolderProjectCard['ocrCandidates'],
+  assetDiscovery?: FolderProjectDocument['assetDiscovery'],
 ): Promise<FolderProjectDocument> {
   try {
     await directory.getFileHandle('project.json')
@@ -275,13 +278,14 @@ export async function createFolderProject(
     sourceImage,
   )
   const document: FolderProjectDocument = {
-    version: 2,
+    version: CURRENT_PROJECT_VERSION,
     name: directory.name,
     activeCardId: cardId,
     cards: [{
       id: cardId,
       imagePath,
       ...project,
+      ...(ocrCandidates?.length ? { ocrCandidates } : {}),
       printArea: null,
       sourceDpi: await readImageDpi(sourceImage),
     }],
@@ -290,13 +294,14 @@ export async function createFolderProject(
     ocrDictionary,
     glossary,
     printSettings: { ...DEFAULT_PRINT_SETTINGS },
+    ...(assetDiscovery !== undefined ? { assetDiscovery } : {}),
   }
   await writeAssetFiles(directory, assets, assetBlobs)
   await writeProjectDocument(directory, document, false)
   return document
 }
 
-/** 新しい画像パスへ退避してから文書を更新する。旧画像の削除は文書の保存成功後に行う。 */
+/** 新しい画像パスへ退避して文書を確定する。旧画像はバックアップの復旧用に保持する。 */
 export async function saveFolderProject(
   directory: FileSystemDirectoryHandle,
   document: FolderProjectDocument,
@@ -305,11 +310,11 @@ export async function saveFolderProject(
   fonts: FontReference[],
   ocrDictionary: FolderProjectDocument['ocrDictionary'],
   assetBlobs: ReadonlyMap<string, Blob>,
-  deletedCards: readonly FolderProjectCard[] = [],
+  _deletedCards: readonly FolderProjectCard[] = [],
   glossary: FolderProjectDocument['glossary'] = document.glossary,
 ): Promise<FolderProjectDocument> {
-  // Read the persisted snapshot: the editor document already omits deleted assets.
-  const previous = parseFolderProject(await readTextFile(directory, 'project.json'))
+  // Validate the persisted snapshot before replacing it or its backup.
+  parseFolderProject(await readTextFile(directory, 'project.json'))
   const stagedAssets = assets.map(asset => assetBlobs.has(asset.id)
     ? { ...asset, imagePath: `assets/${crypto.randomUUID()}.png` }
     : asset)
@@ -333,8 +338,9 @@ export async function saveFolderProject(
       .catch(() => { /* Keep the original save error if cleanup also fails. */ })
     throw error
   }
-  await removeFolderProjectAssetImages(directory, previous.assets, stagedAssets)
-  await removeFolderProjectCardImages(directory, deletedCards)
+  // project.jsonの確定が保存の成功境界。以降に失敗し得るファイル削除を行わない。
+  // 削除済みカード・再切り出し前の画像も、バックアップから復元するため保持する。
+  // _deletedCardsは既存呼出元の引数位置を維持するために残す。
   return updated
 }
 
@@ -394,7 +400,7 @@ export async function removeFolderProjectAssetImages(
     if (currentPaths.has(asset.imagePath))
       continue
     if (!isSafeAssetImagePath(asset.imagePath)) {
-      throw new Error(`安全でないアセット画像パスの削除を拒否しました: ${asset.imagePath}`)
+      throw new Error(`安全でないアイコン画像パスの削除を拒否しました: ${asset.imagePath}`)
     }
     await removeFileByPath(directory, asset.imagePath)
   }
@@ -454,7 +460,7 @@ async function writeAssetFiles(
     if (!blob)
       continue
     if (!isSafeAssetImagePath(asset.imagePath))
-      throw new Error(`安全でないアセット画像パスへの保存を拒否しました: ${asset.imagePath}`)
+      throw new Error(`安全でないアイコン画像パスへの保存を拒否しました: ${asset.imagePath}`)
     await writeFile(
       await assetDirectory.getFileHandle(asset.imagePath.split('/').at(-1)!, {
         create: true,
@@ -470,6 +476,8 @@ async function writeProjectDocument(
   document: FolderProjectDocument,
   createBackup: boolean,
 ) {
+  // 参照・容量の検証失敗ではバックアップも既存JSONも変更しない。
+  const serialized = serializeFolderProject(document)
   if (createBackup) {
     try {
       const previous = await readTextFile(directory, 'project.json')
@@ -486,6 +494,6 @@ async function writeProjectDocument(
   }
   await writeFile(
     await directory.getFileHandle('project.json', { create: true }),
-    serializeFolderProject(document),
+    serialized,
   )
 }

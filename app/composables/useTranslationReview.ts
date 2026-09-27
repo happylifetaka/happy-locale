@@ -23,7 +23,6 @@ interface TranslationReviewOptions {
   pendingCardDeletionIds: Ref<Set<string>>
   projectDirectory: Ref<FileSystemDirectoryHandle | null>
   image: Ref<HTMLImageElement | null>
-  selectProjectRegion: (cardId: string, regionId: string) => Promise<void>
   setMessage: (message: string) => void
   logDiagnostic: (message: string, details?: unknown) => void
 }
@@ -38,7 +37,6 @@ export function useTranslationReview({
   pendingCardDeletionIds,
   projectDirectory,
   image,
-  selectProjectRegion,
   setMessage,
   logDiagnostic,
 }: TranslationReviewOptions) {
@@ -76,19 +74,13 @@ export function useTranslationReview({
 
   /** 翻訳確認に必要なカードの原画像を取得する。 */
   async function loadReviewImage(cardId: string) {
-    const card = translationReview.value?.cards.find(card => card.id === cardId)
+    const card = translationReviewCards.value.find(card => card.id === cardId)
     const directory = projectDirectory.value
     if (!card || !directory)
       throw new Error('カード画像が見つかりません。')
     if (!card.imagePath && cardId === currentImageId.value && image.value)
       return (await fetch(image.value.src)).blob()
     return loadFolderProjectCardImage(directory, card)
-  }
-
-  /** 翻訳確認画面を閉じ、指定カードの領域へ移動する。 */
-  async function locateReviewRegion(cardId: string, regionId: string) {
-    translationReview.value = null
-    await selectProjectRegion(cardId, regionId)
   }
 
   /** 対象が現在も同じ内容か照合し、選択された訳をCSVと共通の反映経路へ渡す。 */
@@ -240,7 +232,6 @@ export function useTranslationReview({
     openTranslationReview,
     translateUntranslatedRegions,
     loadReviewImage,
-    locateReviewRegion,
     applyTranslationReview,
     importCsv,
     exportCsv,

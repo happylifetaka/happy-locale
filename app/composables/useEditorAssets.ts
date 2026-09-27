@@ -59,7 +59,7 @@ export function useEditorAssets({
   /** 開いている元画像で再切り出しするアセットを指定し、範囲選択を開始する。 */
   function startAssetRecrop(id: string) {
     if (!assetSourceImage.value) {
-      setMessage('先にアセット元画像を開いてください。')
+      setMessage('先にアイコン元画像を開いてください。')
       return
     }
     const asset = assets.value.find(item => item.id === id)
@@ -70,7 +70,7 @@ export function useEditorAssets({
     assetEditing.value = true
     maskEditing.value = false
     exclusionEditing.value = false
-    setMessage(`元画像上でアセット「${asset.name}」の新しい範囲をドラッグしてください。`)
+    setMessage(`元画像上でアイコン「${asset.name}」の新しい範囲をドラッグしてください。`)
   }
 
   /** 指定範囲を元に、登録前のアセット作成下書きを開く。 */
@@ -125,7 +125,7 @@ export function useEditorAssets({
       ? assets.value.find(asset => asset.id === draft.editingAssetId)
       : null
     if (draft.editingAssetId && !existingAsset) {
-      setMessage('更新対象のアセットが見つかりませんでした。')
+      setMessage('更新対象のアイコンが見つかりませんでした。')
       return
     }
     const sourceImageId = assetSourceImageId.value
@@ -162,7 +162,7 @@ export function useEditorAssets({
         return
       }
       if (!blob) {
-        setMessage('アセット画像を作成できませんでした。')
+        setMessage('アイコン画像を作成できませんでした。')
         return
       }
       if (existingAsset && existingAsset.name !== name) {
@@ -201,14 +201,14 @@ export function useEditorAssets({
       assetCreationDraft.value = null
       setMessage(
         existingAsset
-          ? `アセット「${name}」を更新しました。`
-          : `アセット「${name}」を登録しました。`,
+          ? `アイコン「${name}」を更新しました。`
+          : `アイコン「${name}」を登録しました。`,
       )
     }
     catch (error) {
       if (isCurrent()) {
-        logDiagnostic('アセット画像を作成できませんでした', error, 'error')
-        setMessage('アセット画像を作成できませんでした。再試行してください。')
+        logDiagnostic('アイコン画像を作成できませんでした', error, 'error')
+        setMessage('アイコン画像を作成できませんでした。再試行してください。')
       }
     }
     finally {
@@ -216,6 +216,58 @@ export function useEditorAssets({
         assetCreationPending.value = null
     }
   }
+  /** OCR内で確認した切り出しを共有資源へ登録する。原文のUndoとは独立して保持する。 */
+  async function createSourceIconAsset(
+    draft: AssetCreationDraft,
+    source: HTMLImageElement,
+    sourceImageId: string,
+    isCurrent: () => boolean,
+  ): Promise<ImageAsset | null> {
+    if (assetCreationDisposed || !isCurrent())
+      return null
+    const name = draft.name.trim()
+    const error = validateAssetName(name, assets.value)
+    if (error)
+      throw new Error(error)
+    const canvas = renderAssetCrop(source, draft.sourceRect, draft.removeBackground, {
+      threshold: draft.backgroundThreshold,
+      feather: draft.edgeFeather,
+      backgroundColor: draft.backgroundColor,
+    }, draft.manualMaskStrokes)
+    let retained = false
+    try {
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+      if (assetCreationDisposed || !isCurrent())
+        return null
+      const currentError = validateAssetName(name, assets.value)
+      if (currentError)
+        throw new Error(currentError)
+      if (!blob)
+        throw new Error('アイコン画像を作成できませんでした。再試行してください。')
+      const id = crypto.randomUUID()
+      const asset: ImageAsset = {
+        id,
+        name,
+        sourceImageId,
+        sourceRect: { ...draft.sourceRect },
+        imagePath: `assets/${id}.png`,
+        scale: 1,
+        baselineOffset: 0,
+        inlinePadding: 0,
+      }
+      projectStore.setAssets([...assets.value, asset])
+      projectRuntime.setAssetImage(id, canvas)
+      retained = true
+      projectRuntime.setPendingAssetWrite(id, blob)
+      return asset
+    }
+    finally {
+      // 登録後はruntimeが所有する。取消・失敗した作業Canvasだけを解放する。
+      if (!retained)
+        canvas.width = canvas.height = 1
+    }
+  }
+
   /** 共有定義・全カードのトークン・編集履歴を揃えて改名し、Undo後の参照切れを防ぐ。 */
   function renameAsset(id: string, name: string) {
     const asset = assets.value.find(item => item.id === id)
@@ -259,6 +311,7 @@ export function useEditorAssets({
   })
 
   return {
+    createSourceIconAsset,
     assetCreationDraft,
     assetCreationRunning,
     assetRecropId,

@@ -30,6 +30,8 @@ function removeFontFace(face: FontFace) {
 export function useProjectRuntime() {
   /** ユーザーが選択した保存先フォルダのハンドル。 */
   const directory = shallowRef<FileSystemDirectoryHandle | null>(null)
+  /** 同じフォルダ・IDの再読込も区別する非同期資源の世代。 */
+  const projectGeneration = shallowRef(0)
   /** 現在のカードの表示・描画用画像要素。 */
   const cardImage = shallowRef<HTMLImageElement | null>(null)
   /** 現在のカード画像に割り当てた一時URL。 */
@@ -46,6 +48,8 @@ export function useProjectRuntime() {
   const pendingCardThumbnailBlobs = shallowRef(new Map<string, Blob>())
   /** アセットIDごとに保持する描画用ビットマップまたはCanvas。 */
   const assetImages = shallowRef(new Map<string, RuntimeAssetImage>())
+  /** 描画用画像に対応する読込済み／保存済みPNG。未保存の最新版はpendingAssetWritesが優先。 */
+  const assetFiles = shallowRef(new Map<string, Blob>())
   /** 次回保存時に書き込むアセットIDと画像Blob。 */
   const pendingAssetWrites = shallowRef(new Map<string, Blob>())
   /** フォントIDごとに保持する読み込み済みFontFace。 */
@@ -53,7 +57,9 @@ export function useProjectRuntime() {
 
   /** プロジェクトの保存先フォルダを設定する。 */
   function setDirectory(nextDirectory: FileSystemDirectoryHandle | null) {
+    projectGeneration.value++
     directory.value = nextDirectory
+    assetFiles.value = new Map()
   }
 
   /** 新画像への差し替え後に旧URLを解放し、表示中の画像を途中で失効させない。 */
@@ -143,12 +149,25 @@ export function useProjectRuntime() {
       if (images.get(id) !== image)
         closeImageBitmap(image)
     })
+    assetFiles.value = new Map([...assetFiles.value].filter(([id]) => images.get(id) === assetImages.value.get(id) && images.has(id)))
+    pendingAssetWrites.value = new Map([...pendingAssetWrites.value].filter(([id]) => images.get(id) === assetImages.value.get(id) && images.has(id)))
     assetImages.value = images
+  }
+
+  /** 読込が完了したアセット画像と元ファイルの対応を採用する。 */
+  function replaceAssetFiles(files: ReadonlyMap<string, Blob>) {
+    assetFiles.value = new Map([...files].filter(([id]) => assetImages.value.has(id)))
   }
 
   /** 指定アセットの描画用画像を置き換える。 */
   function setAssetImage(id: string, image: RuntimeAssetImage) {
     const previous = assetImages.value.get(id)
+    if (previous !== image) {
+      const files = new Map(assetFiles.value)
+      files.delete(id)
+      assetFiles.value = files
+      removePendingAssetWrite(id)
+    }
     if (previous && previous !== image)
       closeImageBitmap(previous)
     assetImages.value = new Map(assetImages.value).set(id, image)
@@ -162,6 +181,10 @@ export function useProjectRuntime() {
     const images = new Map(assetImages.value)
     images.delete(id)
     assetImages.value = images
+    const files = new Map(assetFiles.value)
+    files.delete(id)
+    assetFiles.value = files
+    removePendingAssetWrite(id)
   }
 
   /** アセット画像を次回保存用のBlobとして登録する。 */
@@ -183,6 +206,13 @@ export function useProjectRuntime() {
 
   /** 保存開始時と同じBlobだけを待機列から外し、保存中に再編集された画像は次回分として残す。 */
   function acknowledgeAssetWrites(saved: ReadonlyMap<string, Blob>) {
+    const files = new Map(assetFiles.value)
+    saved.forEach((blob, id) => {
+      // 削除されたアセットを復活させない。保存中の新しい切り抜きはpending側に残す。
+      if (assetImages.value.has(id) && pendingAssetWrites.value.get(id) === blob)
+        files.set(id, blob)
+    })
+    assetFiles.value = files
     pendingAssetWrites.value = new Map([...pendingAssetWrites.value].filter(
       ([id, blob]) => saved.get(id) !== blob,
     ))
@@ -217,6 +247,7 @@ export function useProjectRuntime() {
 
   /** プロジェクト終了時にURL・ビットマップ・FontFaceをまとめて解放する。 */
   function dispose() {
+    projectGeneration.value++
     clearCardImage()
     clearAssetSourceImage()
     resetCardThumbnails()
@@ -228,6 +259,7 @@ export function useProjectRuntime() {
 
   return {
     directory,
+    projectGeneration,
     cardImage,
     cardImageUrl,
     cardSourceFile,
@@ -236,6 +268,7 @@ export function useProjectRuntime() {
     cardThumbnails,
     pendingCardThumbnailBlobs,
     assetImages,
+    assetFiles,
     pendingAssetWrites,
     loadedFonts,
     setDirectory,
@@ -249,6 +282,7 @@ export function useProjectRuntime() {
     setPendingCardThumbnail,
     clearPendingCardThumbnails,
     replaceAssetImages,
+    replaceAssetFiles,
     setAssetImage,
     removeAssetImage,
     setPendingAssetWrite,

@@ -27,6 +27,7 @@ import { regionTextLayout } from '~/utils/region-text-layout'
 import { rubyDisplayRegion, rubyFontSize } from '~/utils/ruby'
 import { applyTextStyle, reconcileTextStyles } from '~/utils/text-styles'
 import { translationConsistencyWarnings } from '~/utils/translation-reuse'
+import OCRCorrectionDiff from './OCRCorrectionDiff.vue'
 
 const props = defineProps<{
   region: TextRegion | null
@@ -513,15 +514,14 @@ function resetSelectedInlineAssetStyle() {
           </small>
           <div v-if="ocrCorrectionCandidate" class="ocr-correction">
             <strong>2. 自動補正で変わる箇所</strong>
+            <small>取消線は削除、下線は追加です。␠ はスペースを表します。</small>
             <ul class="ocr-correction-list">
               <li
                 v-for="(change, index) in ocrCorrectionChanges"
                 :key="`${change.line}-${change.original}-${index}`"
               >
                 <span class="ocr-correction-line">{{ change.line }}行目</span>
-                <del>{{ change.original }}</del>
-                <span aria-hidden="true">→</span>
-                <ins>{{ change.corrected }}</ins>
+                <OCRCorrectionDiff :original="change.original" :corrected="change.corrected" />
               </li>
             </ul>
             <label>
@@ -619,7 +619,7 @@ function resetSelectedInlineAssetStyle() {
           </select>
         </label>
         <p v-if="region.backgroundMode === 'none'" class="muted">
-          元画像を変更せず、日本語訳とインラインアセットだけを描画します。
+          元画像を変更せず、日本語訳とインラインアイコンだけを描画します。
         </p>
         <label v-if="region.backgroundMode === 'auto'">
           検出プリセット
@@ -796,7 +796,7 @@ function resetSelectedInlineAssetStyle() {
           />
         </div>
         <p v-if="unresolvedOriginalAssets.length" class="field-error" role="status">
-          原文の未登録アセット: {{ unresolvedOriginalAssets.join('、') }}
+          原文の未登録アイコン: {{ unresolvedOriginalAssets.join('、') }}
         </p>
         <div class="translation-actions">
           <button
@@ -835,7 +835,7 @@ function resetSelectedInlineAssetStyle() {
             class="field-error"
             role="status"
           >
-            未登録のアセット: {{ unresolvedAssetNames.join('、') }}。トークンは文字列のまま表示されます。
+            未登録のアイコン: {{ unresolvedAssetNames.join('、') }}。トークンは文字列のまま表示されます。
           </small>
           <ul v-if="consistencyWarnings.length" class="consistency-warnings" role="status">
             <li v-for="warning in consistencyWarnings" :key="warning">
@@ -917,7 +917,7 @@ function resetSelectedInlineAssetStyle() {
                 :disabled="!selectedInlineAssetStyle"
                 @click="resetSelectedInlineAssetStyle"
               >
-                アセットの既定値に戻す
+                アイコンの既定値に戻す
               </button>
             </fieldset>
             <p v-else class="muted">

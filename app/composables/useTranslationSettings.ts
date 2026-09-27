@@ -16,9 +16,9 @@ function defaultSettings(): TranslationSettings {
 }
 
 /** 保存値を検証し、利用できない設定は初期値へ戻す。 */
-function parseSettings(value: string | null): TranslationSettings {
+function parseSettings(value: string | null): { settings: TranslationSettings, configured: boolean } | null {
   if (!value)
-    return defaultSettings()
+    return null
   try {
     const parsed: unknown = JSON.parse(value)
     if (
@@ -30,13 +30,16 @@ function parseSettings(value: string | null): TranslationSettings {
       && typeof parsed.endpoint === 'string'
     ) {
       // 旧デモが保存したsampleは手動へ戻す。通常用の接続先は引き継ぐ。
-      return { provider: parsed.provider === 'sample' ? 'manual' : parsed.provider, endpoint: parsed.endpoint }
+      return {
+        settings: { provider: parsed.provider === 'sample' ? 'manual' : parsed.provider, endpoint: parsed.endpoint },
+        configured: parsed.provider !== 'sample',
+      }
     }
   }
   catch {
     // Ignore invalid settings and restore safe defaults.
   }
-  return defaultSettings()
+  return null
 }
 
 /** 翻訳方式と接続先をブラウザに保持する。保存値は読み込み時に検証してから使用する。 */
@@ -45,13 +48,17 @@ export function useTranslationSettings() {
   const settings = ref<TranslationSettings>(defaultSettings())
   /** ブラウザから保存済み翻訳設定を読み込み終えたか。 */
   const loaded = ref(false)
+  /** デフォルト値の自動読込は、利用者による設定保存とは区別する。 */
+  const configured = ref(false)
 
   // ブラウザの保存済み設定を読み込み、検証した値を初期状態へ反映する。
   onMounted(() => {
     try {
-      settings.value = parseSettings(
+      const saved = parseSettings(
         localStorage.getItem(TRANSLATION_SETTINGS_STORAGE_KEY),
       )
+      settings.value = saved?.settings ?? defaultSettings()
+      configured.value = saved?.configured ?? false
     }
     catch {
       settings.value = defaultSettings()
@@ -63,7 +70,7 @@ export function useTranslationSettings() {
   watch(
     settings,
     (value) => {
-      if (loaded.value) {
+      if (loaded.value && configured.value) {
         try {
           localStorage.setItem(
             TRANSLATION_SETTINGS_STORAGE_KEY,
@@ -80,8 +87,9 @@ export function useTranslationSettings() {
 
   /** 渡された翻訳設定を複製し、現在の設定を差し替える。 */
   function updateSettings(value: TranslationSettings) {
+    configured.value = true
     settings.value = { ...value }
   }
 
-  return { settings, updateSettings }
+  return { settings, configured, updateSettings }
 }

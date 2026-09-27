@@ -27,18 +27,20 @@ describe('saved translation settings', () => {
     vi.unstubAllGlobals()
   })
 
-  it('replaces a legacy sample setting with manual and preserves the endpoint across reloads', async () => {
+  it('offers manual for a legacy sample setting without treating demo settings as configured', async () => {
     storage.set(TRANSLATION_SETTINGS_STORAGE_KEY, JSON.stringify({ provider: 'sample', endpoint }))
     const first = scope.run(useTranslationSettings)!
     hooks.mounted()
     await nextTick()
     expect(first.settings.value).toEqual({ provider: 'manual', endpoint })
-    expect(JSON.parse(storage.get(TRANSLATION_SETTINGS_STORAGE_KEY)!)).toEqual({ provider: 'manual', endpoint })
+    expect(first.configured.value).toBe(false)
+    expect(JSON.parse(storage.get(TRANSLATION_SETTINGS_STORAGE_KEY)!)).toEqual({ provider: 'sample', endpoint })
 
     const reloaded = scope.run(useTranslationSettings)!
     hooks.mounted()
     await nextTick()
     expect(reloaded.settings.value).toEqual({ provider: 'manual', endpoint })
+    expect(reloaded.configured.value).toBe(false)
   })
 
   it.each(['manual', 'local', 'browser'] as const)('keeps the saved %s provider and endpoint', async (provider) => {
@@ -47,6 +49,7 @@ describe('saved translation settings', () => {
     hooks.mounted()
     await nextTick()
     expect(settings.settings.value).toEqual({ provider, endpoint })
+    expect(settings.configured.value).toBe(true)
   })
 
   it('persists an explicit change to normal translation settings', async () => {
@@ -55,5 +58,41 @@ describe('saved translation settings', () => {
     settings.updateSettings({ provider: 'local', endpoint })
     await nextTick()
     expect(JSON.parse(storage.get(TRANSLATION_SETTINGS_STORAGE_KEY)!)).toEqual({ provider: 'local', endpoint })
+    expect(settings.configured.value).toBe(true)
+  })
+
+  it.each([null, '{broken', '{}', '{"provider":"unknown","endpoint":""}'])('does not persist defaults or finish setup for %s', async (value) => {
+    if (value !== null)
+      storage.set(TRANSLATION_SETTINGS_STORAGE_KEY, value)
+    const settings = scope.run(useTranslationSettings)!
+    hooks.mounted()
+    await nextTick()
+    expect(settings.configured.value).toBe(false)
+    expect(settings.settings.value.provider).toBe('manual')
+    expect(storage.get(TRANSLATION_SETTINGS_STORAGE_KEY) ?? null).toBe(value)
+  })
+
+  it('persists explicit manual selection and recognizes it on the next visit', async () => {
+    const first = scope.run(useTranslationSettings)!
+    hooks.mounted()
+    first.updateSettings(first.settings.value)
+    await nextTick()
+    const next = scope.run(useTranslationSettings)!
+    hooks.mounted()
+    expect(next.configured.value).toBe(true)
+    expect(next.settings.value.provider).toBe('manual')
+  })
+
+  it('allows setup for this visit when storage is unavailable', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => { throw new Error('denied') },
+      setItem: () => { throw new Error('denied') },
+    })
+    const settings = scope.run(useTranslationSettings)!
+    hooks.mounted()
+    expect(settings.configured.value).toBe(false)
+    settings.updateSettings({ provider: 'browser', endpoint })
+    await nextTick()
+    expect(settings.configured.value).toBe(true)
   })
 })

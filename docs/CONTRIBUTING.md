@@ -35,17 +35,23 @@ miseを使わない場合は、`package.json`と`mise.toml`で指定している
 
 ## テスト
 
-Pull Requestを作る前に次を実行してください。
+ローカルでは変更箇所に関係するテストを実行し、型検査・Lintなどは変更範囲に応じて選んでください。毎回の全検査や本番ビルドは必須ではありません。検証コマンドは次のとおりです。
 
 ```bash
 mise exec -- pnpm test
 mise exec -- pnpm typecheck
 mise exec -- pnpm lint
-mise exec -- pnpm build
+mise exec -- pnpm build:static
 git diff --check
 ```
 
-File System Access API、Canvas操作、フォント、画像出力に影響する変更では、[`MANUAL_TESTS.md`](MANUAL_TESTS.md)の関連項目も確認し、確認したブラウザと結果をPull Requestへ記載してください。
+push・PR時のCIでは`test`、`typecheck`、`lint`、`build:static`を実行します。ローカルでの確認に加えてCIの結果も確認してください。ローカルコミットだけではCIは起動しません。
+
+開発中は`mise exec -- pnpm dev`で動作を確認します。開発時のコンパイルと本番ビルドは同一ではないため、Nuxt設定・依存関係・SSR・静的生成・配信リソースなどに影響する変更やCI失敗の調査では、必要に応じて`mise exec -- pnpm build`または`mise exec -- pnpm build:static`をローカルでも実行してください。サブパス配置の確認方法は[`deployment.md`](deployment.md)を参照してください。
+
+E2Eの成功だけで全動作を確認済みとは扱いません。変更内容に応じて`mise exec -- pnpm test:e2e`で関連するE2Eを実行し、Canvasの見た目、フォント、画像出力の品質、File System Access APIなどは[`MANUAL_TESTS.md`](MANUAL_TESTS.md)も参照して随時実機確認してください。確認したブラウザ・結果と未確認の範囲をPull Requestへ記載してください。
+
+文書だけの変更は内容・ローカルリンク・`git diff --check`の確認を基本とし、ローカルでのアプリ全テストは不要です。
 
 不具合修正には、可能な範囲で失敗を再現するテストを先に追加してください。検証を弱めたり、エラーを握りつぶしたりしてテストを通さないでください。
 

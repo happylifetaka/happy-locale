@@ -1,9 +1,22 @@
+import type { CandidateEdit, CardCandidateEditState } from '~/services/ocr/candidate-edits'
 import type { CardProject, RegionDraft, TextRegion } from '~/types/editor'
+import type { RegionCandidate } from '~/types/ocr'
+import type { MergeOptions } from '~/utils/merge-regions'
 import type { SplitAxis, SplitText } from '~/utils/split-region'
 import { computed, ref } from 'vue'
 import { useKeyedHistory } from '~/composables/useHistory'
+import { intersectionArea } from '~/services/asset-discovery/geometry'
+import { rebaseRegionBounds } from '~/services/asset-discovery/region-comparison'
+import { minimalIconExpansion } from '~/services/asset-discovery/region-fit'
+import { withoutTransferredIcons } from '~/services/asset-discovery/region-transfer'
+import { containsBounds, sameBounds } from '~/services/asset-discovery/review'
+import { applyCandidateEdits, candidateEdits, consumedCandidateEdits } from '~/services/ocr/candidate-edits'
+import { parseRegionCandidates } from '~/services/ocr/candidate-format'
 import { renameCardAssetTokens } from '~/services/project/cards'
+import { normalizeRegion } from '~/services/project/format/regions'
+import { FILE_LIMITS } from '~/utils/file-limits'
 import { reconcileInlineAssetStyles } from '~/utils/inline-assets'
+import { mergeTextRegions } from '~/utils/merge-regions'
 import { splitTextRegion } from '~/utils/split-region'
 import { reconcileTextStyles } from '~/utils/text-styles'
 import { statusForTranslation } from '~/utils/translation-status'
@@ -29,10 +42,15 @@ export type CardEditorChangeHandler = (
   project: CardProject,
 ) => void
 
+export interface CardEditorCandidateBridge {
+  read: (cardId: string | null) => CardCandidateEditState
+  apply: (cardId: string | null, before: CardCandidateEditState, after: CardCandidateEditState) => void
+}
+
 /** 領域の編集を履歴へ確定し、変更後のカードを親の保存用ストアへ通知する。 */
-export function useCardEditor(onChange?: CardEditorChangeHandler) {
+export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: CardEditorCandidateBridge) {
   /** 現在の編集状態とUndo／Redoの履歴を管理する窓口。 */
-  const history = useKeyedHistory(emptyProject())
+  const history = useKeyedHistory<CardProject, CandidateEdit[]>(emptyProject())
   /** カードで現在選択している領域ID。 */
   const selectedRegionId = ref<string | null>(null)
   /** 現在の編集内容を親へ通知するときに対応付けるカードID。 */
@@ -139,7 +157,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
     }>,
   ) {
     if (drafts.length === 0)
-      return
+      return []
     const firstSequence = history.state.value.regions.length + 1
     const regions = drafts.map((draft, index): TextRegion => {
       const sequence = firstSequence + index
@@ -149,6 +167,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
         displayName: `領域 ${sequence}`,
         ...draft.bounds,
         originalText: draft.originalText,
+        lastOcrText: draft.originalText,
         translatedText: '',
         translationStatus: 'untranslated',
         textStyles: [],
@@ -179,10 +198,13 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
     })
     selectedRegionId.value = regions.at(-1)?.id ?? null
     publishProject()
+    return regions.map(region => region.id)
   }
 
   /** 指定領域の変更を履歴へ確定し、文字列変更時の書式も調整する。 */
-  function updateRegion(id: string, patch: Partial<TextRegion>) {
+  function updateRegion(id: string, patch: Partial<TextRegion>, expectedCardId: string | null = activeCardId) {
+    if (expectedCardId !== activeCardId)
+      throw new Error('編集中のカードが変わりました。対象を選び直してください。')
     history.commit({
       ...history.state.value,
       regions: history.state.value.regions.map(region =>
@@ -239,8 +261,145 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
     publishProject()
   }
 
-  /** 雛形の領域へ新しいIDを与えて現在のカードに追加する。 */
-  function appendTemplateRegions(regions: readonly TextRegion[]) {
+  function changedRegionBounds(changes: readonly { id: string, bounds: RegionDraft }[]) {
+    const current = history.state.value
+    const byId = new Map(changes.map(change => [change.id, change.bounds]))
+    const existing = new Set(current.regions.map(region => region.id))
+    if (byId.size !== changes.length || changes.some(change => !existing.has(change.id)))
+      throw new Error('枠を変更する領域を一つずつ選び直してください。')
+    // 履歴のcommit・Storeへの通知より前に、関連データの切欠けを含む全選択を検証する。
+    return current.regions.map((region) => {
+      const bounds = byId.get(region.id)
+      return bounds ? { ...region, ...rebaseRegionBounds(region, bounds, current.imageWidth, current.imageHeight) } : region
+    })
+  }
+
+  /** 再検出の枠修正を全件検証して一つの履歴へ確定する。文字列と相対座標の意味は変えない。 */
+  function applyRegionBounds(changes: readonly { id: string, bounds: RegionDraft }[]) {
+    const current = history.state.value
+    const regions = changedRegionBounds(changes)
+    if (JSON.stringify(regions) === JSON.stringify(current.regions))
+      return
+    history.commit({ ...current, regions })
+    publishProject()
+  }
+
+  function publishCandidateTransition(next: CardProject, edits: CandidateEdit[], direction: 'forward' | 'backward', cardId = activeCardId, previous = history.state.value) {
+    if (!candidates)
+      throw new Error('OCR候補を含む編集の保存先が接続されていません。')
+    const stored = candidates.read(cardId)
+    parseRegionCandidates(stored.candidates, next.imageWidth, next.imageHeight)
+    const nextCandidates = applyCandidateEdits(stored.candidates, edits, direction)
+    parseRegionCandidates(nextCandidates, next.imageWidth, next.imageHeight)
+    candidates.apply(cardId, { project: previous, candidates: stored.candidates }, { project: next, candidates: nextCandidates })
+  }
+
+  /** 比較サービスで選んだ枠・候補をまとめて確定する。原文の再OCR適用とは別操作。 */
+  function applyRegionDetection(
+    changes: readonly { id: string, bounds: RegionDraft }[],
+    beforeCandidates: readonly RegionCandidate[],
+    afterCandidates: readonly RegionCandidate[],
+    expectedCardId: string | null = activeCardId,
+  ) {
+    if (expectedCardId !== activeCardId)
+      throw new Error('編集中のカードが変わりました。再比較してください。')
+    if (!candidates)
+      throw new Error('OCR候補を含む編集の保存先が接続されていません。')
+    const current = history.state.value
+    const before = parseRegionCandidates(beforeCandidates, current.imageWidth, current.imageHeight)
+    parseRegionCandidates(afterCandidates, current.imageWidth, current.imageHeight)
+    const stored = parseRegionCandidates(candidates.read(activeCardId).candidates, current.imageWidth, current.imageHeight)
+    if (JSON.stringify(stored) !== JSON.stringify(before))
+      throw new Error('比較後にOCR候補が変わりました。再比較してください。')
+    const regions = changedRegionBounds(changes)
+    // 保存署名を正確に戻すため、検証で正規化した値ではなく元の項目順も保つ。
+    const edits = candidateEdits(beforeCandidates, afterCandidates)
+    if (edits.some(edit => !edit.before && current.regions.some(region => region.id === edit.id)))
+      throw new Error('新規候補のIDが既存領域と重複しています。再比較してください。')
+    if (!edits.length && JSON.stringify(regions) === JSON.stringify(current.regions))
+      return
+    // 空の付随変更も、候補を含む検証済みの原子的な保存経路を通す目印とする。
+    history.commit({ ...current, regions }, edits, (next, effect) => publishCandidateTransition(next, effect!, 'forward'))
+  }
+
+  /** 確認したアイコン位置と原文、新規領域を候補消費と同じ履歴で反映する。 */
+  function applyIconAnalysis(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], expectedCardId: string | null) {
+    commitIconAnalysis(before, proposals, beforeCandidates, afterCandidates, expectedCardId, false)
+  }
+
+  /** 一括反映用。非表示カードの履歴も保持し、対象の保存状態を直前に再検証する。 */
+  function applyIconAnalysisToCard(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], cardId: string | null, editCandidates = false) {
+    commitIconAnalysis(before, proposals, beforeCandidates, afterCandidates, cardId, true, editCandidates)
+  }
+
+  function commitIconAnalysis(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], expectedCardId: string | null, background: boolean, editCandidates = false) {
+    const inactive = expectedCardId !== activeCardId
+    if (inactive && (!background || !expectedCardId || !candidates))
+      throw new Error('解析後にカード・領域が変更されました。もう一度解析してください。')
+    const current = inactive ? candidates!.read(expectedCardId).project : history.state.value
+    if (JSON.stringify(current) !== JSON.stringify(before))
+      throw new Error('解析後にカード・領域が変更されました。もう一度解析してください。')
+    if (new Set(proposals.map(region => region.id)).size !== proposals.length)
+      throw new Error('適用する領域が重複しています。')
+    const updates = new Map<string, TextRegion>()
+    const additions: TextRegion[] = []
+    for (const proposed of proposals) {
+      const region = structuredClone(proposed)
+      if (!normalizeRegion(region, 0) || !containsBounds({ x: 0, y: 0, width: current.imageWidth, height: current.imageHeight }, region)
+        || region.originalText.length > FILE_LIMITS.projectStringLength
+        || new Set((region.sourceIcons ?? []).map(icon => icon.id)).size !== (region.sourceIcons ?? []).length
+        || region.sourceIcons?.some(icon => !icon.assetId || !containsBounds({ x: 0, y: 0, width: region.width, height: region.height }, icon))) {
+        throw new Error('反映する領域・アイコンの範囲が不正です。')
+      }
+      const existing = current.regions.find(item => item.id === region.id)
+      if (existing) {
+        let boundsPatch: Partial<TextRegion> = {}
+        if (!sameBounds(existing, region)) {
+          const icons = (region.sourceIcons ?? []).filter(icon => icon.id.startsWith('discovery-')).map(icon => ({ ...icon, x: region.x + icon.x, y: region.y + icon.y }))
+          const fitted = minimalIconExpansion(existing, icons)
+          if (!fitted || !sameBounds(fitted, region))
+            throw new Error('アイコンに合わせた小さな拡張だけを反映できます。')
+          boundsPatch = rebaseRegionBounds(withoutTransferredIcons(existing), fitted, current.imageWidth, current.imageHeight)
+        }
+        updates.set(region.id, { ...existing, ...boundsPatch, sourceIcons: region.sourceIcons ?? [], originalText: region.originalText, lastOcrText: region.originalText, translationStatus: region.originalText !== existing.originalText && existing.translationStatus === 'reviewed' ? statusForTranslation(existing.translatedText) : existing.translationStatus })
+      }
+      else {
+        additions.push(region)
+      }
+    }
+    if (current.regions.length + additions.length > FILE_LIMITS.projectRegionsPerCard)
+      throw new Error('領域数の上限を超えます。')
+    const next = { ...current, regions: [...current.regions.map(region => updates.get(region.id) ?? region), ...additions] }
+    for (const region of next.regions) {
+      const old = current.regions.find(item => item.id === region.id)
+      if (old && !sameBounds(old, region) && next.regions.some(other => other.id !== region.id && intersectionArea(region, other) > 0))
+        throw new Error('拡張すると別の領域と重なります。')
+    }
+    parseRegionCandidates(beforeCandidates, current.imageWidth, current.imageHeight)
+    parseRegionCandidates(afterCandidates, current.imageWidth, current.imageHeight)
+    // 初回の自動検出では、追加対象外だった候補も同じ履歴で保存する。
+    const edits = editCandidates || (background && !current.regions.length && !beforeCandidates.length)
+      ? candidateEdits(beforeCandidates, afterCandidates)
+      : consumedCandidateEdits(beforeCandidates, afterCandidates)
+    if (candidates && JSON.stringify(candidates.read(expectedCardId).candidates) !== JSON.stringify(beforeCandidates))
+      throw new Error('解析後に領域候補が変更されました。もう一度解析してください。')
+    if (!edits.length && JSON.stringify(next) === JSON.stringify(current))
+      return
+    if (edits.length || candidates) {
+      const publish = (value: CardProject, effect: CandidateEdit[] | null) => publishCandidateTransition(value, effect!, 'forward', expectedCardId, current)
+      if (inactive)
+        history.commitTo(expectedCardId!, current, next, edits, publish)
+      else
+        history.commit(next, edits, publish)
+    }
+    else {
+      history.commit(next)
+      publishProject()
+    }
+  }
+
+  /** 領域へ新しいIDを与えて現在のカードにまとめて追加する。 */
+  function appendRegions(regions: readonly TextRegion[]) {
     if (!regions.length)
       return
     const added = regions.map((region) => {
@@ -269,6 +428,35 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
       regions: history.state.value.regions.flatMap(item => item.id === id ? [first, second] : [item]),
     })
     selectedRegionId.value = id
+    publishProject()
+  }
+
+  /** 結合を一つの履歴として確定し、基準領域のIDと一覧位置を維持する。 */
+  function mergeRegions(ids: string[], options: MergeOptions) {
+    const regions = ids.map(id => history.state.value.regions.find(region => region.id === id))
+    if (regions.some(region => !region))
+      throw new Error('結合対象の領域が見つかりません。')
+    const merged = mergeTextRegions(regions as TextRegion[], options)
+    history.commit({
+      ...history.state.value,
+      regions: history.state.value.regions.flatMap(region => region.id === options.baseId ? [merged] : ids.includes(region.id) ? [] : [region]),
+    })
+    selectedRegionId.value = merged.id
+    publishProject()
+  }
+
+  /** 領域を指定位置へ移動し、並び順を一つの履歴として保存する。 */
+  function moveRegion(id: string, targetId: string, position: 'before' | 'after') {
+    const current = history.state.value
+    const source = current.regions.find(region => region.id === id)
+    if (!source || id === targetId || !current.regions.some(region => region.id === targetId))
+      return
+    const regions = current.regions.filter(region => region.id !== id)
+    const targetIndex = regions.findIndex(region => region.id === targetId)
+    regions.splice(targetIndex + (position === 'after' ? 1 : 0), 0, source)
+    if (regions.every((region, index) => region.id === current.regions[index]?.id))
+      return
+    history.commit({ ...current, regions })
     publishProject()
   }
 
@@ -332,18 +520,32 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
 
   /** 直前の確定状態へ履歴を戻す。 */
   function undo() {
-    history.undo()
+    let published = false
+    history.undo((next, effect) => {
+      if (effect !== null) {
+        publishCandidateTransition(next, effect, 'backward')
+        published = true
+      }
+    })
     if (!selectedRegion.value)
       selectedRegionId.value = null
-    publishProject()
+    if (!published)
+      publishProject()
   }
 
   /** 取り消した状態へ履歴を進める。 */
   function redo() {
-    history.redo()
+    let published = false
+    history.redo((next, effect) => {
+      if (effect !== null) {
+        publishCandidateTransition(next, effect, 'forward')
+        published = true
+      }
+    })
     if (!selectedRegion.value)
       selectedRegionId.value = null
-    publishProject()
+    if (!published)
+      publishProject()
   }
 
   return {
@@ -360,9 +562,15 @@ export function useCardEditor(onChange?: CardEditorChangeHandler) {
     addRegion,
     addRegions,
     updateRegion,
-    appendTemplateRegions,
+    applyRegionBounds,
+    applyRegionDetection,
+    applyIconAnalysis,
+    applyIconAnalysisToCard,
+    appendRegions,
     splitRegion,
+    mergeRegions,
     removeRegion,
+    moveRegion,
     applyTranslations,
     renameAssetToken,
     undo,

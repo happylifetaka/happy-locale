@@ -121,7 +121,7 @@ function useStandardCardSize() {
   <section class="print-area-inspector">
     <h2>印刷範囲</h2>
     <p class="muted">
-      中央の画像上で始点と終点を順にクリックするか、ドラッグして、和訳シールとして印刷する範囲を指定します。設定済みの枠は移動・リサイズできます。
+      中央の画像上で始点と終点を順にクリックするか、ドラッグして、印刷する範囲を指定します。設定済みの枠は移動・リサイズできます。
     </p>
     <div class="print-area-actions">
       <button type="button" @click="useWholeCard">

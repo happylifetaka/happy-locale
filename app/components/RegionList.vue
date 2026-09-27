@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TextRegion } from '~/types/editor'
 import type { RegionStatusFilter } from '~/utils/region-filter'
+import { computed, nextTick, ref, watch } from 'vue'
 import { filterRegions } from '~/utils/region-filter'
 
 const props = defineProps<{
@@ -9,10 +10,12 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  move: [id: string, targetId: string, position: 'before' | 'after']
   select: [id: string]
   rename: [id: string, displayName: string]
   remove: [id: string]
   split: [id: string]
+  merge: [id: string]
 }>()
 
 /** 一覧を絞り込む検索文字列。 */
@@ -29,6 +32,53 @@ const renameInput = ref<HTMLInputElement | null>(null)
 const filteredRegions = computed(() =>
   filterRegions(props.regions, query.value, status.value),
 )
+
+const draggedId = ref<string | null>(null)
+const dropTarget = ref<{ id: string, position: 'before' | 'after' } | null>(null)
+
+function clearDrag() {
+  draggedId.value = null
+  dropTarget.value = null
+}
+
+watch([() => props.regions, query, status], clearDrag)
+
+function startDrag(event: DragEvent, id: string) {
+  if (editingRegionId.value || !event.dataTransfer) {
+    event.preventDefault()
+    return
+  }
+  draggedId.value = id
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', id)
+}
+
+function dragOver(event: DragEvent, id: string) {
+  if (!draggedId.value || draggedId.value === id)
+    return
+  event.preventDefault()
+  if (event.dataTransfer)
+    event.dataTransfer.dropEffect = 'move'
+  const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  dropTarget.value = { id, position: event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after' }
+}
+
+function drop(event: DragEvent, id: string) {
+  dragOver(event, id)
+  if (draggedId.value && dropTarget.value?.id === id && draggedId.value !== id)
+    emit('move', draggedId.value, id, dropTarget.value.position)
+  clearDrag()
+}
+
+function moveWithKeyboard(event: KeyboardEvent, id: string) {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')
+    return
+  event.preventDefault()
+  const index = filteredRegions.value.findIndex(region => region.id === id)
+  const target = filteredRegions.value[index + (event.key === 'ArrowUp' ? -1 : 1)]
+  if (target)
+    emit('move', id, target.id, event.key === 'ArrowUp' ? 'before' : 'after')
+}
 
 /** 表示名の現在値を下書きへ移して改名を開始する。 */
 function startRename(region: TextRegion) {
@@ -89,8 +139,29 @@ function commitRename(region: TextRegion) {
       v-for="region in filteredRegions"
       :key="region.id"
       class="region-list-item"
-      :class="{ selected: region.id === selectedId }"
+      :class="{
+        'selected': region.id === selectedId,
+        'region-list-dragging': draggedId === region.id,
+        'region-list-drop-before': dropTarget?.id === region.id && dropTarget.position === 'before',
+        'region-list-drop-after': dropTarget?.id === region.id && dropTarget.position === 'after',
+      }"
+      @dragover="dragOver($event, region.id)"
+      @dragleave="dropTarget = null"
+      @drop="drop($event, region.id)"
     >
+      <button
+        type="button"
+        class="region-list-drag-handle"
+        :draggable="editingRegionId === null"
+        :disabled="regions.length < 2 || editingRegionId !== null"
+        :aria-label="`${region.displayName.trim() || region.regionId}を並び替え`"
+        title="ドラッグで並び替え（上下矢印キーでも移動できます）"
+        @dragstart="startDrag($event, region.id)"
+        @dragend="clearDrag"
+        @keydown="moveWithKeyboard($event, region.id)"
+      >
+        ⠿
+      </button>
       <button
         type="button"
         class="region-list-select"
@@ -113,9 +184,6 @@ function commitRename(region: TextRegion) {
           region.translatedText || region.originalText || region.regionId
         }}</span>
       </button>
-      <button type="button" class="region-split-button" :aria-label="`${region.displayName || region.regionId}を分割`" @click="emit('split', region.id)">
-        分割…
-      </button>
       <input
         v-if="editingRegionId === region.id"
         ref="renameInput"
@@ -133,7 +201,7 @@ function commitRename(region: TextRegion) {
           type="button"
           class="region-list-rename"
           :aria-label="`${region.displayName.trim() || region.regionId}の名前を変更`"
-          title="領域名を変更"
+          title="名前変更"
           @click="startRename(region)"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -145,12 +213,69 @@ function commitRename(region: TextRegion) {
           type="button"
           class="region-list-remove"
           :aria-label="`${region.displayName.trim() || region.regionId}を削除`"
-          title="領域を削除"
+          title="削除"
           @click="$emit('remove', region.id)"
         >
-          ×
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="region-list-split"
+          :aria-label="`${region.displayName.trim() || region.regionId}を分割`"
+          title="分割"
+          @click="emit('split', region.id)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 4H3v16h6M15 4h6v16h-6" />
+            <path d="M12 3v3m0 4v4m0 4v3" stroke-dasharray="2 2" />
+            <path d="m7 10-2 2 2 2m-2-2h4m8-2 2 2-2 2m2-2h-4" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="region-list-merge"
+          :disabled="regions.length < 2"
+          :aria-label="`${region.displayName.trim() || region.regionId}を結合`"
+          title="結合"
+          @click="emit('merge', region.id)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M5 12h5m-2-2 2 2-2 2m11-2h-5m2-2-2 2 2 2" />
+          </svg>
         </button>
       </span>
     </div>
   </section>
 </template>
+
+<style scoped>
+.region-list .region-list-select { padding-left: 2rem; }
+.region-list-name-input { left: 2rem; }
+.region-list .region-list-drag-handle {
+  position: absolute;
+  top: 0.65rem;
+  left: 0.2rem;
+  padding: 0.2rem;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: grab;
+  font-size: 1.2rem;
+}
+.region-list-dragging { opacity: 0.45; }
+.region-list-drop-before::before,
+.region-list-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #3970d5;
+  pointer-events: none;
+}
+.region-list-drop-before::before { top: -4px; }
+.region-list-drop-after::after { bottom: -4px; }
+</style>

@@ -67,7 +67,49 @@ function contrastStretch(data: Uint8ClampedArray) {
   }
 }
 
-/** 領域を拡大し余白を追加してOCR用画像にする。除外領域は認識前に白で隠す。 */
+/** 除外範囲を周囲の代表輝度で隠す。暗い背景に白い矩形を作らず、隣接文字の画素は変更しない。 */
+export function maskOCRAreas(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  areas: readonly RegionDraft[],
+  content: RegionDraft,
+  radius = 3,
+) {
+  if (!areas.length)
+    return
+  const source = new Uint8ClampedArray(data)
+  const inside = (x: number, y: number, rect: RegionDraft) => x >= rect.x && y >= rect.y
+    && x < rect.x + rect.width && y < rect.y + rect.height
+  for (const area of areas) {
+    const samples: number[] = []
+    const left = Math.max(0, Math.floor(area.x))
+    const top = Math.max(0, Math.floor(area.y))
+    const right = Math.min(width, Math.ceil(area.x + area.width))
+    const bottom = Math.min(height, Math.ceil(area.y + area.height))
+    for (let y = Math.max(0, top - radius); y < Math.min(height, bottom + radius); y++) {
+      for (let x = Math.max(0, left - radius); x < Math.min(width, right + radius); x++) {
+        if (!inside(x, y, content) || areas.some(rect => inside(x, y, rect)))
+          continue
+        const offset = (y * width + x) * 4
+        samples.push(Math.round(source[offset]! * 0.299 + source[offset + 1]! * 0.587 + source[offset + 2]! * 0.114))
+      }
+    }
+    samples.sort((a, b) => a - b)
+    const background = samples[Math.floor(samples.length / 2)] ?? 255
+    for (let y = top; y < bottom; y++) {
+      for (let x = left; x < right; x++) {
+        const offset = (y * width + x) * 4
+        data[offset] = background
+        data[offset + 1] = background
+        data[offset + 2] = background
+        data[offset + 3] = 255
+      }
+    }
+  }
+}
+
+/** 領域を拡大し余白を追加してOCR用画像にする。除外領域は周囲の背景輝度で隠す。 */
 export async function prepareRegionForOCR(
   image: CanvasImageSource,
   region: RegionDraft,
@@ -80,37 +122,41 @@ export async function prepareRegionForOCR(
   const canvas = document.createElement('canvas')
   canvas.width = Math.ceil(sourceWidth * scale + padding * 2)
   canvas.height = Math.ceil(sourceHeight * scale + padding * 2)
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context)
-    throw new Error('OCR用Canvasを初期化できませんでした。')
+  try {
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (!context)
+      throw new Error('OCR用Canvasを初期化できませんでした。')
 
-  context.fillStyle = '#ffffff'
-  context.fillRect(0, 0, canvas.width, canvas.height)
-  context.imageSmoothingEnabled = true
-  context.imageSmoothingQuality = 'high'
-  context.drawImage(
-    image,
-    region.x,
-    region.y,
-    sourceWidth,
-    sourceHeight,
-    padding,
-    padding,
-    sourceWidth * scale,
-    sourceHeight * scale,
-  )
-
-  for (const area of options.exclusions ?? []) {
-    context.fillRect(
-      padding + area.x * scale,
-      padding + area.y * scale,
-      area.width * scale,
-      area.height * scale,
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.imageSmoothingEnabled = true
+    context.imageSmoothingQuality = 'high'
+    context.drawImage(
+      image,
+      region.x,
+      region.y,
+      sourceWidth,
+      sourceHeight,
+      padding,
+      padding,
+      sourceWidth * scale,
+      sourceHeight * scale,
     )
-  }
 
-  const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-  contrastStretch(imageData.data)
-  context.putImageData(imageData, 0, 0)
-  return canvasToBlob(canvas)
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+    maskOCRAreas(imageData.data, canvas.width, canvas.height, (options.exclusions ?? []).map(area => ({
+      x: padding + area.x * scale,
+      y: padding + area.y * scale,
+      width: area.width * scale,
+      height: area.height * scale,
+    })), { x: padding, y: padding, width: sourceWidth * scale, height: sourceHeight * scale }, Math.ceil(scale * 2))
+    contrastStretch(imageData.data)
+    context.putImageData(imageData, 0, 0)
+    // PNG化が終わるまでは画素を保持し、その後は一括OCRでも積み残さない。
+    return await canvasToBlob(canvas)
+  }
+  finally {
+    canvas.width = 1
+    canvas.height = 1
+  }
 }

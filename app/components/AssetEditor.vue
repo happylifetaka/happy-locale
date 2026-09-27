@@ -51,7 +51,7 @@ function update(id: string, patch: Partial<ImageAsset>) {
       @update-zoom="$emit('update:zoom', $event)"
     />
     <aside class="side-panel asset-editor-panel">
-      <h2>アセット編集</h2>
+      <h2>アイコン編集</h2>
       <AssetCreationPanel
         v-if="image && creationDraft"
         :image="image"
@@ -73,7 +73,7 @@ function update(id: string, patch: Partial<ImageAsset>) {
         {{
           selecting
             ? '元画像上をドラッグしてください'
-            : '新しいアセットを切り出す'
+            : '新しいアイコンを切り出す'
         }}
       </button>
       <p v-if="!creationDraft" class="muted">

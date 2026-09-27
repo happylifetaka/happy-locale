@@ -75,7 +75,6 @@ const childNames = [
   'TranslationReviewDialog',
   'TranslationReuseDialog',
   'TranslationPreviewDialog',
-  'LayoutTemplateDialog',
   'RegionSplitDialog',
   'SourceIconsDialog',
   'TranslationRequestDialog',
@@ -143,7 +142,7 @@ export function deferred<T>() {
 
 export function seedProject(ids = ['one', 'two', 'three']) {
   const project: FolderProjectDocument = {
-    version: 2,
+    version: 4,
     name: 'cards',
     activeCardId: ids[0]!,
     cards: ids.map(id => ({
@@ -179,7 +178,7 @@ export async function mountEditor(pinia = createPinia(), realInspector = false) 
         EditorConfirmDialog: false,
         EditorInspectorPanel: false,
         DiagnosticsDialog: false,
-        EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus'], template: '<div />' },
+        EditorToolbar: { name: 'EditorToolbar', props: ['saveStatus', 'currentView', 'discoveryWorking'], template: '<div />' },
         AssetEditor: { name: 'AssetEditor', props: ['creationDraft', 'creationRunning'], template: '<div />' },
         CardCanvas: { name: 'CardCanvas', props: ['previewDeferred', 'project', 'previewMode', 'regionCandidates', 'selectedCandidateId', 'selectedExclusionId'], methods: { backgroundColorForBounds: () => '#ffffff', exportPng: canvasIO.exportPng, exportJpeg: canvasIO.exportJpeg }, template: '<div />' },
         CardList: { name: 'CardList', props: ['activeCardId', 'loadingCardId', 'batchOcrStates', 'batchOcrRunning', 'batchOcrCompleted', 'batchOcrTotal', 'pendingDeletionIds'], template: '<div />' },
@@ -188,6 +187,7 @@ export async function mountEditor(pinia = createPinia(), realInspector = false) 
         TranslationReuseDialog: { name: 'TranslationReuseDialog', props: ['region', 'candidates'], template: '<div />' },
         TranslationPreviewDialog: { name: 'TranslationPreviewDialog', props: ['originalText', 'currentTranslation', 'proposedTranslation'], template: '<div />' },
         TranslationRequestDialog: { name: 'TranslationRequestDialog', props: ['originalText', 'endpoint'], template: '<div />' },
+        TranslationSettingsDialog: { name: 'TranslationSettingsDialog', props: ['open', 'initialSetup', 'settings', 'endpointEnabled'], template: '<div />' },
         TranslationReviewDialog: { name: 'TranslationReviewDialog', props: ['cards', 'initialImport', 'error', 'appliedRows', 'loadImage'], template: '<div />' },
       },
     },

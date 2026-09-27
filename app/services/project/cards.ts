@@ -4,6 +4,7 @@ import type {
   FolderProjectDocument,
   TextRegion,
 } from '~/types/editor'
+import { reconcileOccurrenceOwners, removeDiscoveryCards } from '~/services/asset-discovery/review'
 import { renameInlineAssetStyles } from '~/utils/inline-assets'
 import { reconcileTextStyles } from '~/utils/text-styles'
 
@@ -50,7 +51,7 @@ export function removeCardFontReferences(
   }
 }
 
-/** 全カードと配置雛形にある、指定フォントを使う領域数を合計する。 */
+/** 全カードにある、指定フォントを使う領域数を合計する。 */
 export function countProjectFontUsage(
   document: FolderProjectDocument,
   fontId: string,
@@ -58,13 +59,10 @@ export function countProjectFontUsage(
   return document.cards.reduce(
     (count, card) => count + countCardFontUsage(card, fontId),
     0,
-  ) + (document.layoutTemplates ?? []).reduce(
-    (count, template) => count + countCardFontUsage({ ...template, imageName: template.name }, fontId),
-    0,
   )
 }
 
-/** 共有フォント定義と、カード・配置雛形の領域全体および部分書式から指定フォントの参照を除く。 */
+/** 共有フォント定義と、カードの領域全体および部分書式から指定フォントの参照を除く。 */
 export function removeProjectFont(
   document: FolderProjectDocument,
   fontId: string,
@@ -72,14 +70,6 @@ export function removeProjectFont(
   return {
     ...document,
     fonts: document.fonts.filter(font => font.id !== fontId),
-    ...(document.layoutTemplates
-      ? {
-          layoutTemplates: document.layoutTemplates.map(template => ({
-            ...template,
-            regions: template.regions.map(region => removeRegionFontReference(region, fontId)),
-          })),
-        }
-      : {}),
     cards: document.cards.map(card => ({
       ...card,
       ...removeCardFontReferences(card, fontId),
@@ -93,12 +83,32 @@ export function updateProjectCard(
   cardId: string,
   project: CardProject,
 ): FolderProjectDocument {
-  return {
+  return reconcileProjectDiscoveryOwners({
     ...document,
     cards: document.cards.map(card =>
       card.id === cardId ? { ...card, ...structuredClone(project) } : card,
     ),
-  }
+  }, cardId)
+}
+
+/** 領域の削除・縮小・Undo後は候補を残し、無効になった所属だけを解除する。 */
+export function reconcileProjectDiscoveryOwners(
+  document: FolderProjectDocument,
+  cardId: string,
+  promotedIds: ReadonlyMap<string, string> = new Map(),
+): FolderProjectDocument {
+  const state = document.assetDiscovery
+  const card = document.cards.find(card => card.id === cardId)
+  if (!state || !card)
+    return document
+  const owners = [
+    ...card.regions.map(region => ({ ...region, kind: 'region' as const })),
+    ...(card.ocrCandidates ?? []).map(candidate => ({ ...candidate, kind: 'candidate' as const })),
+  ]
+  const occurrences = reconcileOccurrenceOwners(state.occurrences, cardId, owners, promotedIds)
+  if (occurrences.every((occurrence, index) => occurrence === state.occurrences[index]))
+    return document
+  return { ...document, assetDiscovery: { ...state, occurrences } }
 }
 
 /** 文書の編集対象カードIDを切り替える。 */
@@ -161,7 +171,14 @@ export function finalizeProjectCardDeletions(
     ? document.activeCardId
     : cards[0]!.id
   return {
-    document: { ...document, activeCardId, cards },
+    document: {
+      ...document,
+      activeCardId,
+      cards,
+      ...(document.assetDiscovery
+        ? { assetDiscovery: removeDiscoveryCards(document.assetDiscovery, new Set(deletedCards.map(card => card.id))) }
+        : {}),
+    },
     deletedCards,
   }
 }
@@ -189,6 +206,7 @@ export function renameCardAssetTokens<T extends CardProject>(
         ...region,
         translatedText,
         originalText,
+        ...(region.lastOcrText !== undefined ? { lastOcrText: region.lastOcrText.replace(pattern, () => `[icon:${nextName}]`) } : {}),
         inlineAssetStyles: renameInlineAssetStyles(
           region.translatedText,
           translatedText,

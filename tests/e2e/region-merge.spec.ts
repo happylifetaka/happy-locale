@@ -1,0 +1,41 @@
+import { expect, test } from '@playwright/test'
+
+test.use({ viewport: { width: 1280, height: 650 } })
+
+test('merges selected card regions with preview, cancellation and one-step undo', async ({ page }, testInfo) => {
+  await page.goto('/cards?demo=1')
+  const canvas = page.getByLabel('カード編集キャンバス')
+  await expect(canvas).toBeVisible()
+  const box = (await canvas.boundingBox())!
+  for (const offset of [30, 140]) {
+    await page.mouse.move(box.x + 30, box.y + offset)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 180, box.y + offset + 70, { steps: 8 })
+    await page.mouse.up()
+  }
+  await page.getByRole('tab', { name: '領域一覧', exact: true }).click()
+  const list = page.locator('.region-list')
+  await expect(list.locator('.region-list-item')).toHaveCount(2)
+  await list.getByRole('button', { name: /を結合$/ }).first().click()
+  const dialog = page.getByRole('dialog', { name: '領域を結合', exact: true })
+  await expect(dialog.getByRole('button', { name: '1つの領域を結合' })).toBeDisabled()
+  await dialog.getByRole('checkbox').nth(1).check()
+  await dialog.getByRole('button', { name: '結合後を確認', exact: true }).click()
+  await expect(dialog.getByLabel('結合後のカード')).toBeVisible()
+  await dialog.getByLabel('原文', { exact: true }).nth(0).fill('First')
+  await dialog.getByLabel('原文', { exact: true }).nth(1).fill('Second')
+  await dialog.getByLabel('訳文', { exact: true }).nth(0).fill('最初')
+  await dialog.getByLabel('訳文', { exact: true }).nth(1).fill('次')
+  await dialog.screenshot({ path: testInfo.outputPath('merge-preview.png') })
+  await dialog.getByRole('button', { name: '2つの領域を結合', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+  await page.getByRole('tab', { name: '領域一覧', exact: true }).click()
+  await expect(list.locator('.region-list-item')).toHaveCount(1)
+  await expect(list).toContainText('最初')
+  await page.getByRole('button', { name: '元に戻す', exact: true }).click()
+  await expect(list.locator('.region-list-item')).toHaveCount(2)
+  await list.getByRole('button', { name: /を結合$/ }).first().click()
+  await dialog.getByRole('checkbox').nth(1).check()
+  await dialog.getByRole('button', { name: 'キャンセル', exact: true }).click()
+  await expect(list.locator('.region-list-item')).toHaveCount(2)
+})
