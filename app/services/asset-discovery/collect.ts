@@ -11,10 +11,12 @@ import { createImageDigestCache } from './digest'
 import { ASSET_DISCOVERY_LIMITS } from './format'
 import { clipBounds, intersectionArea, validBounds } from './geometry'
 import { discoverImageIcons } from './image'
+import { minimalIconExpansion } from './region-fit'
 import { containsBounds } from './review'
 import { DEFAULT_ICON_DISCOVERY_SETTINGS } from './types'
 
 export type DiscoveryCard = Pick<FolderProjectCard, 'id' | 'imageWidth' | 'imageHeight' | 'regions' | 'ocrCandidates'>
+export type IconCollectionScope = 'auto' | 'image' | 'regions'
 export const ICON_DETECTOR_REVISION = 'components-v4'
 export const ICON_OCR_LIMITS = Object.freeze({ owners: 256, areas: 32, pixels: 4_000_000, lines: 1000, words: 10000 })
 
@@ -31,11 +33,13 @@ export interface CardIconProposal {
 }
 
 /** 保存候補のlinesは使わず、枠を再OCRの範囲選択にだけ使う。 */
-export function discoveryOCRAreas(card: DiscoveryCard): { areas: RegionDraft[], limitsHit: CardIconProposal['limitsHit'] } {
+export function discoveryOCRAreas(card: DiscoveryCard, scope: IconCollectionScope = 'auto'): { areas: RegionDraft[], limitsHit: CardIconProposal['limitsHit'] } {
   assertImageDimensions(card.imageWidth, card.imageHeight)
-  const owners = [...card.regions, ...(card.ocrCandidates ?? [])]
+  if (scope === 'image')
+    return { areas: [{ x: 0, y: 0, width: card.imageWidth, height: card.imageHeight }], limitsHit: [] }
+  const owners = [...card.regions, ...(scope === 'regions' ? [] : card.ocrCandidates ?? [])]
   const limitsHit: CardIconProposal['limitsHit'] = owners.length > ICON_OCR_LIMITS.owners ? ['owners'] : []
-  const padding = Math.min(64, Math.max(4, Math.ceil(Math.min(card.imageWidth, card.imageHeight) * 0.02)))
+  const padding = scope === 'regions' ? 8 : Math.min(64, Math.max(4, Math.ceil(Math.min(card.imageWidth, card.imageHeight) * 0.02)))
   const areas: RegionDraft[] = []
   for (const owner of owners.slice(0, ICON_OCR_LIMITS.owners)) {
     if (!validBounds(owner)) {
@@ -64,7 +68,7 @@ export function discoveryOCRAreas(card: DiscoveryCard): { areas: RegionDraft[], 
     }
     areas.push(rect)
   }
-  if (!owners.length)
+  if (!owners.length && scope !== 'regions')
     areas.push({ x: 0, y: 0, width: card.imageWidth, height: card.imageHeight })
   areas.sort((a, b) => a.y - b.y || a.x - b.x)
   if (areas.length > ICON_OCR_LIMITS.areas)
@@ -79,6 +83,7 @@ export function collectMeasuredImageIcons(
   imageDigest: string,
   measured: MeasuredOCRText,
   settings: Readonly<IconDiscoverySettings> = DEFAULT_ICON_DISCOVERY_SETTINGS,
+  scope: IconCollectionScope = 'auto',
 ): CardIconProposal {
   if (!/^[a-f0-9]{64}$/u.test(imageDigest) || measured.coordinates !== 'image' || settings.maximumCandidates > ASSET_DISCOVERY_LIMITS.perCard)
     throw new Error('アイコン候補の元画像情報・件数上限が不正です。')
@@ -87,9 +92,10 @@ export function collectMeasuredImageIcons(
   const extraction = discoverImageIcons(image, card.imageWidth, card.imageHeight, measured, settings)
   const owners = [
     ...card.regions.map(region => ({ ...region, kind: 'region' as const })),
-    ...(card.ocrCandidates ?? []).map(candidate => ({ ...candidate, kind: 'candidate' as const })),
+    ...(scope === 'regions' ? [] : card.ocrCandidates ?? []).map(candidate => ({ ...candidate, kind: 'candidate' as const })),
   ]
-  const occurrences: IconOccurrence[] = extraction.icons.map((icon) => {
+  const occurrences: IconOccurrence[] = extraction.icons.filter(icon => scope !== 'regions' || card.regions.some(region => minimalIconExpansion(region, [icon.bounds]))).map((icon) => {
+    // 保存形式のownerは完全包含だけを表す。許容内のはみ出しは未所属で保存し、OCR時に位置から対応付ける。
     const matches = owners.filter(owner => containsBounds(owner, icon.bounds))
     return {
       id: crypto.randomUUID(),
@@ -120,6 +126,7 @@ export function collectMeasuredImageIcons(
 }
 
 interface CollectCardIconsOptions {
+  scope?: IconCollectionScope
   card: DiscoveryCard
   file: File
   provider: OCRProvider
@@ -129,7 +136,7 @@ interface CollectCardIconsOptions {
 }
 
 /** 保存後の再抽出用。必要なROIを新しくOCRし、一枚のBitmapを確実に解放する。 */
-export async function collectCardIconCandidates({ card, file, provider, isCurrent, settings, digestCache = createImageDigestCache() }: CollectCardIconsOptions): Promise<CardIconProposal | null> {
+export async function collectCardIconCandidates({ card, file, provider, isCurrent, settings, scope = 'auto', digestCache = createImageDigestCache() }: CollectCardIconsOptions): Promise<CardIconProposal | null> {
   let bitmap: ImageBitmap | undefined
   try {
     if (!isCurrent())
@@ -144,7 +151,9 @@ export async function collectCardIconCandidates({ card, file, provider, isCurren
     assertImageDimensions(bitmap.width, bitmap.height)
     if (bitmap.width !== card.imageWidth || bitmap.height !== card.imageHeight)
       throw new Error('元画像の寸法が変わりました。カードを開き直してから再抽出してください。')
-    const { areas, limitsHit } = discoveryOCRAreas(card)
+    if (scope === 'regions' && !card.regions.length)
+      throw new Error('確定した領域がありません。先に領域を作成するか、カード全体から収集してください。')
+    const { areas, limitsHit } = discoveryOCRAreas(card, scope)
     const measured: MeasuredOCRText = { coordinates: 'image', lines: [], words: [] }
     const ocrAreas: RegionDraft[] = []
     let pixels = 0
@@ -175,7 +184,7 @@ export async function collectCardIconCandidates({ card, file, provider, isCurren
       measured.words.push(...(recognized.words ?? []).map(restore))
       ocrAreas.push(area)
     }
-    const proposal = collectMeasuredImageIcons(bitmap, card, imageDigest, measured, settings)
+    const proposal = collectMeasuredImageIcons(bitmap, card, imageDigest, measured, settings, scope)
     return isCurrent() ? { ...proposal, ocrAreas, limitsHit: [...limitsHit, ...proposal.limitsHit] } : null
   }
   catch (error) {

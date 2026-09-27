@@ -29,7 +29,7 @@ export function mapDiscoveryToRegions(state: AssetDiscoveryState, cardId: string
     if (item.imageDigest !== imageDigest || item.imageSize.width !== imageSize.width || item.imageSize.height !== imageSize.height)
       problem = '元画像が検出時から変更されています'
     else if (!assignment?.assetId || assignment.needsSync || !assets.some(asset => asset.id === assignment.assetId) || !assetDigests.has(assignment.assetId))
-      problem = 'グループのアセット割当・画像を確認してください'
+      problem = 'グループのアイコン割当・画像を確認してください'
     else if (fitted.reasons.has(item.id))
       problem = fitted.reasons.get(item.id)!
     else if (touching.length > 1)

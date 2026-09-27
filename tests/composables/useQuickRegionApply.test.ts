@@ -7,10 +7,12 @@ import { useProjectRuntime } from '~/composables/useProjectRuntime'
 import { useQuickRegionApply } from '~/features/cards/useQuickRegionApply'
 import { analyzeIconRegions } from '~/services/asset-discovery/analyze-regions'
 import { regionFromCandidate } from '~/services/asset-discovery/new-region'
+import { detectRegions } from '~/services/ocr/detect-regions'
 import { loadFolderProjectCardImage } from '~/services/project/folder'
 import { useProjectStore } from '~/stores/project'
 import { discoveryProject } from '../fixtures/asset-discovery'
 
+vi.mock('~/services/ocr/detect-regions', () => ({ detectRegions: vi.fn() }))
 vi.mock('~/services/asset-discovery/analyze-regions', () => ({ analyzeIconRegions: vi.fn() }))
 vi.mock('~/services/project/folder', () => ({ loadFolderProjectCardImage: vi.fn() }))
 const cleanups: (() => void)[] = []
@@ -262,4 +264,55 @@ it.each([true, false])('keeps newly detected unchecked candidates atomically, in
   expect(s.store.activeCard.regions).toHaveLength(selected ? 1 : 0)
   s.editor.undo()
   expect(s.store.readCardCandidateEdit(s.first.id)).toEqual(before)
+})
+
+it('detects again on existing cards without changing regions or manually adjusted candidates', async () => {
+  const s = setup()
+  const before = structuredClone(s.store.document!.cards)
+  const candidate = before[0]!.ocrCandidates![0]!
+  vi.mocked(detectRegions).mockResolvedValue({ candidates: [
+    { ...candidate, ...s.first.regions[0]!, id: 'overlap' },
+    { ...candidate, id: 'duplicate' },
+    { ...candidate, id: 'fresh', x: 10, y: 210, width: 30, height: 20 },
+  ] } as Awaited<ReturnType<typeof detectRegions>>)
+  await s.model.start([s.first.id, 'second'], 'detect')
+  expect(analyzeIconRegions).not.toHaveBeenCalled()
+  for (const [index, card] of s.store.document!.cards.entries()) {
+    expect(card.regions).toEqual(before[index]!.regions)
+    expect(card.ocrCandidates!.slice(0, 2)).toEqual(before[index]!.ocrCandidates)
+    expect(card.ocrCandidates).toHaveLength(3)
+    expect(card.ocrCandidates![2]!.selected).toBe(false)
+  }
+  await s.model.start([s.first.id], 'detect')
+  expect(s.store.document!.cards[0]!.ocrCandidates).toHaveLength(3)
+  s.editor.undo()
+  expect(s.store.document!.cards[0]!.ocrCandidates).toEqual(before[0]!.ocrCandidates)
+})
+
+it('discards late detection after cancellation and project replacement', async () => {
+  for (const invalidate of ['cancel', 'project'] as const) {
+    const s = setup()
+    const before = structuredClone(s.store.document)
+    let resolve!: (value: Awaited<ReturnType<typeof detectRegions>>) => void
+    vi.mocked(detectRegions).mockImplementation(() => new Promise((done) => {
+      resolve = done
+    }))
+    const pending = s.model.start([s.first.id], 'detect')
+    await vi.waitFor(() => expect(resolve).toBeDefined())
+    if (invalidate === 'cancel')
+      s.model.cancel()
+    else s.runtime.setDirectory({ name: 'replacement' } as FileSystemDirectoryHandle)
+    resolve({ candidates: [] } as unknown as Awaited<ReturnType<typeof detectRegions>>)
+    await pending
+    expect(s.store.document).toEqual(before)
+  }
+})
+
+it('selects saved candidates for explicit application without changing their text or bounds', () => {
+  const s = setup()
+  const before = structuredClone(s.store.document!.cards[0]!)
+  s.model.selectCandidates(s.first.id, ['unchecked'], true)
+  const after = s.store.document!.cards[0]!
+  expect(after.regions).toEqual(before.regions)
+  expect(after.ocrCandidates![1]).toEqual({ ...before.ocrCandidates![1], selected: true })
 })

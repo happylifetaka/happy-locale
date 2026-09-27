@@ -71,8 +71,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handlePointerD
 
 <template>
   <details ref="root" class="asset-insert-picker" @keydown.esc.stop.prevent="close(true)" @focusout="handleFocusOut">
-    <summary ref="trigger" :aria-label="`${targetLabel}にアセットを挿入`">
-      ＋ アセット
+    <summary ref="trigger" :aria-label="`${targetLabel}にアイコンを挿入`">
+      ＋ アイコン
     </summary>
     <div class="asset-insert-panel">
       <p class="asset-insert-caption">
@@ -88,7 +88,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handlePointerD
         </button>
       </div>
       <p v-else class="asset-insert-empty">
-        登録済みアセットはありません。上部の「アセット編集」から登録できます。
+        登録済みアイコンはありません。上部の「アイコン編集」から登録できます。
       </p>
     </div>
   </details>

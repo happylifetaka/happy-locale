@@ -145,7 +145,7 @@ export function useDiscoverySourceOCR({ store, runtime, editor, target, getProvi
         return null
       for (const source of sources) {
         if (!source.blob)
-          throw new Error('指定したアセットの画像が未読込です。読み込んでからやり直してください。')
+          throw new Error('指定したアイコンの画像が未読込です。読み込んでからやり直してください。')
         assetDigests.set(source.id, await digests.digest(source.blob))
         if (!request.current())
           return null

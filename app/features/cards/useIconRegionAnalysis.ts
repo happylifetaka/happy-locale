@@ -1,5 +1,5 @@
 import type { DiscoveryWorkspaceOptions } from './useDiscoveryWorkspace'
-import type { IconRegionRow } from '~/services/asset-discovery/analyze-regions'
+import type { IconRegionRow, RegionOCRMode } from '~/services/asset-discovery/analyze-regions'
 import type { AssetDiscoveryState } from '~/types/asset-discovery'
 import type { CardProject, FolderProjectCard, ImageAsset } from '~/types/editor'
 import { computed, onScopeDispose, ref, shallowRef, watchEffect } from 'vue'
@@ -8,7 +8,7 @@ import { createImageDigestCache } from '~/services/asset-discovery/digest'
 import { assertImageDimensions } from '~/utils/file-limits'
 
 /** 領域検出→元画像座標の再対応付け→OCR案→カード単位の明示適用。 */
-export function useIconRegionAnalysis(options: DiscoveryWorkspaceOptions) {
+export function useIconRegionAnalysis(options: DiscoveryWorkspaceOptions, mode?: RegionOCRMode) {
   const { store, runtime, editor, currentImageId } = options
   const running = ref(false)
   const cancelled = ref(false)
@@ -107,7 +107,7 @@ export function useIconRegionAnalysis(options: DiscoveryWorkspaceOptions) {
     running.value = true
     ownsOCR = true
     options.ocrRunning.value = true
-    status.value = '元画像とアセットを照合しています…'
+    status.value = '元画像とアイコンを照合しています…'
     let bitmap: ImageBitmap | undefined
     try {
       const imageDigest = await cache.digest(file)
@@ -126,7 +126,7 @@ export function useIconRegionAnalysis(options: DiscoveryWorkspaceOptions) {
       assertImageDimensions(bitmap.width, bitmap.height)
       if (bitmap.width !== sourceCard.imageWidth || bitmap.height !== sourceCard.imageHeight)
         throw new Error('元画像の寸法が変わっています。画像を開き直してください。')
-      const result = await analyzeIconRegions({ card: sourceCard, discovery, assets, image: bitmap, imageDigest, assetDigests, provider: options.provider, isCurrent: current, status: (value) => {
+      const result = await analyzeIconRegions({ mode, card: sourceCard, discovery, assets, image: bitmap, imageDigest, assetDigests, provider: options.provider, isCurrent: current, status: (value) => {
         if (current())
           status.value = value
       } })

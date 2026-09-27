@@ -54,7 +54,7 @@ export async function matchCardIconsToAssets({ card, file, occurrences, catalog,
     || !Number.isFinite(minimumSimilarity) || minimumSimilarity < 0.5 || minimumSimilarity > 1
     || !Number.isFinite(ambiguityMargin) || ambiguityMargin < 0 || ambiguityMargin > 1
     || occurrences.length > ASSET_DISCOVERY_LIMITS.perCard || new Set(occurrences.map(item => item.id)).size !== occurrences.length) {
-    throw new Error('アセット一致提案の条件・上限が不正です。')
+    throw new Error('アイコン一致提案の条件・上限が不正です。')
   }
   const cardKey = JSON.stringify([card.id, card.imageWidth, card.imageHeight])
   const keys = new Map(occurrences.map(item => [item.id, occurrenceKey(item)]))
@@ -144,6 +144,6 @@ export function chooseDiscoveryAssetMatch(proposal: DiscoveryAssetMatches, occur
   const row = proposal.rows.find(item => item.occurrenceId === occurrence.id)
   const match = row?.matches.find(item => item.assetId === assetId)
   if (!session?.current() || session.keys.get(occurrence.id) !== occurrenceKey(occurrence) || !match || occurrence.decision === 'excluded')
-    throw new Error('一致提案の対象が変わったか、選択したアセットがありません。再照合してください。')
+    throw new Error('一致提案の対象が変わったか、選択したアイコンがありません。再照合してください。')
   return { occurrenceId: occurrence.id, assetId: match.assetId, assetDigest: match.assetDigest }
 }

@@ -84,7 +84,7 @@ function inspect(context: SourceIconOCRContext, regionId: string, occurrenceIds:
   for (const asset of usedAssets) {
     const problem = validateAssetName(asset.name, assets, asset.id)
     if (problem || asset.name !== asset.name.trim() || !hash(context.assetDigests.get(asset.id)))
-      throw new Error(problem ?? '原文アイコンのアセット名・画像の同一性を確認してください。')
+      throw new Error(problem ?? '原文アイコンのアイコン名・画像の同一性を確認してください。')
   }
   const signature = JSON.stringify([card.id, card.imageWidth, card.imageHeight, context.imageDigest, region, occurrences, usedAssets.map(asset => [asset, context.assetDigests.get(asset.id)])])
   return { working, usedAssets, signature }

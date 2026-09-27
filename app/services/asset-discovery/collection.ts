@@ -57,13 +57,15 @@ export function groupInitialCollectedIcons(state: AssetDiscoveryState, groups: I
     }
   }
   const seen = new Set<string>()
+  const occurrenceOrder = new Map(next.occurrences.map((item, index) => [item.id, index]))
   for (const proposal of groups.groups) {
     if (!proposal.memberIds.length || !proposal.memberIds.includes(proposal.representativeId) || proposal.memberIds.some(id => seen.has(id)) || new Set(proposal.memberIds).size !== proposal.memberIds.length)
       throw new Error('類似グループ提案の所属・代表が不正です。')
     proposal.memberIds.forEach(id => seen.add(id))
-    const ids = proposal.memberIds.filter(id => eligible.has(id))
+    // 新規グループの代表は、候補一覧の収集順で最初の1件。類似度計算用のID順には依存しない。
+    const ids = proposal.memberIds.filter(id => eligible.has(id)).sort((a, b) => occurrenceOrder.get(a)! - occurrenceOrder.get(b)!)
     if (ids.length) {
-      next.groups.push({ id: crypto.randomUUID(), name: '', memberIds: ids, representativeId: ids.includes(proposal.representativeId) ? proposal.representativeId : ids[0]!, proposedAssetId: null })
+      next.groups.push({ id: crypto.randomUUID(), name: '', memberIds: ids, representativeId: ids[0]!, proposedAssetId: null })
     }
   }
   return parseAssetDiscovery(next, context)

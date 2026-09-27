@@ -1,7 +1,7 @@
 /** 翻訳中のタグ破損は候補として適用できないため、推測で補わず停止する。 */
 export class TranslationTokenError extends Error {
   constructor() {
-    super('アセットタグを正しく復元できませんでした。原文のタグを確認し、再試行または手動で翻訳してください。')
+    super('アイコンタグを正しく復元できませんでした。原文のタグを確認し、再試行または手動で翻訳してください。')
     this.name = 'TranslationTokenError'
   }
 }

@@ -328,11 +328,11 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
   }
 
   /** 一括反映用。非表示カードの履歴も保持し、対象の保存状態を直前に再検証する。 */
-  function applyIconAnalysisToCard(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], cardId: string | null) {
-    commitIconAnalysis(before, proposals, beforeCandidates, afterCandidates, cardId, true)
+  function applyIconAnalysisToCard(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], cardId: string | null, editCandidates = false) {
+    commitIconAnalysis(before, proposals, beforeCandidates, afterCandidates, cardId, true, editCandidates)
   }
 
-  function commitIconAnalysis(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], expectedCardId: string | null, background: boolean) {
+  function commitIconAnalysis(before: CardProject, proposals: readonly TextRegion[], beforeCandidates: readonly RegionCandidate[], afterCandidates: readonly RegionCandidate[], expectedCardId: string | null, background: boolean, editCandidates = false) {
     const inactive = expectedCardId !== activeCardId
     if (inactive && (!background || !expectedCardId || !candidates))
       throw new Error('解析後にカード・領域が変更されました。もう一度解析してください。')
@@ -378,7 +378,7 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
     parseRegionCandidates(beforeCandidates, current.imageWidth, current.imageHeight)
     parseRegionCandidates(afterCandidates, current.imageWidth, current.imageHeight)
     // 初回の自動検出では、追加対象外だった候補も同じ履歴で保存する。
-    const edits = background && !current.regions.length && !beforeCandidates.length
+    const edits = editCandidates || (background && !current.regions.length && !beforeCandidates.length)
       ? candidateEdits(beforeCandidates, afterCandidates)
       : consumedCandidateEdits(beforeCandidates, afterCandidates)
     if (candidates && JSON.stringify(candidates.read(expectedCardId).candidates) !== JSON.stringify(beforeCandidates))
@@ -398,8 +398,8 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
     }
   }
 
-  /** 雛形の領域へ新しいIDを与えて現在のカードに追加する。 */
-  function appendTemplateRegions(regions: readonly TextRegion[]) {
+  /** 領域へ新しいIDを与えて現在のカードにまとめて追加する。 */
+  function appendRegions(regions: readonly TextRegion[]) {
     if (!regions.length)
       return
     const added = regions.map((region) => {
@@ -442,6 +442,21 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
       regions: history.state.value.regions.flatMap(region => region.id === options.baseId ? [merged] : ids.includes(region.id) ? [] : [region]),
     })
     selectedRegionId.value = merged.id
+    publishProject()
+  }
+
+  /** 領域を指定位置へ移動し、並び順を一つの履歴として保存する。 */
+  function moveRegion(id: string, targetId: string, position: 'before' | 'after') {
+    const current = history.state.value
+    const source = current.regions.find(region => region.id === id)
+    if (!source || id === targetId || !current.regions.some(region => region.id === targetId))
+      return
+    const regions = current.regions.filter(region => region.id !== id)
+    const targetIndex = regions.findIndex(region => region.id === targetId)
+    regions.splice(targetIndex + (position === 'after' ? 1 : 0), 0, source)
+    if (regions.every((region, index) => region.id === current.regions[index]?.id))
+      return
+    history.commit({ ...current, regions })
     publishProject()
   }
 
@@ -551,10 +566,11 @@ export function useCardEditor(onChange?: CardEditorChangeHandler, candidates?: C
     applyRegionDetection,
     applyIconAnalysis,
     applyIconAnalysisToCard,
-    appendTemplateRegions,
+    appendRegions,
     splitRegion,
     mergeRegions,
     removeRegion,
+    moveRegion,
     applyTranslations,
     renameAssetToken,
     undo,

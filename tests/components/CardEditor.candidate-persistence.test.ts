@@ -100,7 +100,7 @@ it('includes draft candidates in the first project save', async () => {
   vi.mocked(folderProjectExists).mockResolvedValueOnce(false)
   toolbar.vm.$emit('open-project')
   await flushPromises()
-  canvas.vm.$emit('image', new File(['image'], 'draft.png', { type: 'image/png' }))
+  canvas.vm.$emit('image', [new File(['image'], 'draft.png', { type: 'image/png' })])
   await flushPromises()
   ocrIO.recognize.mockResolvedValue(result)
   wrapper.findComponent({ name: 'RegionCandidatePanel' }).vm.$emit('detect')

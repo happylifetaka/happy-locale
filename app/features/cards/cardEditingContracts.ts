@@ -41,6 +41,7 @@ export interface CardWorkspaceUI {
   cancelRegionDeletion: () => void
   confirmRegionDeletion: () => void
   addRegion: (bounds: RegionDraft, backgroundColor: string) => void
+  moveRegion: (id: string, targetId: string, position: 'before' | 'after') => void
   renameRegion: (id: string, displayName: string) => void
   updateRegionBounds: (regionId: string, bounds: RegionDraft) => void
   addMaskStroke: (regionId: string, stroke: MaskStroke) => void

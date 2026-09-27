@@ -63,45 +63,76 @@ function end(event: PointerEvent) {
       <rect v-if="!splitting" :x="draft.x" :y="draft.y" :width="Math.max(0, draft.width)" :height="Math.max(0, draft.height)" fill="#2563eb20" stroke="#2563eb" stroke-width="2" vector-effect="non-scaling-stroke" />
       <rect v-for="(part, index) in parts" :key="index" :x="part.x" :y="part.y" :width="part.width" :height="part.height" :fill="index ? '#f9731630' : '#2563eb30'" :stroke="index ? '#f97316' : '#2563eb'" stroke-width="2" vector-effect="non-scaling-stroke" />
     </svg>
-    <fieldset v-if="splitting" :disabled="disabled">
+    <fieldset v-if="splitting" :disabled="disabled" class="split-controls">
       <legend>候補を2つに分割</legend>
       <label>分割方向<select v-model="splitAxis" aria-label="分割方向"><option value="horizontal">上下に分ける</option><option value="vertical">左右に分ける</option></select></label>
       <label>分割位置（{{ splitPercent }}%）<input v-model.number="splitPercent" type="range" min="5" max="95" step="1" aria-label="分割位置"></label>
-      <p>保存済みの枠を青・オレンジの2候補に置き換えます。両方とも未確認・未分類・アセット未割当になります。登録済みアセットは削除しません。確定後に個別の範囲を調整できます。</p>
-      <button type="button" @click="emit('split', splitAxis, splitPercent / 100)">
-        2候補への分割を確定
-      </button>
-      <button type="button" @click="splitting = false">
-        分割をキャンセル
-      </button>
+      <p>青とオレンジの2つに分けます。分けた画像は「未分類」に戻るので、グループと使うアイコンを選び直してください。</p>
+      <div class="actions">
+        <button type="button" class="save-button" @click="emit('split', splitAxis, splitPercent / 100)">
+          2候補への分割を確定
+        </button>
+        <button type="button" @click="splitting = false">
+          分割をキャンセル
+        </button>
+      </div>
     </fieldset>
     <fieldset v-else :disabled="disabled">
       <legend>{{ bounds ? '候補の範囲を調整' : '手動で候補を追加' }}</legend>
-      <button type="button" :aria-pressed="drawing" @click="drawing = !drawing">
-        {{ drawing ? 'ドラッグで囲んでください' : '画像上で囲み直す' }}
-      </button>
-      <div class="coordinates">
-        <label v-for="(label, key) in { x: 'X', y: 'Y', width: '幅', height: '高さ' }" :key="key">
-          {{ label }}<input v-model.number="draft[key]" type="number" step="1" :aria-label="`候補の${label}`">
-        </label>
+      <p>{{ bounds ? '青い枠がアイコンの切り抜き範囲です。' : '追加したいアイコンを画像上で囲んでください。' }}</p>
+      <div class="actions">
+        <button type="button" :aria-pressed="drawing" @click="drawing = !drawing">
+          {{ drawing ? 'ドラッグで囲んでください' : '画像上で囲み直す' }}
+        </button>
+        <button type="button" class="save-button" :disabled="!valid" @click="emit('commit', { ...draft })">
+          {{ bounds ? '範囲の変更を保存' : '手動候補を追加' }}
+        </button>
       </div>
-      <p v-if="!valid" role="alert">
+      <p v-if="!valid" class="validation-error" role="alert">
         画像内の有効な範囲を指定してください。
       </p>
-      <button type="button" :disabled="!valid" @click="emit('commit', { ...draft })">
-        {{ bounds ? '範囲の変更を保存' : '手動候補を追加' }}
-      </button>
-      <button v-if="bounds" type="button" @click="splitting = true; drawing = false; start = null">
-        複数のアイコンを2候補に分割
-      </button>
+      <details :open="!bounds" class="numeric-adjustment">
+        <summary>数値で範囲を調整</summary>
+        <div class="coordinates">
+          <label v-for="(label, key) in { x: 'X', y: 'Y', width: '幅', height: '高さ' }" :key="key">
+            {{ label }}<input v-model.number="draft[key]" type="number" step="1" :aria-label="`候補の${label}`">
+          </label>
+        </div>
+      </details>
+      <div v-if="bounds" class="split-option">
+        <p>1つの枠に複数のアイコンが入っている場合</p>
+        <button type="button" @click="splitting = true; drawing = false; start = null">
+          複数のアイコンを2候補に分割
+        </button>
+      </div>
     </fieldset>
   </section>
 </template>
 
 <style scoped>
-svg { width: 100%; max-height: 340px; background: #e2e8f0; touch-action: none; }
+.bounds-editor { min-width: 0; color: #1e293b; }
+svg { display: block; width: 100%; max-height: 340px; border: 1px solid #cbd5e1; border-radius: 10px; box-sizing: border-box; background: #e2e8f0; touch-action: none; }
 .drawing { cursor: crosshair; }
-fieldset { border: 0; padding: 8px 0; }
-.coordinates { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0; }
-input { width: 100%; min-width: 0; }
+fieldset { display: grid; gap: 12px; min-width: 0; margin: 16px 0 0; border: 0; padding: 0; }
+legend { margin-bottom: 8px; padding: 0; font-size: 0.875rem; font-weight: 700; }
+p { margin: 0; color: #64748b; font-size: 0.8125rem; line-height: 1.6; }
+label { display: grid; gap: 6px; min-width: 0; font-size: 0.8125rem; }
+button, input, select { font: inherit; font-size: 0.8125rem; box-sizing: border-box; }
+button { min-height: 38px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; line-height: 1.5; cursor: pointer; }
+button:hover:not(:disabled) { background: #f1f5f9; border-color: #94a3b8; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button[aria-pressed="true"] { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+button.save-button { border-color: #2563eb; background: #2563eb; color: #fff; }
+button.save-button:hover:not(:disabled) { border-color: #1d4ed8; background: #1d4ed8; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions > button { flex: 1 1 150px; }
+input, select { width: 100%; min-width: 0; min-height: 36px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #1e293b; }
+input[type="range"] { min-height: 24px; padding: 0; accent-color: #2563eb; }
+.numeric-adjustment { border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+summary { padding: 10px 12px; font-size: 0.8125rem; cursor: pointer; }
+.coordinates { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 8px; padding: 0 12px 12px; }
+.split-option { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+.split-option > button { justify-self: start; max-width: 100%; }
+.validation-error { color: #b91c1c; }
 </style>

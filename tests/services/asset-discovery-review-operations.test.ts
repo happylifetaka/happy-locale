@@ -164,7 +164,7 @@ it('requires the matching current source for crop edits and leaves registration 
   const before = structuredClone(state)
   const change: OccurrenceReviewChange = { kind: 'bounds', bounds: { ...state.occurrences[0]!.bounds, x: 41 } }
   expect(() => reviewOccurrence(state, id, change, { ...context, imageDigests: new Map([[card.id, 'f'.repeat(64)]]) })).toThrow('元画像が変わ')
-  expect(() => reviewOccurrence(state, id, { kind: 'asset', assetId: 'missing' }, context)).toThrow('アセット参照')
+  expect(() => reviewOccurrence(state, id, { kind: 'asset', assetId: 'missing' }, context)).toThrow('アイコン参照')
   expect(() => reviewOccurrence(state, 'missing', change, context)).toThrow('見つかりません')
   expect(state).toEqual(before)
 })
@@ -246,7 +246,7 @@ it('validates every selected assignment before committing and leaves same-asset 
   for (const ids of [[], ['missing'], ['occurrence-1', 'occurrence-1']])
     expect(() => linkReviewAsset(state, ids, 'asset-2', undefined, context)).toThrow('一つずつ')
   expect(() => linkReviewAsset(state, ['occurrence-1', 'occurrence-3'], 'asset-2', 'group-1', context)).toThrow('グループ')
-  expect(() => linkReviewAsset(state, ['occurrence-1'], 'missing', 'group-1', context)).toThrow('アセット参照')
+  expect(() => linkReviewAsset(state, ['occurrence-1'], 'missing', 'group-1', context)).toThrow('アイコン参照')
   expect(state).toEqual(before)
 })
 

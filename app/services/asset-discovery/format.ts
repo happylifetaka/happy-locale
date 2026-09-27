@@ -40,7 +40,7 @@ export function parseAssetDiscovery(value: unknown, context: DiscoveryFormatCont
       || !digest(item.imageDigest) || (item.origin !== 'detected' && item.origin !== 'manual') || !id(item.detectorRevision)
       || (item.decision !== 'pending' && item.decision !== 'accepted' && item.decision !== 'excluded')
       || !(item.assetId === null || (id(item.assetId) && context.assetIds.has(item.assetId)))) {
-      return fail('候補ID・画像・判定・アセット参照')
+      return fail('候補ID・画像・判定・アイコン参照')
     }
     occurrenceIds.add(item.id)
     if (item.detectionReason !== undefined && item.detectionReason !== 'colored-component' && item.detectionReason !== 'contrast-component')

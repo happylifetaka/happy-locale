@@ -40,6 +40,8 @@ function setup() {
     loadingCardId: ref(null),
     isActive: vi.fn(() => true),
     clearRegionCandidates: vi.fn(),
+    saveProject: vi.fn().mockResolvedValue(undefined),
+    addProjectCards: vi.fn().mockResolvedValue(undefined),
     loadImage: vi.fn().mockResolvedValue(loaded),
     cacheCardThumbnail: vi.fn().mockResolvedValue(new Blob(['thumbnail'])),
     updateCardPrintDpi: vi.fn(),
@@ -250,4 +252,32 @@ it('discards an asset source decoded after its review is cleared', async () => {
   expect(projectRuntime.assetSourceImage.value).toBeNull()
   expect(URL.revokeObjectURL).toHaveBeenCalledWith(loaded.url)
   expect(options.setMessage).not.toHaveBeenCalled()
+})
+
+it('saves the first of multiple images before adding the remainder in selection order', async () => {
+  const { options, loaded, projectStore, projectRuntime, images } = setup()
+  projectRuntime.setDirectory({ name: 'folder' } as FileSystemDirectoryHandle)
+  vi.mocked(options.saveProject).mockImplementation(async () => {
+    const project = baselineProject()
+    project.cards[0]!.id = options.currentImageId.value
+    project.activeCardId = options.currentImageId.value
+    projectStore.replaceProject(project)
+  })
+  const rest = [new File([], 'second.png'), new File([], 'third.jpg')]
+  await images.openCardImages([loaded.file, ...rest])
+  expect(options.saveProject).toHaveBeenCalledOnce()
+  expect(options.addProjectCards).toHaveBeenCalledExactlyOnceWith(rest)
+  expect(options.loadImage).toHaveBeenCalledExactlyOnceWith(loaded.file)
+})
+
+it.each(['single', 'decode-failure', 'save-failure', 'folder-change'] as const)('does not add remaining images after %s', async (mode) => {
+  const { options, loaded, projectRuntime, images } = setup()
+  projectRuntime.setDirectory({ name: 'folder' } as FileSystemDirectoryHandle)
+  if (mode === 'decode-failure')
+    vi.mocked(options.loadImage).mockResolvedValue(null)
+  if (mode === 'folder-change')
+    vi.mocked(options.saveProject).mockImplementation(async () => { projectRuntime.setDirectory({ name: 'other' } as FileSystemDirectoryHandle) })
+  await images.openCardImages(mode === 'single' ? [loaded.file] : [loaded.file, new File([], 'second.png')])
+  expect(options.addProjectCards).not.toHaveBeenCalled()
+  expect(options.saveProject).toHaveBeenCalledTimes(mode === 'single' || mode === 'decode-failure' ? 0 : 1)
 })

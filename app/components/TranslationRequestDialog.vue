@@ -23,7 +23,7 @@ defineEmits<{
         原文を送信しますか？
       </h2>
       <p class="muted">
-        画像やアセットは送信しません。次の原文と言語指定だけをTranslation Endpointへ送信します。
+        画像やアイコンは送信しません。次の原文と言語指定だけをTranslation Endpointへ送信します。
       </p>
       <dl>
         <dt>送信先</dt>

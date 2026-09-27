@@ -170,17 +170,8 @@ export interface FolderProjectDocument {
   ocrDictionary: OCRDictionaryEntry[]
   glossary: GlossaryEntry[]
   printSettings: PrintLayoutSettings
-  layoutTemplates?: LayoutTemplate[]
   /** 領域の編集履歴から独立したアイコン候補と確認状態。 */
   assetDiscovery?: AssetDiscoveryState
-}
-
-export interface LayoutTemplate {
-  id: string
-  name: string
-  imageWidth: number
-  imageHeight: number
-  regions: TextRegion[]
 }
 
 export type RegionDraft = Pick<TextRegion, 'x' | 'y' | 'width' | 'height'>

@@ -14,7 +14,7 @@ export function containsBounds(outer: RegionDraft, inner: RegionDraft): boolean 
 /** 明示的な修正後は、過去の承認を新しい範囲／アセットへ持ち越さない。 */
 export function reviseOccurrence(occurrence: IconOccurrence, bounds: RegionDraft, assetId: string | null): IconOccurrence {
   if (!validBounds(bounds) || bounds.x < 0 || bounds.y < 0 || assetId === '')
-    throw new Error('アイコン候補の範囲・アセット指定が不正です。')
+    throw new Error('アイコン候補の範囲・アイコン指定が不正です。')
   if (sameBounds(bounds, occurrence.bounds) && assetId === occurrence.assetId)
     return occurrence
   return { ...occurrence, bounds: { ...bounds }, assetId, decision: 'pending', approval: null }

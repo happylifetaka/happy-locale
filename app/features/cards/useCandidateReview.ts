@@ -19,7 +19,7 @@ interface CandidateReviewOptions {
   editor: {
     selectedRegionId: Ref<string | null>
     addRegions: (drafts: { bounds: RegionDraft, backgroundColor: string, originalText: string }[]) => string[]
-    appendTemplateRegions: (regions: readonly TextRegion[]) => void
+    appendRegions: (regions: readonly TextRegion[]) => void
   }
   updateBatchOCRResult: (cardId: string, candidates: readonly RegionCandidate[] | null) => void
   finishBatchOCRReview: (cardId: string) => void
@@ -127,7 +127,7 @@ export function useCandidateReview({
     }
     if (sampleCandidates) {
       const reviewedCardId = batchOCRStates.value.get(currentImageId.value)?.status === 'review' ? currentImageId.value : null
-      editor.appendTemplateRegions(sampleCandidates)
+      editor.appendRegions(sampleCandidates)
       clearRegionCandidates()
       switchInspectorTab('text')
       setMessage('原文・アイコン・ルビ設定を追加しました。「未翻訳をまとめて取得」で日本語訳を一括確認できます。')

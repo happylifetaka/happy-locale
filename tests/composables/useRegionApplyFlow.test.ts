@@ -49,15 +49,17 @@ it('defaults to unfinished cards, accepts collection targets and never includes 
   const s = setup()
   s.flow.openApplyTargets()
   expect(s.flow.applyTargetIds.value).toEqual(['new'])
-  s.flow.openApplyTargets([s.options.currentImageId.value])
+  s.flow.openApplyTargets([s.options.currentImageId.value], 'reocr')
   expect(s.flow.applyTargetIds.value).toEqual([s.options.currentImageId.value])
   s.pendingDeletionIds.value = new Set(['new'])
-  s.flow.openApplyTargets(['new'])
+  s.flow.openApplyTargets(['new'], 'reocr')
   expect(s.flow.applyTargetIds.value).toEqual([])
   await s.flow.applyTargetCards([s.options.currentImageId.value])
-  expect(s.ui.quickApply.start).toHaveBeenCalledWith([s.options.currentImageId.value])
-  expect(s.ui.switchView).toHaveBeenCalledWith('card')
-  expect(s.flow.applyTargetIds.value).toBeNull()
+  expect(s.ui.quickApply.start).toHaveBeenCalledWith([s.options.currentImageId.value], 'reocr', false)
+  expect(s.ui.switchView).toHaveBeenCalledWith('ocr')
+  expect(s.flow.applyTargetIds.value).toEqual([s.options.currentImageId.value])
+  expect(s.flow.resultsVisited.value).toBe(true)
+  expect(s.flow.applyResultsOpen.value).toBe(true)
 })
 
 it('routes issues to their exact region, occurrence or source comparison', async () => {
@@ -65,6 +67,7 @@ it('routes issues to their exact region, occurrence or source comparison', async
   const id = s.options.currentImageId.value
   s.flow.openApplyResults()
   expect(s.flow.applyResultsOpen.value).toBe(true)
+  expect(s.flow.resultsVisited.value).toBe(true)
   await s.flow.resolveApplyIssue(id, { message: 'text', regionId: 'existing', preview: true }, 'preview')
   expect(s.flow.applyResultsOpen.value).toBe(false)
   expect(s.flow.iconAnalysisRegionId.value).toBe('existing')
@@ -106,4 +109,15 @@ it('does not navigate while busy and rejects a delayed preview after a project c
   await pending
   expect(s.ui.iconAnalysisOpen.value).toBe(false)
   expect(s.flow.applyResultsOpen.value).toBe(false)
+})
+
+it('allows repeat detection on an existing card and retains selections when changing operations', () => {
+  const s = setup()
+  const id = s.options.currentImageId.value
+  s.flow.openApplyTargets([id], 'detect')
+  expect(s.flow.applyTargetIds.value).toEqual([id])
+  s.flow.openApplyTargets(['new'], 'reocr')
+  expect(s.flow.applyTargetIds.value).toEqual([])
+  s.flow.openApplyTargets(undefined, 'detect')
+  expect(s.flow.applyTargetIds.value).toEqual([id])
 })

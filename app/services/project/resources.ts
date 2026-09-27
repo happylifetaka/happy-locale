@@ -7,7 +7,7 @@ export async function loadProjectAssetImages(files: ReadonlyMap<string, File>) {
     for (const [id, file] of files) {
       const image = await createImageBitmap(file)
       images.set(id, image)
-      assertImageDimensions(image.width, image.height, 'アセット画像')
+      assertImageDimensions(image.width, image.height, 'アイコン画像')
     }
     return images
   }

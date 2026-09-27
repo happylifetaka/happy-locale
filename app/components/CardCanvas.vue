@@ -10,7 +10,7 @@ import { onScopeDispose } from 'vue'
 import { createCardCanvasRenderer } from '~/features/cards/canvas/renderer'
 import { useCanvasInteractions } from '~/features/cards/canvas/useCanvasInteractions'
 import { useEditorToolsStore } from '~/stores/editor-tools'
-import { consumeSelectedFile } from '~/utils/file-input'
+import { consumeSelectedFiles } from '~/utils/file-input'
 
 const props = defineProps<{
   image: HTMLImageElement | null
@@ -44,7 +44,7 @@ const emit = defineEmits<{
   'selectRegionCandidate': [id: string | null]
   'updateRegionCandidateBounds': [id: string, bounds: RegionDraft]
   'updatePrintArea': [bounds: RegionDraft]
-  'image': [file: File]
+  'image': [files: File[]]
   'diagnostic': [message: string]
 }>()
 
@@ -86,15 +86,15 @@ function openImagePicker() {
 /** ファイル入力から画像を取り出して読み込みを要求する。 */
 function pickImage(event: Event) {
   const input = event.target as HTMLInputElement
-  const file = consumeSelectedFile(input)
+  const files = consumeSelectedFiles(input)
   emit(
     'diagnostic',
-    file
+    files.length
       ? 'カード画像選択イベントを受け取りました'
       : 'カード画像選択にファイルがありません',
   )
-  if (file)
-    emit('image', file)
+  if (files.length)
+    emit('image', files)
 }
 
 // 画像・編集状態・操作表示の変更に応じてCanvasを再描画する。
@@ -140,7 +140,7 @@ defineExpose({
   >
     <div v-if="!image" class="canvas-empty">
       <template v-if="projectSelected">
-        <p>PNG / JPEG画像を開いてください</p>
+        <p>PNG / JPEG画像を選択してください（複数選択可）</p>
         <button
           type="button"
           class="primary card-image-open-button"
@@ -153,8 +153,11 @@ defineExpose({
           class="visually-hidden"
           type="file"
           accept="image/png,image/jpeg"
+          aria-label="最初のカード画像（複数選択可）"
+          multiple
           @change="pickImage"
         >
+        <small>複数選択すると、選択したフォルダにプロジェクトを保存してカードを追加します。</small>
         <small>画像はブラウザ内だけで処理され、サーバーには送信されません。</small>
       </template>
       <template v-else>

@@ -7,7 +7,7 @@ import { computed, shallowRef } from 'vue'
 import { transformRegionContents } from '~/utils/regions'
 
 interface RegionEditingOptions {
-  editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'addRegion' | 'updateRegion' | 'removeRegion' | 'splitRegion' | 'mergeRegions'>
+  editor: Pick<ReturnType<typeof useCardEditor>, 'project' | 'addRegion' | 'updateRegion' | 'removeRegion' | 'splitRegion' | 'mergeRegions' | 'moveRegion'>
   currentImageId: Ref<string>
   projectBusy: Ref<boolean>
   selectedExclusionId: Ref<string | null>
@@ -87,6 +87,11 @@ export function useRegionEditing({ editor, currentImageId, projectBusy, selected
       return
     editor.updateRegion(id, { displayName: name })
     setMessage(`領域名を「${name}」へ変更しました。`)
+  }
+
+  function moveRegion(id: string, targetId: string, position: 'before' | 'after') {
+    if (!projectBusy.value)
+      editor.moveRegion(id, targetId, position)
   }
 
   /** 領域削除の確認を開く。 */
@@ -199,5 +204,5 @@ export function useRegionEditing({ editor, currentImageId, projectBusy, selected
     })
     selectedExclusionId.value = null
   }
-  return { regionMergeRequest, requestRegionMerge, applyRegionMerge, regionPendingDeletionConfirmation, regionSplitRequest, requestRegionSplit, applyRegionSplit, addRegion, renameRegion, requestRegionDeletion, cancelRegionDeletion, confirmRegionDeletion, updateRegionBounds, addMaskStroke, addExclusion, updateExclusion, removeExclusion }
+  return { regionMergeRequest, requestRegionMerge, applyRegionMerge, regionPendingDeletionConfirmation, regionSplitRequest, requestRegionSplit, applyRegionSplit, addRegion, renameRegion, moveRegion, requestRegionDeletion, cancelRegionDeletion, confirmRegionDeletion, updateRegionBounds, addMaskStroke, addExclusion, updateExclusion, removeExclusion }
 }

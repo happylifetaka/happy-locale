@@ -189,7 +189,7 @@ function normalizeSourceIcons(value: unknown): SourceIcon[] {
       || typeof item.assetId !== 'string' || !item.assetId
       || !['x', 'y', 'width', 'height'].every(key => typeof item[key] === 'number' && Number.isFinite(item[key]))
       || Number(item.width) <= 0 || Number(item.height) <= 0) {
-      throw new Error('元画像のアイコンのID・アセット・範囲を確認してください。')
+      throw new Error('元画像のアイコンのID・アイコン・範囲を確認してください。')
     }
     ids.add(item.id)
     return { id: item.id, assetId: item.assetId, x: Number(item.x), y: Number(item.y), width: Number(item.width), height: Number(item.height) }

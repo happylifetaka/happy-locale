@@ -24,10 +24,10 @@
       "regionId": "sample-01-0",
       "displayName": "カード名",
       "originalText": "LANTERN GROVE",
-      "x": 48,
-      "y": 65,
-      "width": 648,
-      "height": 40,
+      "x": 45,
+      "y": 69,
+      "width": 333,
+      "height": 35,
       "ocrLayout": "single-line"
     },
     {
@@ -54,10 +54,10 @@
       "regionId": "sample-01-1",
       "displayName": "種別",
       "originalText": "PLACE",
-      "x": 48,
-      "y": 121,
-      "width": 648,
-      "height": 26,
+      "x": 45,
+      "y": 122,
+      "width": 78,
+      "height": 23,
       "ocrLayout": "single-line"
     },
     {
@@ -84,10 +84,10 @@
       "regionId": "sample-01-2",
       "displayName": "補足",
       "originalText": "FOREST / QUIET",
-      "x": 48,
-      "y": 151,
-      "width": 648,
-      "height": 20,
+      "x": 45,
+      "y": 152,
+      "width": 166,
+      "height": 21,
       "ocrLayout": "single-line"
     },
     {
@@ -114,24 +114,24 @@
       "regionId": "sample-01-3",
       "displayName": "効果",
       "originalText": "When you enter this place, gain 2 [icon:sun].\nSpend 1 [icon:drop]: move one marker\nfrom this card to your reserve.",
-      "x": 48,
-      "y": 619,
-      "width": 628,
-      "height": 256,
+      "x": 53,
+      "y": 617,
+      "width": 520,
+      "height": 126,
       "sourceIcons": [
         {
           "id": "sample-01-icon-0",
           "assetId": "sample-sun",
-          "x": 478.20000000000005,
-          "y": 0,
+          "x": 473.20000000000005,
+          "y": 2,
           "width": 32,
           "height": 36
         },
         {
           "id": "sample-01-icon-1",
           "assetId": "sample-drop",
-          "x": 119.39999999999998,
-          "y": 45,
+          "x": 114.39999999999998,
+          "y": 47,
           "width": 32,
           "height": 36
         }
@@ -164,10 +164,10 @@
       "regionId": "sample-02-0",
       "displayName": "カード名",
       "originalText": "CLOUD COURIER",
-      "x": 48,
-      "y": 65,
-      "width": 648,
-      "height": 40,
+      "x": 45,
+      "y": 69,
+      "width": 336,
+      "height": 35,
       "ocrLayout": "single-line"
     },
     {
@@ -194,10 +194,10 @@
       "regionId": "sample-02-1",
       "displayName": "種別",
       "originalText": "TRAVELER",
-      "x": 48,
-      "y": 121,
-      "width": 648,
-      "height": 26,
+      "x": 45,
+      "y": 122,
+      "width": 123,
+      "height": 23,
       "ocrLayout": "single-line"
     },
     {
@@ -224,9 +224,9 @@
       "regionId": "sample-02-2",
       "displayName": "補足",
       "originalText": "AIR / MESSENGER",
-      "x": 48,
-      "y": 151,
-      "width": 648,
+      "x": 44,
+      "y": 152,
+      "width": 180,
       "height": 20,
       "ocrLayout": "single-line"
     },
@@ -241,15 +241,7 @@
       "removeColorOutliers": true,
       "backgroundColor": "#fffdf4",
       "manualMaskStrokes": [],
-      "exclusionAreas": [
-        {
-          "id": "sample-02-badge",
-          "x": 564,
-          "y": 237,
-          "width": 64,
-          "height": 19
-        }
-      ],
+      "exclusionAreas": [],
       "textColor": "#193640",
       "textStrokeColor": "#ffffff",
       "textStrokeWidth": 0,
@@ -262,16 +254,16 @@
       "regionId": "sample-02-3",
       "displayName": "効果",
       "originalText": "AFTER MOVING\nDraw 2 cards, then keep 1.\nIf your reserve is empty, gain 1 [icon:sun].",
-      "x": 48,
-      "y": 619,
-      "width": 628,
-      "height": 256,
+      "x": 53,
+      "y": 628,
+      "width": 506,
+      "height": 120,
       "sourceIcons": [
         {
           "id": "sample-02-icon-0",
           "assetId": "sample-sun",
-          "x": 464.4,
-          "y": 90,
+          "x": 459.4,
+          "y": 81,
           "width": 32,
           "height": 36
         }
@@ -304,10 +296,10 @@
       "regionId": "sample-03-0",
       "displayName": "カード名",
       "originalText": "TIDAL COMPASS",
-      "x": 48,
-      "y": 466,
-      "width": 648,
-      "height": 40,
+      "x": 45,
+      "y": 470,
+      "width": 333,
+      "height": 35,
       "ocrLayout": "single-line"
     },
     {
@@ -334,10 +326,10 @@
       "regionId": "sample-03-1",
       "displayName": "種別",
       "originalText": "TOOL",
-      "x": 48,
-      "y": 522,
-      "width": 648,
-      "height": 26,
+      "x": 45,
+      "y": 523,
+      "width": 64,
+      "height": 23,
       "ocrLayout": "single-line"
     },
     {
@@ -364,10 +356,10 @@
       "regionId": "sample-03-2",
       "displayName": "補足",
       "originalText": "NAVIGATION",
-      "x": 48,
-      "y": 552,
-      "width": 648,
-      "height": 20,
+      "x": 44,
+      "y": 554,
+      "width": 121,
+      "height": 18,
       "ocrLayout": "single-line"
     },
     {
@@ -394,16 +386,16 @@
       "regionId": "sample-03-3",
       "displayName": "効果",
       "originalText": "Choose a direction.\nSpend 2 [icon:drop] to move up to 3 spaces.\nYou may stop on an occupied space.",
-      "x": 48,
-      "y": 619,
-      "width": 628,
-      "height": 256,
+      "x": 54,
+      "y": 626,
+      "width": 471,
+      "height": 117,
       "sourceIcons": [
         {
           "id": "sample-03-icon-0",
           "assetId": "sample-drop",
-          "x": 119.39999999999998,
-          "y": 45,
+          "x": 113.39999999999998,
+          "y": 38,
           "width": 32,
           "height": 36
         }
@@ -436,10 +428,10 @@
       "regionId": "sample-04-0",
       "displayName": "カード名",
       "originalText": "GLASS ORCHARD",
-      "x": 48,
-      "y": 65,
-      "width": 648,
-      "height": 40,
+      "x": 45,
+      "y": 69,
+      "width": 333,
+      "height": 35,
       "ocrLayout": "single-line"
     },
     {
@@ -466,10 +458,10 @@
       "regionId": "sample-04-1",
       "displayName": "種別",
       "originalText": "SITE",
-      "x": 48,
-      "y": 121,
-      "width": 648,
-      "height": 26,
+      "x": 45,
+      "y": 122,
+      "width": 64,
+      "height": 24,
       "ocrLayout": "single-line"
     },
     {
@@ -496,10 +488,10 @@
       "regionId": "sample-04-2",
       "displayName": "補足",
       "originalText": "GROWTH",
-      "x": 48,
-      "y": 151,
-      "width": 648,
-      "height": 20,
+      "x": 45,
+      "y": 153,
+      "width": 74,
+      "height": 18,
       "ocrLayout": "single-line"
     },
     {
@@ -513,15 +505,7 @@
       "removeColorOutliers": true,
       "backgroundColor": "#fffdf4",
       "manualMaskStrokes": [],
-      "exclusionAreas": [
-        {
-          "id": "sample-04-badge",
-          "x": 564,
-          "y": 237,
-          "width": 64,
-          "height": 19
-        }
-      ],
+      "exclusionAreas": [],
       "textColor": "#193640",
       "textStrokeColor": "#ffffff",
       "textStrokeWidth": 0,
@@ -534,24 +518,24 @@
       "regionId": "sample-04-3",
       "displayName": "効果",
       "originalText": "AT DAWN\nPlace 1 [icon:sun] on this card.\nAT DUSK\nRemove 3 [icon:sun]: gain 2 points.",
-      "x": 48,
-      "y": 619,
-      "width": 628,
-      "height": 256,
+      "x": 53,
+      "y": 628,
+      "width": 382,
+      "height": 165,
       "sourceIcons": [
         {
           "id": "sample-04-icon-0",
           "assetId": "sample-sun",
-          "x": 119.39999999999998,
-          "y": 45,
+          "x": 114.39999999999998,
+          "y": 36,
           "width": 32,
           "height": 36
         },
         {
           "id": "sample-04-icon-1",
           "assetId": "sample-sun",
-          "x": 133.2,
-          "y": 135,
+          "x": 128.2,
+          "y": 126,
           "width": 32,
           "height": 36
         }
@@ -584,9 +568,9 @@
       "regionId": "sample-05-0",
       "displayName": "カード名",
       "originalText": "THE QUIET BRIDGE",
-      "x": 48,
-      "y": 65,
-      "width": 648,
+      "x": 45,
+      "y": 69,
+      "width": 409,
       "height": 40,
       "ocrLayout": "single-line"
     },
@@ -614,10 +598,10 @@
       "regionId": "sample-05-1",
       "displayName": "種別",
       "originalText": "EVENT",
-      "x": 48,
-      "y": 121,
-      "width": 648,
-      "height": 26,
+      "x": 44,
+      "y": 122,
+      "width": 79,
+      "height": 23,
       "ocrLayout": "single-line"
     },
     {
@@ -644,10 +628,10 @@
       "regionId": "sample-05-2",
       "displayName": "補足",
       "originalText": "ONE USE",
-      "x": 48,
-      "y": 151,
-      "width": 648,
-      "height": 20,
+      "x": 45,
+      "y": 153,
+      "width": 85,
+      "height": 18,
       "ocrLayout": "single-line"
     },
     {
@@ -674,16 +658,16 @@
       "regionId": "sample-05-3",
       "displayName": "効果",
       "originalText": "All travelers may move 1 space.\nA traveler who stays in place gains\n2 [icon:drop] instead. Discard this card.",
-      "x": 48,
-      "y": 619,
-      "width": 628,
-      "height": 256,
+      "x": 53,
+      "y": 627,
+      "width": 489,
+      "height": 121,
       "sourceIcons": [
         {
           "id": "sample-05-icon-0",
           "assetId": "sample-drop",
-          "x": 36.599999999999994,
-          "y": 90,
+          "x": 31.599999999999994,
+          "y": 82,
           "width": 32,
           "height": 36
         }

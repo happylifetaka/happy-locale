@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { TextRegion } from '~/types/editor'
+import type { RegionDraft } from '~/types/editor'
 
 defineProps<{
   src: string
-  region: TextRegion
+  region: RegionDraft & { displayName?: string, regionId?: string }
   imageWidth: number
   imageHeight: number
   previewHeight?: number
@@ -18,7 +18,7 @@ const clipId = useId()
     :viewBox="`${region.x} ${region.y} ${region.width} ${region.height}`"
     :style="{ height: `${previewHeight ?? Math.max(48, Math.min(140, region.height / Math.max(1, region.width) * 300))}px` }"
     role="img"
-    :aria-label="`${region.displayName || region.regionId}の原画像`"
+    :aria-label="`${region.displayName || region.regionId || '領域候補'}の原画像`"
   >
     <defs>
       <clipPath :id="clipId" clipPathUnits="userSpaceOnUse">

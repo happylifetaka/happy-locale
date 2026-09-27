@@ -14,11 +14,12 @@ import { useSourceIcons } from './useSourceIcons'
 
 defineProps<{
   visible: boolean
+  batch?: boolean
   hasCardList: boolean
   printArea: RegionDraft | null
 }>()
 const emit = defineEmits<{
-  image: [file: File]
+  image: [files: File[]]
   diagnostic: [message: string, details?: unknown, level?: 'info' | 'error']
   updatePrintArea: [area: RegionDraft]
 }>()
@@ -40,6 +41,7 @@ const {
   updateExclusion,
   selectRegionForEditing,
   renameRegion,
+  moveRegion,
   requestRegionSplit,
   requestRegionDeletion,
   regionSplitRequest,
@@ -131,9 +133,13 @@ function registerSourceAsset(draft: AssetCreationDraft, isCurrent: () => boolean
       || regionPendingDeletionConfirmation.regionId }}」を削除します。
     元テキスト、訳文、文字設定も削除されます。
   </EditorConfirmDialog>
-  <div v-show="visible" class="editor-layout" :class="{ 'has-card-list': hasCardList }">
+  <div v-show="visible" class="editor-layout" :class="{ 'has-card-list': hasCardList, 'has-batch-workspace': batch }">
     <slot name="cards" />
+    <div v-show="batch" class="batch-workspace">
+      <slot name="batch" />
+    </div>
     <CardCanvas
+      v-show="!batch"
       ref="canvasApi"
       v-model:zoom="cardZoom"
       v-model:preview-mode="cardPreviewMode"
@@ -165,6 +171,7 @@ function registerSourceAsset(draft: AssetCreationDraft, isCurrent: () => boolean
       @update-print-area="emit('updatePrintArea', $event)"
     />
     <EditorInspectorPanel
+      v-show="!batch"
       :active-tab="inspectorTab"
       :can-open-tab="canOpenInspectorTab"
       :selection-label="editor.selectedRegion.value ? (editor.selectedRegion.value.displayName.trim() || editor.selectedRegion.value.regionId) : null"
@@ -181,15 +188,16 @@ function registerSourceAsset(draft: AssetCreationDraft, isCurrent: () => boolean
         aria-labelledby="inspector-tab-list"
       >
         <RegionList
+          :key="cardId"
           :regions="editor.project.value.regions"
           :selected-id="editor.selectedRegionId.value"
           @select="selectRegionForEditing"
           @rename="renameRegion"
+          @move="moveRegion"
           @split="requestRegionSplit"
           @merge="requestRegionMerge"
           @remove="requestRegionDeletion"
         />
-        <slot name="layout-tools" />
         <p v-if="editor.project.value.regions.length === 0" class="muted">
           画像上をドラッグして最初の領域を追加してください。
         </p>

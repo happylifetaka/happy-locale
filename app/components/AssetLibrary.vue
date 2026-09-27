@@ -87,7 +87,7 @@ function updateNumber(
 
 <template>
   <section class="asset-library">
-    <h3>アセット</h3>
+    <h3>アイコン</h3>
     <button
       v-if="showCreate !== false"
       type="button"
@@ -95,13 +95,13 @@ function updateNumber(
       :disabled="!image"
       @click="$emit('toggleEditing')"
     >
-      {{ assetEditing ? '画像上をドラッグ' : '画像からアセットを登録' }}
+      {{ assetEditing ? '画像上をドラッグ' : '画像からアイコンを登録' }}
     </button>
     <p class="muted">
       アイコンを矩形で囲むとプロジェクト内で再利用できます。
     </p>
     <p v-if="assets.length === 0" class="muted">
-      登録済みアセットはありません。
+      登録済みアイコンはありません。
     </p>
     <div v-for="asset in assets" :key="asset.id" class="asset-item">
       <img
@@ -130,7 +130,7 @@ function updateNumber(
           v-if="showRecrop"
           type="button"
           :disabled="!image"
-          :title="image ? '元画像から切り出し直す' : '先にアセット元画像を開いてください'"
+          :title="image ? '元画像から切り出し直す' : '先にアイコン元画像を開いてください'"
           @click="$emit('recrop', asset.id)"
         >
           切り出し直し

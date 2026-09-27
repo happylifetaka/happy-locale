@@ -220,9 +220,9 @@ export async function openFolderProject(
   for (const asset of document.assets) {
     try {
       if (!isSafeAssetImagePath(asset.imagePath))
-        throw new Error(`安全でないアセット画像パスを拒否しました: ${asset.imagePath}`)
+        throw new Error(`安全でないアイコン画像パスを拒否しました: ${asset.imagePath}`)
       const file = await getFileByPath(directory, asset.imagePath)
-      assertFileSize(file, FILE_LIMITS.imageBytes, 'アセット画像')
+      assertFileSize(file, FILE_LIMITS.imageBytes, 'アイコン画像')
       assetFiles.set(asset.id, file)
     }
     catch (error) {
@@ -400,7 +400,7 @@ export async function removeFolderProjectAssetImages(
     if (currentPaths.has(asset.imagePath))
       continue
     if (!isSafeAssetImagePath(asset.imagePath)) {
-      throw new Error(`安全でないアセット画像パスの削除を拒否しました: ${asset.imagePath}`)
+      throw new Error(`安全でないアイコン画像パスの削除を拒否しました: ${asset.imagePath}`)
     }
     await removeFileByPath(directory, asset.imagePath)
   }
@@ -460,7 +460,7 @@ async function writeAssetFiles(
     if (!blob)
       continue
     if (!isSafeAssetImagePath(asset.imagePath))
-      throw new Error(`安全でないアセット画像パスへの保存を拒否しました: ${asset.imagePath}`)
+      throw new Error(`安全でないアイコン画像パスへの保存を拒否しました: ${asset.imagePath}`)
     await writeFile(
       await assetDirectory.getFileHandle(asset.imagePath.split('/').at(-1)!, {
         create: true,

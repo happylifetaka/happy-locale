@@ -118,7 +118,7 @@ function pickCsv(event: Event) {
           :disabled="!hasOpenProject || discoveryWorking"
           @click="$emit('view', 'assets')"
         >
-          アセット編集
+          アイコン編集
         </button>
         <button
           type="button"
@@ -127,7 +127,7 @@ function pickCsv(event: Event) {
           :disabled="!discoveryAvailable || discoveryWorking"
           @click="$emit('view', 'discovery')"
         >
-          アセット検出
+          アイコン検出
         </button>
       </nav>
     </div>

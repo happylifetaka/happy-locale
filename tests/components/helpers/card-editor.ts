@@ -75,7 +75,6 @@ const childNames = [
   'TranslationReviewDialog',
   'TranslationReuseDialog',
   'TranslationPreviewDialog',
-  'LayoutTemplateDialog',
   'RegionSplitDialog',
   'SourceIconsDialog',
   'TranslationRequestDialog',

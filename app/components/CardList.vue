@@ -3,12 +3,13 @@ import type { CardApplyIssues } from '~/services/asset-discovery/apply-issues'
 import type { OCRQueueCardState } from '~/services/ocr/queue'
 import type { FolderProjectCard } from '~/types/editor'
 import type { RegionStatusFilter } from '~/utils/region-filter'
-import { applyIssueCounts } from '~/services/asset-discovery/apply-issues'
+import BatchCardSelection from '~/features/cards/BatchCardSelection.vue'
 import { cardProgress, progressLabel } from '~/utils/card-progress'
 import { consumeSelectedFiles } from '~/utils/file-input'
 import { filterProjectRegions } from '~/utils/region-filter'
 
 const props = defineProps<{
+  batchSelection?: { operation?: 'detect' | 'reocr' | 'translate', ids: readonly string[], eligibleIds: readonly string[], focusedId: string, detection: boolean, busy: boolean }
   cards: FolderProjectCard[]
   activeCardId: string
   loadingCardId: string | null
@@ -27,12 +28,14 @@ const props = defineProps<{
   batchOcrEligibleCount: number
   batchOcrStates: ReadonlyMap<string, OCRQueueCardState>
   batchAutoApplyAvailable?: boolean
+  reocrAvailable?: boolean
   batchAutoApply?: boolean
   batchApplyIssues?: readonly CardApplyIssues[]
 }>()
 
 const emit = defineEmits<{
   'select': [id: string]
+  'selectBatchTargets': [ids: string[]]
   'add': [files: File[]]
   'addFolder': []
   'exportPng': [id: string]
@@ -46,15 +49,12 @@ const emit = defineEmits<{
   'selectRegion': [cardId: string, regionId: string]
   'requestThumbnail': [cardId: string]
   'startBatchOcr': []
-  'applyCurrentCard': []
-  'openApplyResults': []
+  'startBatchReocr': []
   'update:batchAutoApply': [value: boolean]
   'startBatchTranslation': []
   'cancelBatchOcr': []
   'openPrintLayout': []
 }>()
-
-const applyCounts = computed(() => applyIssueCounts(props.batchApplyIssues ?? []))
 
 /** カード一覧のスクロール領域。 */
 const cardListPanel = ref<HTMLElement | null>(null)
@@ -96,32 +96,8 @@ const projectSearchResults = computed(() =>
       )
     : [],
 )
-/** 一括OCRの確認待ち・空結果・失敗の件数。 */
-const batchOCRResultSummary = computed(() => {
-  let review = 0
-  let empty = 0
-  let errors = 0
-  let applied = 0
-  props.batchOcrStates.forEach((state) => {
-    if (state.status === 'review')
-      review += 1
-    else if (state.status === 'empty')
-      empty += 1
-    else if (state.status === 'error')
-      errors += 1
-    else if (state.status === 'applied')
-      applied += 1
-  })
-  return [
-    review > 0 ? `確認待ち${review}枚` : '',
-    empty > 0 ? `候補なし${empty}枚` : '',
-    errors > 0 ? `失敗${errors}枚` : '',
-    applied > 0 ? `反映済み${applied}枚` : '',
-  ].filter(Boolean).join('、')
-})
-
 /** カードのOCR状態を一覧表示用の短いラベルへ変換する。 */
-function batchOCRStateLabel(state: OCRQueueCardState | undefined) {
+function batchOCRStateLabel(state: OCRQueueCardState | undefined, regionCount: number) {
   if (!state)
     return ''
   if (state.status === 'queued')
@@ -129,11 +105,11 @@ function batchOCRStateLabel(state: OCRQueueCardState | undefined) {
   if (state.status === 'processing')
     return 'OCR解析中…'
   if (state.status === 'review')
-    return `OCR候補 ${state.candidates}件`
+    return state.candidates ? `OCR候補 ${state.candidates}件` : regionCount ? `領域 ${regionCount}件・追加候補なし` : 'OCR候補なし'
   if (state.status === 'empty')
     return 'OCR候補なし'
   if (state.status === 'applied')
-    return state.issues ? `反映済み・要確認${state.issues}件` : `反映済み・アイコン${state.icons}個`
+    return state.issues ? `要確認 ${state.issues}件` : ''
   return 'OCR失敗'
 }
 
@@ -289,61 +265,24 @@ onBeforeUnmount(() => {
         印刷範囲 {{ cards.filter(card => card.printArea).length }}/{{ activeCount }}枚
       </small>
     </button>
-    <section
-      v-if="(activeCount > 0 && batchAutoApplyAvailable) || (activeCount > 1 && (batchOcrEligibleCount > 1 || batchOcrTotal > 0)) || batchApplyIssues?.length"
-      class="card-list-batch-ocr"
-      aria-label="複数カードのOCR"
-    >
-      <label v-if="batchAutoApplyAvailable && !batchOcrRunning"><input type="checkbox" :checked="batchAutoApply" @change="$emit('update:batchAutoApply', ($event.target as HTMLInputElement).checked)">追加・アイコン反映まで実行</label>
-      <template v-if="batchOcrRunning">
-        <div class="card-list-batch-ocr-progress" aria-live="polite">
-          <span>一括OCR {{ batchOcrCompleted }}/{{ batchOcrTotal }}枚</span>
-          <progress :value="batchOcrCompleted" :max="batchOcrTotal" />
-        </div>
-        <button type="button" @click="$emit('cancelBatchOcr')">
-          {{ batchAutoApply ? '中止（完了分は保持）' : '現在のカード後に中止' }}
-        </button>
-      </template>
-      <template v-else-if="batchOcrEligibleCount > 1">
-        <p>{{ batchAutoApply ? '対象' : '領域未作成' }} {{ batchOcrEligibleCount }}枚</p>
-        <small v-if="batchAutoApply">既存領域・訳文は保持。割当済みアイコンを反映します。</small>
-        <button
-          type="button"
-          :disabled="loadingCardId !== null || addingCards || exportingCards || batchOcrRunning"
-          @click="$emit('startBatchOcr')"
-        >
-          まとめて領域検出
-        </button>
-      </template>
-      <p v-else-if="!batchAutoApply || batchOcrTotal">
-        一括OCR: {{ batchOCRResultSummary || '処理済み' }}
-      </p>
-      <button v-if="batchAutoApply && !batchOcrRunning" type="button" :disabled="loadingCardId !== null || addingCards || exportingCards || pendingDeletionIds.has(activeCardId)" @click="$emit('applyCurrentCard')">
-        このカードに反映
+    <nav class="card-list-workflows" aria-label="カードの一括作業">
+      <button v-if="batchAutoApplyAvailable || batchOcrEligibleCount > 1" type="button" :aria-pressed="batchSelection?.operation === 'detect'" :disabled="loadingCardId !== null || addingCards || exportingCards || batchOcrRunning" @click="$emit('startBatchOcr')">
+        領域検出
       </button>
-      <small v-if="batchAutoApply && !batchOcrRunning && batchOcrTotal">{{ batchOcrCompleted }}/{{ batchOcrTotal }}枚処理済み</small>
-      <div v-if="batchApplyIssues?.length && !batchOcrRunning">
-        <p v-if="applyCounts.protectedCards">
-          原文保護で保留 {{ applyCounts.protectedCards }}枚
-        </p>
-        <p v-if="applyCounts.problemCards">
-          検出・対応付けの問題 {{ applyCounts.problemCards }}枚
-        </p>
-        <button type="button" :disabled="loadingCardId !== null || addingCards || exportingCards" @click="$emit('openApplyResults')">
-          未反映の内容を確認
-        </button>
-      </div>
-    </section>
-    <section v-if="batchTranslationAvailable" class="card-list-batch-ocr" aria-label="複数カードの翻訳">
-      <p>{{ batchTranslationCount ?? 0 }}枚の原文・訳文をまとめて確認します。</p>
-      <button
-        type="button"
-        :disabled="!batchTranslationCount || translationRunning || loadingCardId !== null || addingCards || exportingCards || batchOcrRunning"
-        @click="$emit('startBatchTranslation')"
-      >
-        {{ translationRunning ? '翻訳候補を取得中…' : 'まとめて翻訳' }}
+      <button v-if="batchAutoApplyAvailable && reocrAvailable !== false" type="button" aria-label="まとめて再OCR" :aria-pressed="batchSelection?.operation === 'reocr'" :disabled="loadingCardId !== null || addingCards || exportingCards || batchOcrRunning" @click="$emit('startBatchReocr')">
+        原文読み直し
       </button>
-    </section>
+      <button v-if="batchTranslationAvailable" type="button" aria-label="まとめて翻訳" :aria-pressed="batchSelection?.operation === 'translate'" :disabled="!batchTranslationCount || translationRunning || loadingCardId !== null || addingCards || exportingCards || batchOcrRunning" @click="$emit('startBatchTranslation')">
+        翻訳
+      </button>
+    </nav>
+    <div v-if="batchOcrRunning && !batchSelection" class="card-list-batch-ocr-progress" aria-live="polite">
+      <span>一括OCR {{ batchOcrCompleted }}/{{ batchOcrTotal }}枚</span>
+      <progress :value="batchOcrCompleted" :max="batchOcrTotal" />
+      <button type="button" @click="$emit('cancelBatchOcr')">
+        {{ batchAutoApply ? '中止（完了分は保持）' : '現在のカード後に中止' }}
+      </button>
+    </div>
     <details class="project-region-search">
       <summary>プロジェクト内を検索</summary>
       <div class="project-region-search-controls">
@@ -388,6 +327,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </details>
+    <BatchCardSelection v-if="batchSelection" :cards="cards" :selected-ids="batchSelection.ids" :eligible-ids="batchSelection.eligibleIds" :disabled="batchSelection.busy" :detection="batchSelection.detection" @select="emit('selectBatchTargets', $event)" />
     <ol>
       <li
         v-for="card in cards"
@@ -397,6 +337,9 @@ onBeforeUnmount(() => {
         class="card-list-item"
         :class="{ pending: pendingDeletionIds.has(card.id) }"
       >
+        <span class="batch-card-check">
+          <input v-if="batchSelection" type="checkbox" :aria-label="`${card.imageName}を処理対象にする`" :checked="batchSelection.ids.includes(card.id)" :disabled="batchSelection.busy || !batchSelection.eligibleIds.includes(card.id)" @change="emit('selectBatchTargets', ($event.target as HTMLInputElement).checked ? [...batchSelection.ids, card.id] : batchSelection.ids.filter(id => id !== card.id))">
+        </span>
         <form
           v-if="renamingCardId === card.id"
           class="card-list-rename"
@@ -417,15 +360,16 @@ onBeforeUnmount(() => {
           v-else
           class="card-list-select"
           type="button"
-          :class="{ selected: card.id === activeCardId }"
+          :class="{ selected: card.id === (batchSelection?.focusedId || activeCardId) }"
           :disabled="
             loadingCardId !== null
               || addingCards
               || exportingCards
               || batchOcrRunning
+              || batchSelection?.busy
               || pendingDeletionIds.has(card.id)
           "
-          :aria-current="card.id === activeCardId ? 'true' : undefined"
+          :aria-current="card.id === (batchSelection?.focusedId || activeCardId) ? 'true' : undefined"
           @click="$emit('select', card.id)"
         >
           <span class="card-thumbnail">
@@ -445,12 +389,12 @@ onBeforeUnmount(() => {
               削除予定
             </small>
             <small
-              v-else-if="batchOcrStates.get(card.id)"
+              v-else-if="batchOCRStateLabel(batchOcrStates.get(card.id), card.regions.length)"
               class="card-ocr-state"
               :class="`is-${batchOcrStates.get(card.id)?.status}`"
               :title="batchOCRStateTitle(batchOcrStates.get(card.id))"
             >
-              {{ batchOCRStateLabel(batchOcrStates.get(card.id)) }}
+              {{ batchOCRStateLabel(batchOcrStates.get(card.id), card.regions.length) }}
             </small>
             <span v-else class="card-progress">
               <small :title="`編集領域 ${card.regions.length}件`">
@@ -578,6 +522,7 @@ onBeforeUnmount(() => {
               || addingCards
               || exportingCards
               || batchOcrRunning
+              || batchSelection?.busy
               || !canAddCards
               || pendingCount > 0
           "
@@ -604,6 +549,7 @@ onBeforeUnmount(() => {
               || addingCards
               || exportingCards
               || batchOcrRunning
+              || batchSelection?.busy
               || !canAddCards
               || pendingCount > 0
           "

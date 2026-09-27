@@ -95,7 +95,7 @@ it('keeps undo history when the first save binds the draft to a saved card', asy
   vi.mocked(folderProjectExists).mockResolvedValueOnce(false)
   toolbar.vm.$emit('open-project')
   await flushPromises()
-  canvas.vm.$emit('image', new File(['image'], 'draft.png', { type: 'image/png' }))
+  canvas.vm.$emit('image', [new File(['image'], 'draft.png', { type: 'image/png' })])
   await flushPromises()
   canvas.vm.$emit('add-region', { x: 2, y: 2, width: 20, height: 20 }, '#ffffff')
   await nextTick()

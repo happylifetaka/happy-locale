@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { collectCardIconCandidates, collectMeasuredImageIcons, discoveryOCRAreas } from '~/services/asset-discovery/collect'
 import { parseAssetDiscovery } from '~/services/asset-discovery/format'
 import { discoverImageIcons } from '~/services/asset-discovery/image'
+import { regionFromCandidate } from '~/services/asset-discovery/new-region'
 import { prepareRegionForOCR } from '~/services/ocr/image'
 import { fingerprintImage } from '~/utils/asset-matching'
 import { discoveryProject } from '../fixtures/asset-discovery'
@@ -134,4 +135,33 @@ it('rejects malformed extraction reasons rather than dropping them on save', () 
   const project = discoveryProject()
   project.assetDiscovery!.occurrences[0]!.detectionReason = 'unknown' as never
   expect(() => parseAssetDiscovery(project.assetDiscovery, { cards: project.cards, assetIds: new Set(['asset-1']) })).toThrow('抽出理由')
+})
+
+it('limits region-only collection to confirmed regions with the same small-overflow tolerance as OCR', async () => {
+  const input = options()
+  const region = regionFromCandidate(input.card.ocrCandidates![0]!, 0)
+  region.width = 45 // right edge 55: a 20px icon extending to 59 fits; to 60 does not.
+  input.card.regions = [region]
+  vi.mocked(discoverImageIcons).mockReturnValueOnce({
+    icons: [40, 39, 100].map(x => ({ bounds: { x, y: 50, width: 20, height: 20 }, reason: 'colored-component', lineIndex: 0 })),
+    searchedAreas: [],
+    truncated: false,
+    examinedPixels: 100,
+  })
+  const before = structuredClone(input.card)
+  const proposal = (await collectCardIconCandidates({ ...input, scope: 'regions' }))!
+  expect(proposal.occurrences.map(item => item.bounds.x)).toEqual([39])
+  expect(proposal.occurrences[0]!.owner).toBeNull()
+  expect(parseAssetDiscovery({ occurrences: proposal.occurrences, groups: [] }, { cards: [input.card], assetIds: new Set() }).occurrences).toEqual(proposal.occurrences)
+  expect(prepareRegionForOCR).toHaveBeenCalledWith(bitmap, { x: 2, y: 12, width: 61, height: 116 }, { scale: 2, padding: 0 })
+  expect(input.card).toEqual(before)
+})
+
+it('searches the whole image only when selected and never falls back from empty confirmed regions', async () => {
+  const input = options()
+  expect(discoveryOCRAreas(input.card, 'image').areas).toEqual([{ x: 0, y: 0, width: 200, height: 240 }])
+  expect(discoveryOCRAreas(input.card, 'regions').areas).toEqual([])
+  await expect(collectCardIconCandidates({ ...input, scope: 'regions' })).rejects.toThrow('確定した領域がありません')
+  expect(input.provider.recognize).not.toHaveBeenCalled()
+  expect(bitmap.close).toHaveBeenCalledOnce()
 })

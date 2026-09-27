@@ -97,3 +97,29 @@ describe('bundled sample project', () => {
     expect(sampleRegions({ ...project.cards[0]!, id: 'unrelated' })).toEqual([])
   })
 })
+
+it('keeps compact text bounds while preserving the original image positions of source icons', () => {
+  for (const card of project.cards) {
+    const regions = sampleRegions(card)
+    expect(regions[0]!.width).toBeLessThan(450)
+    expect(regions[1]!.width).toBeLessThan(150)
+    expect(regions[2]!.width).toBeLessThan(200)
+    const effect = regions[3]!
+    expect(effect.height).toBeLessThan(180)
+    expect(effect.exclusionAreas).toEqual([])
+    for (const icon of effect.sourceIcons ?? []) {
+      expect(icon.x).toBeGreaterThanOrEqual(0)
+      expect(icon.y).toBeGreaterThanOrEqual(0)
+      expect(icon.x + icon.width).toBeLessThanOrEqual(effect.width)
+      expect(icon.y + icon.height).toBeLessThanOrEqual(effect.height)
+    }
+    const candidates = sampleRegionCandidates(card)
+    expect(resolveSampleCandidates(card, candidates)).toEqual(regions)
+  }
+  const effect = sampleRegions(project.cards[0]!)[3]!
+  for (const asset of project.assets) {
+    const icon = effect.sourceIcons!.find(icon => icon.assetId === asset.id)!
+    expect(effect.x + icon.x).toBeCloseTo(asset.sourceRect.x)
+    expect(effect.y + icon.y).toBeCloseTo(asset.sourceRect.y)
+  }
+})

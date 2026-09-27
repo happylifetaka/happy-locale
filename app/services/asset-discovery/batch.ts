@@ -1,4 +1,4 @@
-import type { CardIconProposal, DiscoveryCard } from './collect'
+import type { CardIconProposal, DiscoveryCard, IconCollectionScope } from './collect'
 import type { IconDiscoverySettings } from './types'
 import type { OCRProvider } from '~/services/ocr/types'
 import { collectCardIconCandidates } from './collect'
@@ -8,6 +8,7 @@ import { proposeIconGroups } from './group'
 import { DEFAULT_ICON_DISCOVERY_SETTINGS } from './types'
 
 export interface IconDiscoveryBatchOptions {
+  scope?: IconCollectionScope
   cards: readonly DiscoveryCard[]
   provider: OCRProvider
   loadFile: (card: DiscoveryCard) => Promise<File>
@@ -58,6 +59,7 @@ export async function collectIconDiscoveryBatch(options: IconDiscoveryBatchOptio
         }
         const proposal = await collectCardIconCandidates({
           card,
+          scope: options.scope,
           file,
           provider,
           isCurrent: current,

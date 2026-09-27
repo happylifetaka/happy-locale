@@ -35,6 +35,7 @@ for (const [batch, detectFresh] of [[true, false], [true, true], [false, false]]
       await writer.close()
       return fixture
     }, { url, batch, detectFresh })
+    let candidatesBeforeApply = fixture.project.cards[batch ? 1 : 0]!.ocrCandidates ?? []
     const saved = () => page.evaluate(async (name) => {
       const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(name)
       return JSON.parse(await (await (await dir.getFileHandle('project.json')).getFile()).text()) as import('../../app/types/editor').FolderProjectDocument
@@ -47,11 +48,21 @@ for (const [batch, detectFresh] of [[true, false], [true, true], [false, false]]
     try {
       await page.getByRole('button', { name: 'プロジェクトを開く／作成', exact: true }).click()
       if (batch) {
-        await expect(page.getByLabel('追加・アイコン反映まで実行')).toBeChecked()
-        await page.getByRole('button', { name: 'まとめて領域検出', exact: true }).click()
-        await page.getByRole('dialog', { name: '領域・アイコンを反映', exact: true }).getByRole('button', { name: 'すべて', exact: true }).click()
-        await page.getByRole('button', { name: '選択した2枚に反映', exact: true }).click()
-        await expect(page.getByText('2/2枚処理済み', { exact: true })).toBeVisible({ timeout: 45000 })
+        await expect(page.getByLabel('追加・アイコン反映まで実行')).toHaveCount(0)
+        await page.locator('.card-list-panel').getByRole('button', { name: '領域検出', exact: true }).click()
+        const targets = page.getByRole('region', { name: '領域検出・OCR', exact: true })
+        await expect(page.locator('.card-list-panel').getByRole('combobox', { name: 'カードの選択条件' })).toHaveValue('uncreated')
+        await targets.getByRole('button', { name: '1枚の領域を検出', exact: true }).click()
+        await expect(page.getByRole('region', { name: 'OCR結果', exact: true })).toBeVisible()
+        await targets.getByRole('button', { name: '表示中の候補をすべて選択', exact: true }).click()
+        await save()
+        candidatesBeforeApply = (await saved()).cards[1]!.ocrCandidates ?? []
+        await targets.getByRole('button', { name: /選択した候補を追加/ }).click()
+        await expect(page.getByRole('region', { name: 'OCR結果', exact: true })).toBeVisible({ timeout: 45000 })
+        await page.getByRole('button', { name: 'まとめて再OCR', exact: true }).click()
+        await page.locator('.card-list-panel').getByRole('combobox', { name: 'カードの選択条件' }).selectOption('all')
+        await page.getByRole('button', { name: '2枚を再OCR', exact: true }).click()
+        await expect(page.getByRole('region', { name: 'OCR結果', exact: true })).toBeVisible({ timeout: 45000 })
       }
       else {
         await expect(page.getByLabel('アイコンも反映', { exact: true })).toBeChecked()
@@ -68,25 +79,26 @@ for (const [batch, detectFresh] of [[true, false], [true, true], [false, false]]
       expect(after.cards[0]!.regions[0]!.sourceIcons).toHaveLength(1)
       expect(after.assetDiscovery).toEqual(fixture.project.assetDiscovery)
       if (batch) {
+        await page.getByRole('button', { name: 'カード編集に戻る', exact: true }).click()
         await page.locator('.card-list-panel').screenshot({ path: testInfo.outputPath('batch-region-controls.png') })
         expect(after.cards[1]!.regions[0]!.originalText).toContain('[icon:token]')
         expect(after.cards[1]!.ocrCandidates ?? []).toEqual([])
-        await page.getByLabel('追加・アイコン反映まで実行').uncheck()
-        await expect(page.getByLabel('追加・アイコン反映まで実行')).toBeVisible()
-        await page.getByLabel('追加・アイコン反映まで実行').check()
-        await page.getByRole('button', { name: 'まとめて領域検出', exact: true }).click()
-        await page.getByRole('dialog', { name: '領域・アイコンを反映', exact: true }).getByRole('button', { name: 'すべて', exact: true }).click()
-        await page.getByRole('button', { name: '選択した2枚に反映', exact: true }).click()
-        await expect(page.getByRole('button', { name: '中止（完了分は保持）', exact: true })).toHaveCount(0, { timeout: 45000 })
+        await page.getByRole('button', { name: 'まとめて再OCR', exact: true }).click()
+        await page.locator('.card-list-panel').getByRole('combobox', { name: 'カードの選択条件' }).selectOption('all')
+        await page.getByRole('button', { name: '2枚を再OCR', exact: true }).click()
+        await expect(page.getByRole('region', { name: 'OCR結果', exact: true })).toBeVisible({ timeout: 45000 })
+        await page.getByRole('button', { name: 'カード編集に戻る', exact: true }).click()
         await save()
         await expect.poll(async () => (await saved()).cards.map(card => card.regions.length)).toEqual([1, 1])
         await page.locator('[data-card-id="two"] .card-list-select').click()
       }
+      if (!batch)
+        await page.getByRole('button', { name: 'カード編集に戻る', exact: true }).click()
       await page.getByRole('button', { name: '元に戻す', exact: true }).click()
       await save()
       const index = batch ? 1 : 0
       await expect.poll(async () => (await saved()).cards[index]!.regions).toEqual(fixture.project.cards[index]!.regions)
-      expect((await saved()).cards[index]!.ocrCandidates ?? []).toEqual(fixture.project.cards[index]!.ocrCandidates ?? [])
+      expect((await saved()).cards[index]!.ocrCandidates ?? []).toEqual(candidatesBeforeApply)
       await page.getByRole('button', { name: 'やり直す', exact: true }).click()
       await save()
       await expect.poll(async () => (await saved()).cards[index]!.regions).toEqual(after.cards[index]!.regions)

@@ -124,3 +124,40 @@ it('automatically updates unchanged OCR text and records the next baseline', asy
   expect(result.rows[0]!.error).toBeUndefined()
   expect(result.rows[0]!.region.lastOcrText).toBe('Gain [icon:synthetic-icon]')
 })
+
+it('re-OCRs plain existing regions without detecting or consuming saved candidates', async () => {
+  const s = setup()
+  s.options.discovery = { occurrences: [], groups: [] }
+  s.options.card.ocrCandidates = discoveryProject().cards[0]!.ocrCandidates!
+  const before = structuredClone(s.options.card)
+  s.options.provider.recognize.mockResolvedValue({ text: 'New plain text', confidence: 95, blocks: [], words: [] })
+  const result = await analyzeIconRegions({ ...s.options, mode: 'reocr', preserveEditedText: true })
+  expect(result.rows).toHaveLength(1)
+  expect(result.rows[0]!.region).toMatchObject({ id: s.region.id, x: s.region.x, y: s.region.y, width: s.region.width, height: s.region.height, originalText: 'New plain text', lastOcrText: 'New plain text', translatedText: s.region.translatedText })
+  expect(result.rows[0]!.candidateId).toBeUndefined()
+  expect(result.candidates).toEqual(before.ocrCandidates)
+  expect(detectRegions).not.toHaveBeenCalled()
+  expect(s.options.card).toEqual(before)
+})
+
+it('keeps edited plain text protected during re-OCR and allows explicit comparison', async () => {
+  const s = setup()
+  s.options.discovery = { occurrences: [], groups: [] }
+  s.region.originalText = 'Manually corrected'
+  const result = await analyzeIconRegions({ ...s.options, mode: 'reocr', preserveEditedText: true })
+  expect(result.rows[0]).toMatchObject({ needsTextReview: true, region: { originalText: 'Manually corrected' } })
+  expect(s.options.provider.recognize).not.toHaveBeenCalled()
+  const comparison = await analyzeIconRegions({ ...s.options, mode: 'reocr' })
+  expect(comparison.rows[0]!.region.originalText).toBe('Gain')
+})
+
+it('does not silently detect regions in re-OCR mode or reread existing regions in detect mode', async () => {
+  const s = setup()
+  const before = structuredClone(s.options.card)
+  expect((await analyzeIconRegions({ ...s.options, mode: 'detect' })).rows).toEqual([])
+  expect(s.options.card).toEqual(before)
+  s.options.card.regions = []
+  await expect(analyzeIconRegions({ ...s.options, mode: 'reocr' })).rejects.toThrow('解析対象の領域がありません')
+  expect(s.options.provider.recognize).not.toHaveBeenCalled()
+  expect(detectRegions).not.toHaveBeenCalled()
+})

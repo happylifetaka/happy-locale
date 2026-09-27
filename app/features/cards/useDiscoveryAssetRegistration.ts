@@ -8,6 +8,7 @@ import type { AssetCreationDraft, ImageAsset } from '~/types/editor'
 import { computed, onScopeDispose, shallowRef, watchEffect } from 'vue'
 import { intersectionArea } from '~/services/asset-discovery/geometry'
 import { containsBounds } from '~/services/asset-discovery/review'
+import { activeReviewGroups } from '~/services/asset-discovery/review-groups'
 
 interface DiscoveryAssetRegistrationOptions {
   store: Pick<ReturnType<typeof useProjectStore>, 'assetDiscovery' | 'assets'>
@@ -66,7 +67,7 @@ export function useDiscoveryAssetRegistration({ store, runtime, currentImageId, 
     const groupId = options.groupId
     if (options.linkGroupMembers && !groupId)
       throw new Error('登録するグループを選んでください。')
-    if (groupId && state!.groups.find(group => group.id === groupId)?.representativeId !== occurrenceId)
+    if (groupId && activeReviewGroups(state!).find(group => group.id === groupId)?.representativeId !== occurrenceId)
       throw new Error('グループの代表候補を選び直してください。')
     if (draft.editingAssetId !== null || !containsBounds({ x: 0, y: 0, width: source.naturalWidth, height: source.naturalHeight }, draft.sourceRect)
       || intersectionArea(draft.sourceRect, occurrence.bounds) === 0) {
@@ -91,7 +92,7 @@ export function useDiscoveryAssetRegistration({ store, runtime, currentImageId, 
       if (generation !== runtime.projectGeneration.value || !store.assets.some(item => item.id === asset.id))
         return null
       if (!request.current())
-        return { asset, linked: false, warning: 'アセットは登録済みですが、対象が変わったため候補への関連付けはしていません。' }
+        return { asset, linked: false, warning: 'アイコンは登録済みですが、対象が変わったため候補への関連付けはしていません。' }
       request.linking = true
       try {
         // グループUIでは全メンバーへ同じ登録先を反映する。個別の承認はしない。
@@ -100,7 +101,7 @@ export function useDiscoveryAssetRegistration({ store, runtime, currentImageId, 
         return { asset, linked: true }
       }
       catch (error) {
-        return { asset, linked: false, warning: `アセットは登録済みです。候補への関連付けを確認してください。${error instanceof Error ? error.message : String(error)}` }
+        return { asset, linked: false, warning: `アイコンは登録済みです。候補への関連付けを確認してください。${error instanceof Error ? error.message : String(error)}` }
       }
     }
     catch (error) {

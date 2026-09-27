@@ -78,7 +78,7 @@ export function assertProjectIntegrity(value: unknown): void {
   })
 
   const collections = [
-    ['assets', value.assets, normalizeAsset, 'アセットID'],
+    ['assets', value.assets, normalizeAsset, 'アイコンID'],
     ['fonts', value.fonts, normalizeFont, 'フォントID'],
     ['ocrDictionary', value.ocrDictionary, normalizeOCRDictionaryEntry, 'OCR辞書ID'],
     ['glossary', value.glossary, normalizeGlossaryEntry, '用語集ID'],
@@ -94,7 +94,7 @@ export function assertProjectIntegrity(value: unknown): void {
   }
 
   if (Array.isArray(value.assets))
-    assertUnique(value.assets, 'assets', 'name', 'アセット名')
+    assertUnique(value.assets, 'assets', 'name', 'アイコン名')
 }
 
 /** 大量の領域やマスク点による負荷を、詳細な正規化や描画に進む前に制限する。 */
@@ -104,7 +104,7 @@ export function assertProjectComplexity(value: unknown): void {
   if (Array.isArray(value.cards) && value.cards.length > FILE_LIMITS.projectCards)
     throw new Error(`カードは${FILE_LIMITS.projectCards}件以下にしてください。`)
   if (Array.isArray(value.assets) && value.assets.length > FILE_LIMITS.projectAssets)
-    throw new Error(`アセットは${FILE_LIMITS.projectAssets}件以下にしてください。`)
+    throw new Error(`アイコンは${FILE_LIMITS.projectAssets}件以下にしてください。`)
   if (Array.isArray(value.cards)) {
     for (const card of value.cards) {
       if (

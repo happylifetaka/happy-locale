@@ -26,7 +26,10 @@ export interface IconRegionRow {
   blockedByIconMapping?: boolean
 }
 
+export type RegionOCRMode = 'detect' | 'reocr'
+
 interface AnalyzeIconRegionsOptions {
+  mode?: RegionOCRMode
   card: FolderProjectCard
   discovery: AssetDiscoveryState
   assets: ImageAsset[]
@@ -49,7 +52,7 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
       throw new Error('解析対象が変更されたか中止されました。')
   }
   let candidates = card.ocrCandidates ?? []
-  if (!card.regions.length && !candidates.length) {
+  if (options.mode !== 'reocr' && !card.regions.length && !candidates.length) {
     status('領域を新規検出しています…')
     const detection = await detectRegions({ image, imageWidth: card.imageWidth, imageHeight: card.imageHeight, provider, isCurrent, onProgress: progress => status(progress.status) })
     current()
@@ -57,7 +60,7 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
       throw new Error('領域を検出できませんでした。')
     candidates = detection.candidates
   }
-  const additions = candidates.filter(candidate => candidate.selected).filter((candidate) => {
+  const additions = (options.mode === 'reocr' ? [] : candidates).filter(candidate => candidate.selected).filter((candidate) => {
     const overlapping = card.regions.find(region => intersectionArea(region, candidate) > 0)
     if (overlapping) {
       warnings.push('既存領域と重なる領域候補は追加しません。既存の枠を優先します。')
@@ -83,7 +86,9 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
     const before = card.regions.find(item => item.id === region.id) ?? null
     const added = additions.find(item => item.region.id === region.id)
     const occurrences = mapping.mapped.get(region.id) ?? []
-    if (before && !occurrences.length && !before.sourceIcons?.some(icon => icon.id.startsWith('discovery-')) && !mapping.blocked.has(region.id))
+    if (before && options.mode === 'detect')
+      continue
+    if (options.mode !== 'reocr' && before && !occurrences.length && !before.sourceIcons?.some(icon => icon.id.startsWith('discovery-')) && !mapping.blocked.has(region.id))
       continue
     const row: IconRegionRow = { region: structuredClone(region), before: before ? structuredClone(before) : null, candidateId: added?.candidateId, iconCount: occurrences.length }
     const previous = regions[index]!
@@ -123,7 +128,7 @@ export async function analyzeIconRegions(options: AnalyzeIconRegionsOptions) {
         current()
         const result = await provider.recognize(blob, { language: 'eng', layout: regionTextLayout(region) })
         current()
-        row.region.originalText = checkedSourceIconText(result, region, assets)
+        row.region.originalText = region.sourceIcons?.length ? checkedSourceIconText(result, region, assets) : result.text.trim()
         row.region.lastOcrText = row.region.originalText
       }
     }

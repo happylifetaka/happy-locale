@@ -49,7 +49,7 @@ export function useDiscoveryAssetMatching({ store, runtime, currentCard, review,
     if (!card || !state?.occurrences.some(item => item.cardId === card.id))
       return null
     if (!file)
-      throw new Error('元画像を読み込んでからアセットを照合してください。')
+      throw new Error('元画像を読み込んでからアイコンを照合してください。')
     const snapshot = { id: card.id, imageWidth: card.imageWidth, imageHeight: card.imageHeight }
     const stateText = JSON.stringify(state)
     const generation = runtime.projectGeneration.value

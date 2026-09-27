@@ -92,11 +92,10 @@ describe('folder project format', () => {
     expect(restored.cards[0]!.regions).toEqual([])
   })
 
-  it('migrates version 2 without losing print settings, DPI or templates and leaves candidates absent', () => {
+  it('migrates version 2 without losing print settings, DPI and leaves candidates absent', () => {
     const value = document()
     value.cards[0]!.printArea = { x: 5, y: 5, width: 70, height: 100 }
     value.cards[0]!.sourceDpi = { x: 300, y: 300 }
-    value.layoutTemplates = []
     const restored = parseFolderProject(JSON.stringify({ ...value, version: 2 }))
     expect(restored).toEqual(value)
     expect(restored.cards[0]!.ocrCandidates).toBeUndefined()
@@ -296,10 +295,10 @@ describe('folder project format', () => {
     ]
 
     expect(() => parseFolderProject(JSON.stringify(value))).toThrow(
-      'アセット名「coin」が重複',
+      'アイコン名「coin」が重複',
     )
     expect(() => serializeFolderProject(value)).toThrow(
-      'アセット名「coin」が重複',
+      'アイコン名「coin」が重複',
     )
   })
 

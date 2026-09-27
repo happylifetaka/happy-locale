@@ -74,7 +74,7 @@ export function useTranslationReview({
 
   /** 翻訳確認に必要なカードの原画像を取得する。 */
   async function loadReviewImage(cardId: string) {
-    const card = translationReview.value?.cards.find(card => card.id === cardId)
+    const card = translationReviewCards.value.find(card => card.id === cardId)
     const directory = projectDirectory.value
     if (!card || !directory)
       throw new Error('カード画像が見つかりません。')

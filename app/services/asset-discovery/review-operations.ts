@@ -95,7 +95,7 @@ export function reviewOccurrence(state: AssetDiscoveryState, id: string, change:
       const { digest } = matchingImage(context, item)
       const assetDigest = context.assetDigests.get(item.assetId ?? '')
       if (!assetDigest)
-        throw new Error('登録先アセットの画像を読み込んでから承認してください。')
+        throw new Error('登録先アイコンの画像を読み込んでから承認してください。')
       revised = approveOccurrence(item, digest, assetDigest)
       break
     }
@@ -213,7 +213,7 @@ export function moveReviewOccurrencesWithAsset(state: AssetDiscoveryState, ids: 
   const target = destination.kind === 'existing' ? state.groups.find(group => group.id === destination.id) : undefined
   const assignment = target ? groupAssetState(state, target) : { assetId: null, needsSync: false }
   if (assignment.needsSync)
-    throw new Error('移動先グループのアセット割当が揃っていません。先にグループ全体へ関連付けてください。')
+    throw new Error('移動先グループのアイコン割当が揃っていません。先にグループ全体へ関連付けてください。')
   const next = moveReviewOccurrences(state, ids, destination, context)
   return linkReviewAsset(next, ids, assignment.assetId, undefined, context)
 }
@@ -225,7 +225,7 @@ export function linkReviewAssetChoices(state: AssetDiscoveryState, choices: read
   const existing = new Map(next.occurrences.map(item => [item.id, item]))
   if (!choices.length || assignments.size !== choices.length
     || choices.some(choice => !existing.has(choice.occurrenceId) || existing.get(choice.occurrenceId)!.decision === 'excluded' || !context.assetIds.has(choice.assetId))) {
-    throw new Error('関連付ける候補とアセットを一つずつ選び直してください。')
+    throw new Error('関連付ける候補とアイコンを一つずつ選び直してください。')
   }
   next.occurrences = next.occurrences.map((item) => {
     const assetId = assignments.get(item.id)

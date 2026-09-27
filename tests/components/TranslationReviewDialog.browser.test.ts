@@ -161,3 +161,49 @@ it('disables batch translation with no selection and translates only checked row
   expect(wrapper.findAll('textarea').map(input => input.element.value)).toEqual(['', '選択行の訳', '手修正済み'])
   wrapper.unmount()
 })
+
+it('keeps an embedded draft on return and limits translation and apply to the sidebar targets', async () => {
+  const translate = vi.fn().mockResolvedValue('候補')
+  const { wrapper, button, card } = setup(translate)
+  const second = { ...structuredClone(card), id: 'second', imageName: 'second.png' }
+  await wrapper.setProps({ embedded: true, cards: [card, second], targetIds: [card.id] })
+  expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+  expect(wrapper.findAll('.review-row')).toHaveLength(card.regions.length)
+  await wrapper.findAll('textarea')[0]!.setValue('保持する下書き')
+  await button('カード編集に戻る').trigger('click')
+  expect(wrapper.emitted('close')).toHaveLength(1)
+  expect(wrapper.findAll('textarea')[0]!.element.value).toBe('保持する下書き')
+  await wrapper.setProps({ targetIds: ['second'] })
+  expect(wrapper.findAll('textarea')[0]!.element.value).toBe('')
+  await wrapper.setProps({ targetIds: [card.id] })
+  expect(wrapper.findAll('textarea')[0]!.element.value).toBe('保持する下書き')
+  await button('選択した変更1件を反映').trigger('click')
+  expect((wrapper.emitted('apply')![0]![0] as { cardId: string }[]).map(row => row.cardId)).toEqual([card.id])
+  expect(wrapper.emitted('apply')![0]![1]).toBe(false)
+  // 反映要求だけ、または失敗時には移動せず、親から成功通知を受けて編集へ戻る。
+  expect(wrapper.emitted('close')).toHaveLength(1)
+  await wrapper.setProps({ error: '元の領域や訳文が変更されています。' })
+  expect(wrapper.emitted('close')).toHaveLength(1)
+  const applied = wrapper.emitted('apply')![0]![0] as { key: string, translation: string }[]
+  await wrapper.setProps({ error: '', appliedRows: applied.map(({ key, translation }) => ({ key, translation })) })
+  expect(wrapper.emitted('close')).toHaveLength(2)
+  expect(wrapper.findAll('textarea')[0]!.element.value).toBe('保持する下書き')
+  wrapper.unmount()
+})
+
+it('invalidates a candidate when its source changes and rejects the late translation of the old row', async () => {
+  let finish!: (text: string) => void
+  const { wrapper, button, card } = setup(vi.fn(() => new Promise<string>((resolve) => {
+    finish = resolve
+  })))
+  await wrapper.findAll('.review-row-check')[0]!.setValue(true)
+  await button('選択した行を翻訳').trigger('click')
+  const edited = structuredClone(card)
+  edited.regions[0]!.originalText = 'Changed source'
+  await wrapper.setProps({ cards: [edited] })
+  finish('古い候補')
+  await flushPromises()
+  expect(wrapper.findAll('textarea')[0]!.element.value).toBe('')
+  expect(wrapper.emitted('apply')).toBeUndefined()
+  wrapper.unmount()
+})

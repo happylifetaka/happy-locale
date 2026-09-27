@@ -38,7 +38,7 @@ export async function prepareDiscoveryAssetCatalog({ assets, assetFiles, pending
   if (!Number.isInteger(maximumAssets) || maximumAssets < 1 || maximumAssets > 1000 || assets.length > FILE_LIMITS.projectAssets
     || new Set(assets.map(asset => asset.id)).size !== assets.length
     || assets.some(asset => !asset.id.trim() || asset.id.length > ASSET_DISCOVERY_LIMITS.identifierLength)) {
-    throw new Error('照合アセットのID・件数上限が不正です。')
+    throw new Error('照合アイコンのID・件数上限が不正です。')
   }
   const entries = assets.map(asset => ({ id: asset.id, blob: pendingAssetWrites.get(asset.id) ?? assetFiles.get(asset.id) }))
     .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
@@ -57,7 +57,7 @@ export async function prepareDiscoveryAssetCatalog({ assets, assetFiles, pending
     let bitmap: ImageBitmap | undefined
     try {
       if (!entry.blob)
-        throw new Error('アセット画像が未読込または取得できません。')
+        throw new Error('アイコン画像が未読込または取得できません。')
       const assetDigest = await digestCache.digest(entry.blob)
       if (!current())
         return null
@@ -73,7 +73,7 @@ export async function prepareDiscoveryAssetCatalog({ assets, assetFiles, pending
     catch (error) {
       if (!current())
         return null
-      failures.push({ assetId: entry.id, message: error instanceof Error ? error.message : 'アセット画像を照合できませんでした。' })
+      failures.push({ assetId: entry.id, message: error instanceof Error ? error.message : 'アイコン画像を照合できませんでした。' })
     }
     finally {
       bitmap?.close()

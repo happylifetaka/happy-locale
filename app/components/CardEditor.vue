@@ -4,10 +4,6 @@ import type { DiscoveryWorkspaceOptions } from '~/features/cards/useDiscoveryWor
 import type {
   OCRProvider,
 } from '~/services/ocr/types'
-import type {
-  LayoutTemplate,
-  TextRegion,
-} from '~/types/editor'
 import type { EditorTabView, EditorView } from '~/types/editor-view'
 import { storeToRefs } from 'pinia'
 import { useBatchOCR } from '~/composables/useBatchOCR'
@@ -31,8 +27,8 @@ import AssetDiscoveryWorkspace from '~/features/cards/AssetDiscoveryWorkspace.vu
 import { provideCardEditing, provideCardOCR, provideCardResources, provideCardTranslation } from '~/features/cards/cardEditingContext'
 import CardEditingWorkspace from '~/features/cards/CardEditingWorkspace.vue'
 import IconRegionAnalysisDialog from '~/features/cards/IconRegionAnalysisDialog.vue'
-import RegionApplyDialog from '~/features/cards/RegionApplyDialog.vue'
-import RegionApplyResultsDialog from '~/features/cards/RegionApplyResultsDialog.vue'
+import RegionOCRWorkspace from '~/features/cards/RegionOCRWorkspace.vue'
+import { useBatchWorkspace } from '~/features/cards/useBatchWorkspace'
 import { useCandidateReview } from '~/features/cards/useCandidateReview'
 import { useCardWorkspace } from '~/features/cards/useCardWorkspace'
 import { useDiscoveryImageIdentity } from '~/features/cards/useDiscoveryImageIdentity'
@@ -50,7 +46,6 @@ import {
   supportsFolderProjects,
 } from '~/services/project/folder'
 import { useProjectStore } from '~/stores/project'
-import { fitsImage } from '~/utils/layout-template'
 import { savedProjectSignature } from '~/utils/project-save'
 import DiagnosticsDialog from './DiagnosticsDialog.vue'
 import EditorConfirmDialog from './EditorConfirmDialog.vue'
@@ -138,8 +133,6 @@ const pendingCardDeletionIds = shallowRef(new Set<string>())
 const assetEditing = ref(false)
 /** カード・アセット編集・アセット検出・印刷のうち現在表示する作業画面。 */
 const currentView = ref<EditorView>('card')
-/** 配置雛形ダイアログの保存・適用モード。nullなら閉じている。 */
-const layoutTemplateMode = ref<'capture' | 'apply' | null>(null)
 /** 単一・全体・一括OCRで共有する実行状態。 */
 const ocrRunning = ref(false)
 /** カード画面の表示状態・選択・領域操作は同一の窓口を使う。 */
@@ -374,6 +367,7 @@ const {
   projectStore,
   projectRuntime,
   currentImageId,
+  lastSavedProjectSignature,
   loadingCardId,
   activity,
   ocrRunning,
@@ -493,10 +487,12 @@ const imageAdoption = useEditorImageAdoption({
   loadImage,
   cacheCardThumbnail,
   updateCardPrintDpi,
+  saveProject,
+  addProjectCards,
   setMessage,
   logDiagnostic,
 })
-const { openCardImage, openAssetSourceImage } = imageAdoption
+const { openCardImages, openAssetSourceImage } = imageAdoption
 
 const candidateReview = useCandidateReview({
   currentImageId,
@@ -549,14 +545,14 @@ const discoveryOptions: DiscoveryWorkspaceOptions = {
   editor,
   currentImageId,
   ocrRunning,
-  busy: computed(() => projectBusy.value || translationRunning.value || assetCreationRunning.value || isDemo.value),
+  busy: computed(() => projectBusy.value || translationRunning.value || assetCreationRunning.value),
   pendingDeletionIds: pendingCardDeletionIds,
   provider: ocrProvider,
   createAsset: createSourceIconAsset,
   selectCard: selectProjectCard,
 }
 const quickRegionApply = useQuickRegionApply(discoveryOptions, setMessage)
-const { applyTargetIds, applyResultsOpen, iconAnalysisRegionId, discoveryFocus, batchAutoApply, openApplyTargets, openApplyResults, applyTargetCards, previewCard, resolveApplyIssue } = useRegionApplyFlow({
+const regionOCRFlow = useRegionApplyFlow({
   discovery: discoveryOptions,
   quickApply: quickRegionApply,
   discoveryWorking,
@@ -565,8 +561,24 @@ const { applyTargetIds, applyResultsOpen, iconAnalysisRegionId, discoveryFocus, 
   selectRegion: selectProjectRegion,
   setMessage,
 })
+const { iconAnalysisRegionId, discoveryFocus, returningToResults, batchAutoApply, openApplyTargets, openApplyResults, applyTargetCards } = regionOCRFlow
+const { batchTranslationBusy, batchTranslationTargets, batchTranslationFocus, translationReturn, openBatchTranslation, batchSelection, selectBatchTargets, browseBatchCard, editTranslationCard } = useBatchWorkspace({
+  currentView,
+  projectGeneration: projectRuntime.projectGeneration,
+  ocrRunning,
+  projectBusy,
+  isDemo,
+  translationReview,
+  translationReviewCards,
+  openTranslationReview,
+  regionOCRFlow,
+  quickRegionApply,
+  switchView,
+  selectProjectCard,
+  selectProjectRegion,
+})
 const reflectCandidateIcons = ref(true)
-const autoApplyEnabled = computed(() => !isDemo.value && batchAutoApply.value)
+const autoApplyEnabled = computed(() => batchAutoApply.value)
 const canReflectCandidateIcons = computed(() => !isDemo.value && Boolean(projectStore.assetDiscovery?.occurrences.some(item => item.cardId === currentImageId.value && item.assetId && item.decision !== 'excluded')))
 const combinedBatchStates = computed(() => autoApplyEnabled.value ? new Map([...batchOCRStates.value, ...quickRegionApply.states.value]) : batchOCRStates.value)
 async function startRegionBatch() {
@@ -580,7 +592,8 @@ async function confirmCandidatesWithIcons() {
     confirmRegionCandidates()
     return
   }
-  await applyTargetCards([currentImageId.value])
+  regionOCRFlow.operation.value = 'detect'
+  await applyTargetCards([currentImageId.value], true)
   if (!regionCandidates.value.length)
     switchInspectorTab('text')
 }
@@ -648,33 +661,9 @@ function projectSignature() {
     fonts: fonts.value,
     ocrDictionary: ocrDictionary.value,
     glossary: glossary.value,
-    layoutTemplates: documentValue?.layoutTemplates,
     assetDiscovery: projectStore.assetDiscovery,
     printSettings: documentValue?.printSettings ?? { ...DEFAULT_PRINT_SETTINGS },
   }, pendingCardDeletionIds.value, pendingAssetWrites.value.keys(), pendingFontCacheDeletionIds.value)
-}
-
-/** 作成した配置雛形を共有設定へ追加する。 */
-function saveLayoutTemplate(template: LayoutTemplate) {
-  const document = folderDocument.value
-  if (!document || projectBusy.value)
-    return
-  projectStore.replaceProject({
-    ...document,
-    layoutTemplates: [...(document.layoutTemplates ?? []), template],
-  })
-  layoutTemplateMode.value = null
-  setMessage('配置雛形を登録しました。プロジェクト保存で保存できます。')
-}
-
-/** 選んだ雛形の領域を現在のカードへ追加する。 */
-function applyLayoutTemplate(regions: TextRegion[]) {
-  if (projectBusy.value || regions.some(region => !fitsImage(region, editor.project.value.imageWidth, editor.project.value.imageHeight)))
-    return
-  editor.appendTemplateRegions(regions)
-  layoutTemplateMode.value = null
-  inspectorTab.value = 'list'
-  setMessage(`${regions.length}領域を追加しました。原文と訳文を設定してください。`)
 }
 
 /** 現在の保存対象データから計算した変更検出用文字列。 */
@@ -754,7 +743,7 @@ async function openProject(sample = false) {
 
 /** 同一プロジェクト内ではアセット検出の選択・比較案を保持して切り替える。 */
 function switchView(view: EditorTabView) {
-  if (discoveryWorking.value || (view === 'discovery' && (isDemo.value || !image.value)))
+  if (batchTranslationBusy.value || discoveryWorking.value || quickRegionApply.running.value || (view === 'discovery' && (isDemo.value || !image.value)))
     return
   if (view === 'discovery')
     discoveryVisited.value = true
@@ -814,7 +803,7 @@ provideCardTranslation({
       :current-view="currentView"
       :diagnostic-count="diagnostics.length"
       :discovery-available="!isDemo && Boolean(image)"
-      :discovery-working="discoveryWorking || quickRegionApply.running.value"
+      :discovery-working="discoveryWorking || quickRegionApply.running.value || batchTranslationBusy"
       @open-project="openProject"
       @save-project="saveProject"
       @import-csv="importCsv"
@@ -827,9 +816,18 @@ provideCardTranslation({
       @open-glossary="glossaryOpen = true"
       @open-diagnostics="diagnosticsOpen = true"
     />
-    <IconRegionAnalysisDialog v-if="iconAnalysisOpen" :options="discoveryOptions" :initial-region-id="iconAnalysisRegionId" @close="iconAnalysisOpen = false" @edit-regions="editAnalysisRegions" />
-    <RegionApplyDialog v-if="applyTargetIds" :cards="quickRegionApply.eligible.value" :initial-ids="applyTargetIds" :active-card-id="currentImageId" :discovery="discoveryOptions.store.assetDiscovery" :assets="discoveryOptions.store.assets" :thumbnails="cardThumbnails" @request-thumbnail="requestCardThumbnail" @close="applyTargetIds = null" @apply="applyTargetCards" @preview="previewCard" />
-    <RegionApplyResultsDialog v-if="applyResultsOpen" :issues="quickRegionApply.issues.value" :cards="quickRegionApply.eligible.value" :thumbnails="cardThumbnails" @request-thumbnail="requestCardThumbnail" @close="applyResultsOpen = false" @resolve="resolveApplyIssue" />
+    <IconRegionAnalysisDialog v-if="iconAnalysisOpen" :options="discoveryOptions" :initial-region-id="iconAnalysisRegionId" mode="reocr" @close="iconAnalysisOpen = false" @edit-regions="editAnalysisRegions" />
+    <div v-if="returningToResults && currentView !== 'ocr'" class="ocr-return-bar">
+      <button type="button" :disabled="ocrRunning || discoveryWorking" @click="openApplyResults">
+        OCR結果に戻る
+      </button>
+      <span>修正後は、対象カードを「まとめて再OCR」で読み直してください。</span>
+    </div>
+    <div v-if="translationReturn && currentView === 'card'" class="ocr-return-bar">
+      <button type="button" @click="switchView('translation')">
+        翻訳確認に戻る
+      </button>
+    </div>
     <GlossaryDialog
       :open="glossaryOpen"
       :entries="glossary"
@@ -855,23 +853,6 @@ provideCardTranslation({
         translationSettingsOpen = false
       "
     />
-    <TranslationReviewDialog
-      v-if="translationReview"
-      :cards="translationReview.cards"
-      :active-card-id="currentImageId"
-      :assets="assets"
-      :asset-images="assetImages"
-      :glossary="glossary"
-      :initial-import="translationReview.initialImport"
-      :auto-translate="translationReview.autoTranslate"
-      :load-image="loadReviewImage"
-      :translate="isDemo ? sampleTranslate : translationSettings.provider === 'browser' ? browserTranslate : undefined"
-      :browser-translation="!isDemo && translationSettings.provider === 'browser'"
-      :error="translationReviewError"
-      :applied-rows="translationReviewApplied"
-      @apply="applyTranslationReview"
-      @close="translationReview = null"
-    />
     <TranslationReuseDialog
       v-if="reuseRequest"
       :region="reuseRequest.region"
@@ -888,16 +869,6 @@ provideCardTranslation({
       :proposed-translation="translationPreview.proposedTranslation"
       @apply="applyTranslationPreview"
       @cancel="discardTranslationPreview"
-    />
-    <LayoutTemplateDialog
-      v-if="layoutTemplateMode && image"
-      :mode="layoutTemplateMode"
-      :project="editor.project.value"
-      :image-url="image.src"
-      :templates="folderDocument?.layoutTemplates ?? []"
-      @save="saveLayoutTemplate"
-      @apply="applyLayoutTemplate"
-      @close="layoutTemplateMode = null"
     />
     <TranslationRequestDialog
       v-if="translationRequest"
@@ -933,21 +904,50 @@ provideCardTranslation({
       この変更はプロジェクト保存時に確定します。
     </EditorConfirmDialog>
     <CardEditingWorkspace
-      :visible="currentView === 'card'"
+      :visible="['card', 'ocr', 'translation'].includes(currentView)"
+      :batch="currentView === 'ocr' || currentView === 'translation'"
       :has-card-list="projectCards.length > 0"
       :print-area="activeProjectCard?.printArea ?? null"
-      @image="openCardImage"
+      @image="openCardImages"
       @diagnostic="logDiagnostic"
       @update-print-area="updatePrintArea"
     >
+      <template #batch>
+        <TranslationReviewDialog
+          v-if="translationReview"
+          v-show="currentView === 'translation'"
+          :key="projectRuntime.projectGeneration.value"
+          embedded
+          :target-ids="batchTranslationTargets"
+          :focused-card-id="batchTranslationFocus"
+          :cards="translationReviewCards"
+          :active-card-id="currentImageId"
+          :assets="assets"
+          :asset-images="assetImages"
+          :glossary="glossary"
+          :initial-import="translationReview.initialImport"
+          :auto-translate="translationReview.autoTranslate"
+          :load-image="loadReviewImage"
+          :translate="isDemo ? sampleTranslate : translationSettings.provider === 'browser' ? browserTranslate : undefined"
+          :browser-translation="!isDemo && translationSettings.provider === 'browser'"
+          :error="translationReviewError"
+          :applied-rows="translationReviewApplied"
+          @apply="applyTranslationReview"
+          @working="batchTranslationBusy = $event"
+          @edit-card="editTranslationCard"
+          @close="switchView('card')"
+        />
+        <RegionOCRWorkspace v-show="currentView === 'ocr'" :key="projectRuntime.projectGeneration.value" :options="discoveryOptions" :flow="regionOCRFlow" :runner="quickRegionApply" :thumbnails="cardThumbnails" @translate="openBatchTranslation" @request-thumbnail="requestCardThumbnail" @close="switchView('card')" />
+      </template>
       <template #cards>
         <CardList
           v-if="projectCards.length > 0"
           :cards="projectCards"
+          :batch-selection="batchSelection"
           :active-card-id="activeCardId"
           :loading-card-id="loadingCardId"
           :adding-cards="addingCards"
-          :exporting-cards="exportingCards"
+          :exporting-cards="exportingCards || batchTranslationBusy"
           :can-add-cards="Boolean(folderDocument) && !isDemo"
           :add-cards-disabled-reason="isDemo ? 'デモではサンプルカードのみ編集できます。' : undefined"
           :thumbnails="cardThumbnails"
@@ -957,17 +957,18 @@ provideCardTranslation({
           :batch-ocr-total="autoApplyEnabled ? quickRegionApply.total.value : batchOCRTotal"
           :batch-ocr-eligible-count="autoApplyEnabled ? quickRegionApply.eligible.value.length : batchOCREligibleCards.length"
           :batch-ocr-states="combinedBatchStates"
-          :batch-auto-apply-available="!isDemo"
+          :batch-auto-apply-available="true"
+          :reocr-available="!isDemo"
           :batch-auto-apply="autoApplyEnabled"
           :batch-apply-issues="quickRegionApply.issues.value"
           :batch-translation-available="true"
           :batch-translation-count="translationReviewCards.filter(card => card.regions.length).length"
-          :translation-running="translationRunning"
+          :translation-running="translationRunning || batchTranslationBusy"
+          @select-batch-targets="selectBatchTargets"
           @update:batch-auto-apply="batchAutoApply = $event"
-          @apply-current-card="applyTargetCards([currentImageId])"
-          @open-apply-results="openApplyResults"
-          @start-batch-translation="openTranslationReview(undefined, false, isDemo)"
-          @select="selectProjectCard"
+          @start-batch-reocr="openApplyTargets(undefined, 'reocr')"
+          @start-batch-translation="openBatchTranslation"
+          @select="browseBatchCard"
           @add="addProjectCards"
           @add-folder="addProjectCardsFromFolder"
           @export-png="exportCardImage($event, 'png')"
@@ -987,8 +988,8 @@ provideCardTranslation({
       </template>
       <template #header>
         <p v-if="isDemo" class="muted">
-          デモ：左側の「まとめて領域検出」→「選択した候補を追加」→ 左側の「まとめて翻訳」→PDF(A4)作成で翻訳からPDF作成の流れを体験できます。<br>
-          デモでは領域・原文・翻訳・アセットはデモ用データを使います。実際はOCR認識、アセット登録、翻訳をする必要があります。<br>
+          「領域検出」で対象カードを選んで実行し、候補を選択して追加します。「翻訳」で訳文候補を確認・反映した後、「PDF(A4)作成」から書き出せます。<br>
+          デモでは用意済みの領域・原文・訳文候補と登録済みのアイコンを使います。実際のOCR認識や外部サービスへの翻訳依頼は行いません。
         </p>
         <div v-if="(isDemo || translationSettings.provider === 'browser') && editor.project.value.regions.length" class="batch-translation-actions">
           <button
@@ -1001,24 +1002,10 @@ provideCardTranslation({
           <small>このカードの原文がある未翻訳領域が対象です。</small>
         </div>
       </template>
-      <template #layout-tools>
-        <details class="layout-template-tools">
-          <summary>配置雛形</summary>
-          <p v-if="!folderDocument" class="muted">
-            プロジェクトを一度保存すると、配置雛形を登録できます。
-          </p>
-          <button type="button" :disabled="!folderDocument || !editor.project.value.regions.length || projectBusy" @click="layoutTemplateMode = 'capture'">
-            このカードの領域を雛形にする
-          </button>
-          <button type="button" :disabled="!folderDocument?.layoutTemplates?.length || projectBusy" @click="layoutTemplateMode = 'apply'">
-            配置雛形から領域を追加
-          </button>
-        </details>
-      </template>
       <template #candidates>
         <RegionCandidatePanel
           v-show="inspectorTab === 'ocr'"
-          :detection-disabled-reason="isDemo ? 'デモでは使用できません。左側の「まとめて領域検出」を使ってください。' : undefined"
+          :detection-disabled-reason="isDemo ? 'デモでは使用できません。左側の「領域検出」を使ってください。' : undefined"
           :has-image="Boolean(image)"
           :running="ocrRunning"
           :progress="ocrProgress"
@@ -1075,8 +1062,7 @@ provideCardTranslation({
       :active="currentView === 'discovery'"
       :focus-occurrence="discoveryFocus"
       @working="discoveryWorking = $event"
-      @analyze-regions="previewCard(currentImageId)"
-      @apply-regions="openApplyTargets"
+      @open-ocr="(ids, mode) => openApplyTargets(ids, mode)"
     />
     <AssetEditor
       v-show="currentView === 'assets'"

@@ -1,7 +1,6 @@
 import type { ImageAsset, SourceIcon } from '~/types/editor'
 import { describe, expect, it } from 'vitest'
 import { useCardEditor } from '~/composables/useCardEditor'
-import { createLayoutTemplate, placeLayoutTemplate } from '~/utils/layout-template'
 import { transformRegionContents } from '~/utils/regions'
 import { sourceIconProblems, textWithSourceIcons } from '~/utils/source-icons'
 import { splitTextRegion } from '~/utils/split-region'
@@ -35,11 +34,9 @@ describe('source image icons', () => {
     expect(sourceIconProblems({ ...region, width: 90 }, assets)).toHaveLength(2)
   })
 
-  it('preserves anchors through templates, moves and splits and blocks splitting through an icon', () => {
+  it('preserves anchors through moves and splits and blocks splitting through an icon', () => {
     const editor = editorFixture()
     const region = editor.selectedRegion.value!
-    const template = createLayoutTemplate('any layout', editor.project.value, [region.id])
-    expect(placeLayoutTemplate(template, 400, 400)[0]!.sourceIcons![0]).toMatchObject({ x: 160, y: 0, width: 40, height: 40 })
     expect(transformRegionContents(region, { ...region, x: 10, width: 150 }).sourceIcons![0]!.x).toBe(70)
     const texts = [{ originalText: '', translatedText: '' }, { originalText: '', translatedText: '' }] as const
     const [first, second] = splitTextRegion(region, 'horizontal', 30, texts)

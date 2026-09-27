@@ -1,6 +1,16 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import process from 'node:process'
 
+// 同梱PNGの文字画素に約4pxの余白を付け、本文の登録アイコン全体も含めた範囲。
+// 元画像を差し替えた場合は再計測する。順序はカード名・種別・補足・効果。
+const textBounds = {
+  '01': [[45, 69, 333, 35], [45, 122, 78, 23], [45, 152, 166, 21], [53, 617, 520, 126]],
+  '02': [[45, 69, 336, 35], [45, 122, 123, 23], [44, 152, 180, 20], [53, 628, 506, 120]],
+  '03': [[45, 470, 333, 35], [45, 523, 64, 23], [44, 554, 121, 18], [54, 626, 471, 117]],
+  '04': [[45, 69, 333, 35], [45, 122, 64, 24], [45, 153, 74, 18], [53, 628, 382, 165]],
+  '05': [[45, 69, 409, 40], [44, 122, 79, 23], [45, 153, 85, 18], [53, 627, 489, 121]],
+}
+
 /** 配布用のサンプルプロジェクトと領域候補を生成する。 */
 async function main() {
   const root = new URL('../../public/sample-project/', import.meta.url)
@@ -14,7 +24,8 @@ async function main() {
     const id = `sample-${sample.id}`
     await copyFile(new URL(`png/${sample.filename}`, import.meta.url), new URL(`images/${sample.filename}`, root))
     cards.push({ id, imageName: sample.filename, imagePath: `images/${sample.filename}`, imageWidth: 744, imageHeight: 1039, regions: [], printArea: { x: 0, y: 0, width: 744, height: 1039 }, sourceDpi: { x: 300, y: 300 } })
-    const titleY = sample.id === '03' ? 500 : 99
+    const bounds = textBounds[sample.id].map(([x, y, width, height]) => ({ x, y, width, height }))
+    const effectBounds = bounds[3]
     const base = { translationStatus: 'untranslated', translatedText: '', textStyles: [], inlineAssetStyles: [], backgroundMode: 'auto', autoMaskPreset: 'dark', autoMaskSensitivity: 60, removeColorOutliers: true, backgroundColor: '#fffdf4', manualMaskStrokes: [], exclusionAreas: [], textColor: '#193640', textStrokeColor: '#ffffff', textStrokeWidth: 0, fontSize: 26, autoFitFontSize: true, fontId: null, textAlign: 'left', verticalAlign: 'top' }
     const region = (index, name, text, bounds, extra = {}) => ({ ...base, id: `${id}-${index}`, regionId: `${id}-${index}`, displayName: name, originalText: text, ...bounds, ...extra, ocrLayout: index < 3 ? 'single-line' : 'text-block' })
     const icons = []
@@ -24,7 +35,7 @@ async function main() {
       for (const part of line.split(/(\{sun\}|\{drop\})/)) {
         if (part.startsWith('{')) {
           const name = part.slice(1, -1)
-          icons.push({ id: `${id}-icon-${icons.length}`, assetId: `sample-${name}`, x: cursor - 48, y: 645 + index * 45 - 26 - 619, width: 32, height: 36 })
+          icons.push({ id: `${id}-icon-${icons.length}`, assetId: `sample-${name}`, x: cursor - effectBounds.x, y: 645 + index * 45 - 26 - effectBounds.y, width: 32, height: 36 })
           cursor += 34
         }
         else {
@@ -33,10 +44,10 @@ async function main() {
       }
     })
     hints[id] = [
-      region(0, 'カード名', sample.name, { x: 48, y: titleY - 34, width: 648, height: 40 }),
-      region(1, '種別', sample.type, { x: 48, y: titleY + 22, width: 648, height: 26 }),
-      region(2, '補足', sample.detail, { x: 48, y: titleY + 52, width: 648, height: 20 }, { fontSize: 12 }),
-      region(3, '効果', sample.lines.join('\n').replace(/\{(sun|drop)\}/g, '[icon:$1]'), { x: 48, y: 619, width: 628, height: 256 }, { autoMaskPreset: sample.id === '05' ? 'light' : 'dark', autoMaskSensitivity: 85, backgroundColor: sample.id === '05' ? '#244b51' : '#fffdf4', textColor: sample.id === '05' ? '#ffffff' : '#193640', sourceIcons: icons, exclusionAreas: Number(sample.id) % 2 === 0 ? [{ id: `${id}-badge`, x: 564, y: 237, width: 64, height: 19 }] : [] }),
+      region(0, 'カード名', sample.name, bounds[0]),
+      region(1, '種別', sample.type, bounds[1]),
+      region(2, '補足', sample.detail, bounds[2], { fontSize: 12 }),
+      region(3, '効果', sample.lines.join('\n').replace(/\{(sun|drop)\}/g, '[icon:$1]'), effectBounds, { autoMaskPreset: sample.id === '05' ? 'light' : 'dark', autoMaskSensitivity: 85, backgroundColor: sample.id === '05' ? '#244b51' : '#fffdf4', textColor: sample.id === '05' ? '#ffffff' : '#193640', sourceIcons: icons, exclusionAreas: [] }),
     ]
   }
   for (const asset of assets) {

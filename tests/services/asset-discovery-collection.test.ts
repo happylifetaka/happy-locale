@@ -73,7 +73,7 @@ it.each([false, true])('stores first collection as pending and roundtrips withou
   expect(s.store.assetDiscovery!.occurrences).toHaveLength(draft ? 1 : 3)
   expect(s.store.assetDiscovery!.occurrences.every(item => item.decision === 'pending' && item.approval === null && item.assetId === null)).toBe(true)
   expect(s.store.assetDiscovery!.groups).toHaveLength(1)
-  expect(s.store.assetDiscovery!.groups[0]).toMatchObject({ name: '', proposedAssetId: null, memberIds: result.staged.flatMap(item => item.addedIds).sort() })
+  expect(s.store.assetDiscovery!.groups[0]).toMatchObject({ name: '', proposedAssetId: null, memberIds: result.staged.flatMap(item => item.addedIds), representativeId: result.staged[0]!.addedIds[0] })
   expect(s.store.readCardCandidateEdit(draft ? null : 'one')).toEqual(cardBefore)
   expect(JSON.stringify(s.store.assets)).toBe(assetsBefore)
   if (!draft) {
@@ -82,6 +82,30 @@ it.each([false, true])('stores first collection as pending and roundtrips withou
     expect(savedProjectSignature(saved)).not.toBe(savedProjectSignature(s.project))
   }
   expect(s.batch.provider.dispose).not.toHaveBeenCalled()
+})
+
+it('initializes every group representative from the first collected member rather than ID order', () => {
+  const s = setup()
+  const input = proposal(s.batch.cards[0]!)
+  const original = input.occurrences[0]!
+  input.occurrences = ['z-first-red', 'z-first-blue', 'a-later-blue', 'a-later-red'].map(id => ({ ...original, id }))
+  const staged = stageInitialCardIcons(undefined, input, s.reviewContext())
+  if (staged.kind !== 'initial')
+    throw new Error('Expected initial collection')
+  const grouped = groupInitialCollectedIcons(staged.state, {
+    groups: [
+      { memberIds: ['a-later-red', 'z-first-red'], representativeId: 'a-later-red', minimumSimilarity: null },
+      { memberIds: ['a-later-blue', 'z-first-blue'], representativeId: 'a-later-blue', minimumSimilarity: null },
+    ],
+    comparisons: 2,
+    truncated: false,
+  }, [staged.receipt], s.context())
+  expect(grouped.groups.map(({ memberIds, representativeId }) => ({ memberIds, representativeId }))).toEqual([
+    { memberIds: ['z-first-red', 'a-later-red'], representativeId: 'z-first-red' },
+    { memberIds: ['z-first-blue', 'a-later-blue'], representativeId: 'z-first-blue' },
+  ])
+  expect(grouped.occurrences).toEqual(staged.state.occurrences)
+  expect(staged.state.groups).toEqual([])
 })
 
 it('stages all first-pass candidates even if their initial bounds need manual disambiguation', () => {
@@ -127,6 +151,27 @@ it('leaves a repeated unchanged detection as a comparison without duplicate cand
   expect(s.store.snapshot()).toEqual(before)
   expect(write).not.toHaveBeenCalled()
   expect(compareIconProposal(s.store.assetDiscovery!, result.proposals[0]!, s.reviewContext()).differences).toMatchObject([{ status: 'unchanged' }])
+})
+
+it('preserves a manually changed representative when collecting additional cards and collecting again', async () => {
+  const s = setup()
+  s.batch.cards = s.project.cards.slice(0, 2)
+  await collectStoredIconDiscoveryBatch(s.options)
+  const edited = structuredClone(s.store.assetDiscovery!)
+  edited.groups[0]!.representativeId = 'detected-two'
+  edited.groups[0]!.name = 'Manually selected representative'
+  s.store.setAssetDiscovery(edited)
+  s.batch.cards = s.project.cards
+  const additional = await collectStoredIconDiscoveryBatch(s.options)
+  expect(additional.staged.map(item => item.status)).toEqual(['review', 'review', 'stored'])
+  expect(additional.groupingError).toBeNull()
+  expect(s.store.assetDiscovery!.groups).toHaveLength(2)
+  expect(s.store.assetDiscovery!.groups[0]).toEqual(edited.groups[0])
+  expect(s.store.assetDiscovery!.groups[1]).toMatchObject({ memberIds: ['detected-three'], representativeId: 'detected-three' })
+  const beforeRepeat = s.store.snapshot()
+  const repeated = await collectStoredIconDiscoveryBatch(s.options)
+  expect(repeated.staged.map(item => item.status)).toEqual(['review', 'review', 'review'])
+  expect(s.store.snapshot()).toEqual(beforeRepeat)
 })
 
 it('retains completed cards after a per-card load or persistence failure and continues independent cards', async () => {
@@ -204,7 +249,7 @@ it('keeps manual grouping done while the next card is being extracted', async ()
   })
   await collectStoredIconDiscoveryBatch(s.options)
   expect(s.store.assetDiscovery!.groups[0]).toMatchObject({ id: 'manual-group', memberIds: ['detected-one'], name: 'Keep this group' })
-  expect(s.store.assetDiscovery!.groups[1]!.memberIds).toEqual(['detected-three', 'detected-two'])
+  expect(s.store.assetDiscovery!.groups[1]).toMatchObject({ memberIds: ['detected-two', 'detected-three'], representativeId: 'detected-two' })
 })
 
 it('uses original card snapshots when deciding whether completed candidates may still be grouped', async () => {

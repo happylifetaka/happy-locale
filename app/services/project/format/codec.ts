@@ -1,7 +1,7 @@
 import type { CardProject, FolderProjectCard, FolderProjectDocument, FontReference, GlossaryEntry, ImageAsset, OCRDictionaryEntry } from '~/types/editor'
 import { parseAssetDiscovery } from '~/services/asset-discovery/format'
 import { FILE_LIMITS } from '~/utils/file-limits'
-import { normalizeAsset, normalizeCard, normalizeFont, normalizeGlossaryEntry, normalizeLayoutTemplates, normalizeOCRDictionaryEntry, normalizePrintSettings } from './entities'
+import { normalizeAsset, normalizeCard, normalizeFont, normalizeGlossaryEntry, normalizeOCRDictionaryEntry, normalizePrintSettings } from './entities'
 import { assertProjectComplexity, assertProjectIntegrity } from './integrity'
 import { CURRENT_PROJECT_VERSION, migrateProjectDocument } from './migrations'
 import { isRecord, string } from './values'
@@ -46,7 +46,6 @@ export function parseFolderProject(text: string): FolderProjectDocument {
     version: CURRENT_PROJECT_VERSION,
     name: string(value.name, 'HappyLocale Project'),
     ...(value.demoPreset === 'sample-v1' ? { demoPreset: 'sample-v1' as const } : {}),
-    ...(value.layoutTemplates !== undefined ? { layoutTemplates: normalizeLayoutTemplates(value.layoutTemplates) } : {}),
     activeCardId,
     cards,
     assets,
@@ -78,8 +77,6 @@ export function serializeFolderProject(project: FolderProjectDocument): string {
     throw new Error('対応していないプロジェクト形式です。')
   assertProjectComplexity(project)
   assertProjectIntegrity(project)
-  if (project.layoutTemplates !== undefined)
-    normalizeLayoutTemplates(project.layoutTemplates)
   if (project.assetDiscovery !== undefined)
     parseAssetDiscovery(project.assetDiscovery, { cards: project.cards, assetIds: new Set(project.assets.map(asset => asset.id)) })
   const text = `${JSON.stringify(project, null, 2)}\n`

@@ -9,12 +9,14 @@ import { readonly, ref, shallowRef } from 'vue'
 import { moveProjectCard, renameProjectCard } from '~/services/project/cards'
 import { addFolderProjectCards, listImageFiles, pickImageDirectory } from '~/services/project/folder'
 import { createCardThumbnailBlob } from '~/utils/card-thumbnail'
+import { savedProjectSignature } from '~/utils/project-save'
 
 interface ProjectCardsOptions {
   editor: Pick<ReturnType<typeof useCardEditor>, 'renameImage'>
   projectStore: Pick<ReturnType<typeof useProjectStore>, 'document' | 'replaceProject' | 'acceptSavedProject'>
   projectRuntime: Pick<ReturnType<typeof useProjectRuntime>, 'directory' | 'pendingAssetWrites' | 'acknowledgeAssetWrites'>
   currentImageId: Ref<string>
+  lastSavedProjectSignature: Ref<string | null>
   loadingCardId: Readonly<Ref<string | null>>
   activity: ProjectActivity
   ocrRunning: Ref<boolean>
@@ -35,6 +37,7 @@ export function useProjectCards({
   projectStore,
   projectRuntime,
   currentImageId,
+  lastSavedProjectSignature,
   loadingCardId,
   activity,
   ocrRunning,
@@ -256,6 +259,7 @@ export function useProjectCards({
         ],
       })
       projectStore.acceptSavedProject(updatedDocument, new Set())
+      lastSavedProjectSignature.value = savedProjectSignature(updatedDocument)
       projectRuntime.acknowledgeAssetWrites(assetWrites)
       thumbnails.forEach((thumbnail, id) => {
         setCardThumbnail(id, thumbnail)

@@ -18,6 +18,8 @@ interface EditorImageAdoptionOptions {
   loadingCardId: Readonly<Ref<string | null>>
   isActive: () => boolean
   clearRegionCandidates: () => void
+  saveProject: () => Promise<void>
+  addProjectCards: (files: File[]) => Promise<void>
   loadImage: (file: File) => Promise<RuntimeLoadedImage | null>
   cacheCardThumbnail: (cardId: string, image: HTMLImageElement, isCurrent?: () => boolean) => Promise<Blob | null>
   updateCardPrintDpi: (cardId: string, dpi: FolderProjectCard['sourceDpi']) => void
@@ -40,6 +42,8 @@ export function useEditorImageAdoption({
   isActive,
   clearRegionCandidates,
   loadImage,
+  saveProject,
+  addProjectCards,
   cacheCardThumbnail,
   updateCardPrintDpi,
   setMessage,
@@ -84,7 +88,7 @@ export function useEditorImageAdoption({
   function applyAssetSourceImage(loaded: RuntimeLoadedImage) {
     projectRuntime.replaceAssetSourceImage(loaded)
     assetSourceImageId.value = crypto.randomUUID()
-    logDiagnostic('アセット切り出し元画像を反映しました', {
+    logDiagnostic('アイコン切り出し元画像を反映しました', {
       width: loaded.element.naturalWidth,
       height: loaded.element.naturalHeight,
     })
@@ -147,6 +151,7 @@ export function useEditorImageAdoption({
       if (thumbnail)
         projectRuntime.setPendingCardThumbnail(cardId, thumbnail)
       setMessage(`${file.name} を読み込みました。`)
+      return true
     }
     catch (error) {
       if (!adopted) {
@@ -158,18 +163,39 @@ export function useEditorImageAdoption({
       if (adopted) {
         logDiagnostic('カードサムネイルを作成できませんでした', error, 'error')
         setMessage(`${file.name} を読み込みました（サムネイルの作成に失敗しました）。`)
-        return
+        return true
       }
       logDiagnostic('編集プロジェクトの初期化に失敗しました', error, 'error')
       setMessage('画像の編集画面を初期化できませんでした。')
     }
   }
 
+  /** 複数の初期画像は最初のカードを保存してから既存の一括追加経路へ渡す。 */
+  async function openCardImages(files: File[]) {
+    const first = files[0]
+    if (!first)
+      return
+    const directory = projectRuntime.directory.value
+    const cardId = currentImageId.value
+    const request = cardRequest + 1
+    if (!await openCardImage(first) || files.length === 1)
+      return
+    const isCurrent = () => isActive() && cardRequest === request
+      && projectRuntime.directory.value === directory && currentImageId.value === cardId
+    if (!isCurrent())
+      return
+    await saveProject()
+    // 保存失敗・別の画像やプロジェクトへの切替後は残りを追加しない。
+    if (!isCurrent() || !projectStore.document?.cards.some(card => card.id === cardId))
+      return
+    await addProjectCards(files.slice(1))
+  }
+
   async function openAssetSourceImage(file: File) {
     if (!isActive())
       return
     const request = ++assetRequest
-    logDiagnostic('アセット切り出し元の画像選択を開始しました')
+    logDiagnostic('アイコン切り出し元の画像選択を開始しました')
     const loaded = await loadImage(file)
     if (!loaded)
       return
@@ -182,8 +208,8 @@ export function useEditorImageAdoption({
     assetEditing.value = false
     assetCreationDraft.value = null
     assetRecropId.value = null
-    setMessage(`${file.name} をアセット切り出し元として読み込みました。`)
+    setMessage(`${file.name} をアイコン切り出し元として読み込みました。`)
   }
 
-  return { applyLoadedImage, clearLoadedCardImage, detectAndApplyCardDpi, clearAssetSourceImage, openCardImage, openAssetSourceImage }
+  return { applyLoadedImage, clearLoadedCardImage, detectAndApplyCardDpi, clearAssetSourceImage, openCardImage, openCardImages, openAssetSourceImage }
 }

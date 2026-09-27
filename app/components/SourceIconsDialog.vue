@@ -91,7 +91,7 @@ async function register() {
   }
   catch (cause) {
     if (isCurrent())
-      error.value = cause instanceof Error ? cause.message : 'アセットを登録できませんでした。'
+      error.value = cause instanceof Error ? cause.message : 'アイコンを登録できませんでした。'
   }
   finally { running.value = false }
 }
@@ -163,11 +163,11 @@ function cancel() {
     <p>指定部分をOCRから除き、単語の位置を使って原文候補へアイコン記法を差し込みます。背景補修から画像を守る「保護領域」とは別の設定です。</p>
     <p>自動補修・手動マスクでは、囲った範囲の元アイコンを消して背景を補修します。保護領域と重なる部分は残ります。</p>
     <p v-if="!assets.length">
-      画像を囲むと、この画面で新しいアセットを登録できます。
+      画像を囲むと、この画面で新しいアイコンを登録できます。
     </p>
     <label>
-      囲むアイコンに割り当てるアセット
-      <select v-model="assetId" aria-label="囲むアイコンに割り当てるアセット">
+      割り当てる登録済みアイコン
+      <select v-model="assetId" aria-label="割り当てる登録済みアイコン">
         <option value="">範囲指定後に選ぶ</option>
         <option v-for="asset in assets" :key="asset.id" :value="asset.id">{{ asset.name }}</option>
       </select>
@@ -181,10 +181,10 @@ function cancel() {
         <button type="button" :aria-pressed="selectedId === icon.id" @click="selectIcon(icon.id)">
           候補{{ index + 1 }}を確認
         </button>
-        <label>アイコン{{ index + 1 }}のアセット
+        <label>アイコン{{ index + 1 }}の登録先
           <select v-model="icon.assetId" :disabled="Boolean(creation)">
             <option value="">未選択（OCRから除外しない）</option>
-            <option v-if="icon.assetId && !assets.some(asset => asset.id === icon.assetId)" :value="icon.assetId">未登録のアセット</option>
+            <option v-if="icon.assetId && !assets.some(asset => asset.id === icon.assetId)" :value="icon.assetId">未登録のアイコン</option>
             <option v-for="asset in assets" :key="asset.id" :value="asset.id">{{ asset.name }}</option>
           </select>
         </label>
@@ -194,7 +194,7 @@ function cancel() {
       </li>
     </ol>
     <section v-if="selected" aria-label="選択したアイコン候補">
-      <h3>切り抜きとアセット候補</h3>
+      <h3>切り抜きとアイコン候補</h3>
       <fieldset :disabled="Boolean(creation)">
         <legend>範囲の調整（領域内の座標）</legend>
         <label v-for="field in (['x', 'y', 'width', 'height'] as const)" :key="field">{{ { x: '左位置', y: '上位置', width: '幅', height: '高さ' }[field] }}
@@ -227,7 +227,7 @@ function cancel() {
     <p v-for="problem in problems" :key="problem" role="alert">
       {{ problem }}
     </p>
-    <p>範囲は数値で調整するか、指定を削除して囲み直せます。未選択の範囲はOCRから除外しません。登録済みアセットはキャンセルや原文のUndoでも残ります。</p>
+    <p>範囲は数値で調整するか、指定を削除して囲み直せます。未選択の範囲はOCRから除外しません。登録済みアイコンはキャンセルや原文のUndoでも残ります。</p>
     <div class="confirmation-actions">
       <button type="button" autofocus @click="emit('close')">
         キャンセル

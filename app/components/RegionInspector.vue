@@ -619,7 +619,7 @@ function resetSelectedInlineAssetStyle() {
           </select>
         </label>
         <p v-if="region.backgroundMode === 'none'" class="muted">
-          元画像を変更せず、日本語訳とインラインアセットだけを描画します。
+          元画像を変更せず、日本語訳とインラインアイコンだけを描画します。
         </p>
         <label v-if="region.backgroundMode === 'auto'">
           検出プリセット
@@ -796,7 +796,7 @@ function resetSelectedInlineAssetStyle() {
           />
         </div>
         <p v-if="unresolvedOriginalAssets.length" class="field-error" role="status">
-          原文の未登録アセット: {{ unresolvedOriginalAssets.join('、') }}
+          原文の未登録アイコン: {{ unresolvedOriginalAssets.join('、') }}
         </p>
         <div class="translation-actions">
           <button
@@ -835,7 +835,7 @@ function resetSelectedInlineAssetStyle() {
             class="field-error"
             role="status"
           >
-            未登録のアセット: {{ unresolvedAssetNames.join('、') }}。トークンは文字列のまま表示されます。
+            未登録のアイコン: {{ unresolvedAssetNames.join('、') }}。トークンは文字列のまま表示されます。
           </small>
           <ul v-if="consistencyWarnings.length" class="consistency-warnings" role="status">
             <li v-for="warning in consistencyWarnings" :key="warning">
@@ -917,7 +917,7 @@ function resetSelectedInlineAssetStyle() {
                 :disabled="!selectedInlineAssetStyle"
                 @click="resetSelectedInlineAssetStyle"
               >
-                アセットの既定値に戻す
+                アイコンの既定値に戻す
               </button>
             </fieldset>
             <p v-else class="muted">

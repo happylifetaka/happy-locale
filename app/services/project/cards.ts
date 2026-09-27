@@ -51,7 +51,7 @@ export function removeCardFontReferences(
   }
 }
 
-/** 全カードと配置雛形にある、指定フォントを使う領域数を合計する。 */
+/** 全カードにある、指定フォントを使う領域数を合計する。 */
 export function countProjectFontUsage(
   document: FolderProjectDocument,
   fontId: string,
@@ -59,13 +59,10 @@ export function countProjectFontUsage(
   return document.cards.reduce(
     (count, card) => count + countCardFontUsage(card, fontId),
     0,
-  ) + (document.layoutTemplates ?? []).reduce(
-    (count, template) => count + countCardFontUsage({ ...template, imageName: template.name }, fontId),
-    0,
   )
 }
 
-/** 共有フォント定義と、カード・配置雛形の領域全体および部分書式から指定フォントの参照を除く。 */
+/** 共有フォント定義と、カードの領域全体および部分書式から指定フォントの参照を除く。 */
 export function removeProjectFont(
   document: FolderProjectDocument,
   fontId: string,
@@ -73,14 +70,6 @@ export function removeProjectFont(
   return {
     ...document,
     fonts: document.fonts.filter(font => font.id !== fontId),
-    ...(document.layoutTemplates
-      ? {
-          layoutTemplates: document.layoutTemplates.map(template => ({
-            ...template,
-            regions: template.regions.map(region => removeRegionFontReference(region, fontId)),
-          })),
-        }
-      : {}),
     cards: document.cards.map(card => ({
       ...card,
       ...removeCardFontReferences(card, fontId),

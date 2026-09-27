@@ -1,39 +1,9 @@
-import type { FolderProjectCard, FontReference, GlossaryEntry, ImageAsset, LayoutTemplate, OCRDictionaryEntry, PrintLayoutSettings, TextRegion } from '~/types/editor'
+import type { FolderProjectCard, FontReference, GlossaryEntry, ImageAsset, OCRDictionaryEntry, PrintLayoutSettings, TextRegion } from '~/types/editor'
 import { parseRegionCandidates } from '~/services/ocr/candidate-format'
 import { DEFAULT_PRINT_SETTINGS } from '~/services/print-layout'
-import { clearTemplateText } from '~/utils/layout-template'
 import { isSafeAssetImagePath, isSafeCardImagePath } from './paths'
 import { normalizeRegion } from './regions'
 import { boolean, isRecord, number, string } from './values'
-
-/** 配置雛形とその領域データを正規化する。 */
-export function normalizeLayoutTemplates(value: unknown): LayoutTemplate[] {
-  if (!Array.isArray(value))
-    throw new Error('配置雛形の形式が不正です。')
-  const ids = new Set<string>()
-  return value.map((item) => {
-    if (!isRecord(item) || typeof item.id !== 'string' || !item.id
-      || ids.has(item.id) || typeof item.name !== 'string' || !item.name.trim()
-      || typeof item.imageWidth !== 'number' || !Number.isFinite(item.imageWidth) || item.imageWidth <= 0
-      || typeof item.imageHeight !== 'number' || !Number.isFinite(item.imageHeight) || item.imageHeight <= 0
-      || !Array.isArray(item.regions) || item.regions.length === 0) {
-      throw new Error('配置雛形の名前・画像寸法・領域を確認してください。')
-    }
-    ids.add(item.id)
-    const regions = item.regions.map(normalizeRegion)
-    if (regions.some(region => !region)
-      || new Set(regions.map(region => region?.id)).size !== regions.length) {
-      throw new Error('配置雛形の領域IDが不正です。')
-    }
-    return {
-      id: item.id,
-      name: item.name.trim(),
-      imageWidth: item.imageWidth,
-      imageHeight: item.imageHeight,
-      regions: (regions as TextRegion[]).map(clearTemplateText),
-    }
-  })
-}
 
 /** アセットの保存用定義を検証し、配置設定の初期値を補う。 */
 export function normalizeAsset(value: unknown): ImageAsset | null {

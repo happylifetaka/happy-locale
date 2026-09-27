@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { DiscoveryWorkspaceOptions } from './useDiscoveryWorkspace'
-import type { IconRegionRow } from '~/services/asset-discovery/analyze-regions'
+import type { IconRegionRow, RegionOCRMode } from '~/services/asset-discovery/analyze-regions'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useIconRegionAnalysis } from './useIconRegionAnalysis'
 
-const props = defineProps<{ options: DiscoveryWorkspaceOptions, initialRegionId?: string }>()
+const props = defineProps<{ options: DiscoveryWorkspaceOptions, initialRegionId?: string, mode?: RegionOCRMode }>()
 const emit = defineEmits<{ close: [], editRegions: [] }>()
-const model = useIconRegionAnalysis(props.options)
+const model = useIconRegionAnalysis(props.options, props.mode)
 const dialog = ref<HTMLDialogElement | null>(null)
 const checked = ref<string[]>([])
 const focused = ref('')
@@ -36,22 +36,24 @@ onMounted(() => dialog.value?.showModal())
 </script>
 
 <template>
-  <dialog ref="dialog" class="icon-analysis" aria-label="領域検出・アイコン反映" @cancel.prevent="close">
+  <dialog ref="dialog" class="icon-analysis" :aria-label="mode === 'reocr' ? 'OCR結果の比較' : '領域検出・アイコン反映'" @cancel.prevent="close">
     <header>
-      <h2>領域検出・アイコン反映</h2><button type="button" @click="close">
+      <h2>{{ mode === 'reocr' ? 'OCR結果の比較' : '領域検出・アイコン反映' }}</h2><button type="button" @click="close">
         閉じる
       </button>
     </header>
     <p>原文を再OCRします。手修正も置き換わるため、変更前後を比較して反映してください。訳文は保持します。</p>
     <details>
       <summary>反映の仕組み</summary>
-      <p>領域も候補もないカードだけ新規検出します。OCR用コピーのアイコンを塗りつぶし、[icon:アセット名] に置き換えます。元画像は変更しません。</p>
+      <p v-if="mode !== 'reocr'">
+        領域も候補もないカードだけ新規検出します。OCR用コピーのアイコンを塗りつぶし、[icon:アイコン名] に置き換えます。元画像は変更しません。
+      </p>
       <p>小さなはみ出しは他領域と重ならない範囲で拡張します。元の枠＝灰色の破線、反映後＝青、アイコン＝オレンジ。反映はUndoで戻せます。</p>
       <p>カード切替・閉じる・反映後に未反映案を破棄します。</p>
     </details>
     <label>対象カード<select :value="options.currentImageId.value" :disabled="busy" @change="options.selectCard(($event.target as HTMLSelectElement).value)"><option v-for="card in cards" :key="card.id" :value="card.id">{{ card.imageName }}</option></select></label>
     <button type="button" :disabled="busy" @click="model.analyze">
-      領域とアイコンを解析
+      {{ mode === 'reocr' ? '変更後の原文を読み取る' : '領域とアイコンを解析' }}
     </button>
     <button v-if="model.running.value" type="button" :disabled="model.cancelled.value" @click="model.cancel">
       解析を中止

@@ -3,13 +3,14 @@ import type { useDiscoveryImageIdentity } from './useDiscoveryImageIdentity'
 import type { useCardEditor } from '~/composables/useCardEditor'
 import type { useEditorAssets } from '~/composables/useEditorAssets'
 import type { useProjectRuntime } from '~/composables/useProjectRuntime'
-import type { CardIconProposal } from '~/services/asset-discovery/collect'
+import type { CardIconProposal, IconCollectionScope } from '~/services/asset-discovery/collect'
 import type { IconProposalChoice, IconProposalReview } from '~/services/asset-discovery/proposal-review'
 import type { OCRProvider } from '~/services/ocr/types'
 import type { useProjectStore } from '~/stores/project'
 import type { AssetCreationDraft, RegionDraft } from '~/types/editor'
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { createImageDigestCache } from '~/services/asset-discovery/digest'
+import { activeReviewGroups } from '~/services/asset-discovery/review-groups'
 import { useDiscoveryAssetRegistration } from './useDiscoveryAssetRegistration'
 import { useDiscoveryCollection } from './useDiscoveryCollection'
 import { useDiscoveryReview } from './useDiscoveryReview'
@@ -48,6 +49,7 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
   const activeCard = computed(() => cards.value.find(card => card.id === currentImageId.value))
   const occurrences = computed(() => store.assetDiscovery?.occurrences ?? [])
   const groups = computed(() => store.assetDiscovery?.groups ?? [])
+  const reviewGroups = computed(() => activeReviewGroups({ occurrences: occurrences.value, groups: groups.value }))
   const selected = computed(() => occurrences.value.find(item => item.id === selectedId.value))
   const externalBusy = () => options.busy.value || (ocrRunning.value && !ownsOCR.value)
   const collection = useDiscoveryCollection({
@@ -133,7 +135,7 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
       selectedId.value = id
     })
   }
-  async function collect(ids: readonly string[]) {
+  async function collect(ids: readonly string[], scope: IconCollectionScope = 'auto') {
     if (working.value)
       return
     await run(async () => {
@@ -143,7 +145,7 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
       ownsOCR.value = true
       ocrRunning.value = true
       try {
-        const result = await collection.start(ids)
+        const result = await collection.start(ids, scope)
         if (!result)
           return
         pending.value = new Map(result.proposals.filter(proposal => result.staged.some(item => item.cardId === proposal.cardId && item.status === 'review')).map(proposal => [proposal.cardId, proposal]))
@@ -190,11 +192,11 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
       return
     const generation = runtime.projectGeneration.value
     await run(async () => {
-      const group = groups.value.find(group => group.id === groupId)
+      const group = reviewGroups.value.find(group => group.id === groupId)
       if (!group)
         throw new Error('登録するグループを選んでください。')
       await select(group.representativeId)
-      if (disposed || generation !== runtime.projectGeneration.value || selected.value?.id !== group.representativeId || !groups.value.some(current => current.id === groupId && current.representativeId === group.representativeId))
+      if (disposed || generation !== runtime.projectGeneration.value || selected.value?.id !== group.representativeId || !reviewGroups.value.some(current => current.id === groupId && current.representativeId === group.representativeId))
         throw new Error('グループの代表候補を選び直してください。')
       await verify()
       const item = selected.value!
@@ -214,7 +216,7 @@ export function useDiscoveryWorkspace(options: DiscoveryWorkspaceOptions) {
       await verify()
       const result = await registration.register(id, draft, { groupId, linkGroupMembers: true, isCurrent: () => creation.value === draft && selectedId.value === id && creationGroupId.value === groupId })
       if (result) {
-        notice.value = result.warning ?? 'グループに登録しました。「次へ」で対象カードに反映できます。'
+        notice.value = result.warning ?? 'グループに登録しました。「領域検出」または「まとめて再OCR」で原文に取り込めます。'
         creation.value = null
       }
     })

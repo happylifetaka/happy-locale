@@ -124,7 +124,7 @@ function pickImage(event: Event) {
     <div v-if="!image" class="canvas-empty">
       <p>先にカード画像を開いてください</p>
       <label class="button primary asset-source-open-button">
-        アセット元画像を開く
+        アイコン元画像を開く
         <input
           class="visually-hidden"
           type="file"
@@ -145,7 +145,7 @@ function pickImage(event: Event) {
         width: `${image.naturalWidth * (zoom / 100)}px`,
         height: `${image.naturalHeight * (zoom / 100)}px`,
       }"
-      aria-label="アセット切り出し元画像"
+      aria-label="アイコン切り出し元画像"
       @pointerdown="pointerDown"
       @pointermove="pointerMove"
       @pointerup="pointerUp"

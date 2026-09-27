@@ -59,7 +59,7 @@ export function useEditorAssets({
   /** 開いている元画像で再切り出しするアセットを指定し、範囲選択を開始する。 */
   function startAssetRecrop(id: string) {
     if (!assetSourceImage.value) {
-      setMessage('先にアセット元画像を開いてください。')
+      setMessage('先にアイコン元画像を開いてください。')
       return
     }
     const asset = assets.value.find(item => item.id === id)
@@ -70,7 +70,7 @@ export function useEditorAssets({
     assetEditing.value = true
     maskEditing.value = false
     exclusionEditing.value = false
-    setMessage(`元画像上でアセット「${asset.name}」の新しい範囲をドラッグしてください。`)
+    setMessage(`元画像上でアイコン「${asset.name}」の新しい範囲をドラッグしてください。`)
   }
 
   /** 指定範囲を元に、登録前のアセット作成下書きを開く。 */
@@ -125,7 +125,7 @@ export function useEditorAssets({
       ? assets.value.find(asset => asset.id === draft.editingAssetId)
       : null
     if (draft.editingAssetId && !existingAsset) {
-      setMessage('更新対象のアセットが見つかりませんでした。')
+      setMessage('更新対象のアイコンが見つかりませんでした。')
       return
     }
     const sourceImageId = assetSourceImageId.value
@@ -162,7 +162,7 @@ export function useEditorAssets({
         return
       }
       if (!blob) {
-        setMessage('アセット画像を作成できませんでした。')
+        setMessage('アイコン画像を作成できませんでした。')
         return
       }
       if (existingAsset && existingAsset.name !== name) {
@@ -201,14 +201,14 @@ export function useEditorAssets({
       assetCreationDraft.value = null
       setMessage(
         existingAsset
-          ? `アセット「${name}」を更新しました。`
-          : `アセット「${name}」を登録しました。`,
+          ? `アイコン「${name}」を更新しました。`
+          : `アイコン「${name}」を登録しました。`,
       )
     }
     catch (error) {
       if (isCurrent()) {
-        logDiagnostic('アセット画像を作成できませんでした', error, 'error')
-        setMessage('アセット画像を作成できませんでした。再試行してください。')
+        logDiagnostic('アイコン画像を作成できませんでした', error, 'error')
+        setMessage('アイコン画像を作成できませんでした。再試行してください。')
       }
     }
     finally {
@@ -243,7 +243,7 @@ export function useEditorAssets({
       if (currentError)
         throw new Error(currentError)
       if (!blob)
-        throw new Error('アセット画像を作成できませんでした。再試行してください。')
+        throw new Error('アイコン画像を作成できませんでした。再試行してください。')
       const id = crypto.randomUUID()
       const asset: ImageAsset = {
         id,

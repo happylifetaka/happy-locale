@@ -6,7 +6,7 @@ export function sourceIconProblems(region: TextRegion, assets: readonly Pick<Ima
   const problems: string[] = []
   for (const [index, icon] of (region.sourceIcons ?? []).entries()) {
     if (!assets.some(asset => asset.id === icon.assetId))
-      problems.push(`アイコン${index + 1}のアセットが見つかりません。`)
+      problems.push(`アイコン${index + 1}のアイコンが見つかりません。`)
     if (![icon.x, icon.y, icon.width, icon.height].every(Number.isFinite)
       || icon.x < 0 || icon.y < 0 || icon.width <= 0 || icon.height <= 0
       || icon.x + icon.width > region.width || icon.y + icon.height > region.height) {
@@ -56,7 +56,7 @@ export function textWithSourceIcons(
   for (const icon of icons) {
     const asset = assets.find(asset => asset.id === icon.assetId)
     if (!asset)
-      throw new Error('アイコンに割り当てたアセットが見つかりません。')
+      throw new Error('アイコンに割り当てたアイコンが見つかりません。')
     const block: OCRTextBlock = { ...icon, text: `[icon:${asset.name}]`, confidence: null }
     const matchingRows = rows.filter(items => items.some(item => overlap(item, block) >= 0.3))
     matchingRows.sort((a, b) => {

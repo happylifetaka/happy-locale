@@ -113,6 +113,32 @@ it('links all group members when explicitly registering through the group UI, wi
   expect(s.store.activeCard.regions).toEqual(regions)
 })
 
+it('registers the first active member when the saved representative is excluded without losing its restoration data', async () => {
+  const s = setup()
+  s.review.change('occurrence-1', { kind: 'decision', decision: 'excluded' })
+  const before = structuredClone(s.store.assetDiscovery)
+  const task = s.registration.register('occurrence-2', s.draft, { groupId: 'group-1', linkGroupMembers: true })
+  s.callbacks[0]!.finish(new Blob(['fallback representative PNG'], { type: 'image/png' }))
+  const result = (await task)!
+  expect(result.linked).toBe(true)
+  expect(s.store.assetDiscovery!.groups[0]).toMatchObject({ representativeId: 'occurrence-1', memberIds: ['occurrence-1', 'occurrence-2'], proposedAssetId: result.asset.id })
+  expect(s.store.assetDiscovery!.occurrences[0]).toMatchObject({ decision: 'excluded', approval: null })
+  expect(s.store.assetDiscovery!.occurrences[1]).toMatchObject({ assetId: result.asset.id, decision: 'pending', approval: null })
+  expect(s.review.undo()).toBe(true)
+  expect(s.store.assetDiscovery).toEqual(before)
+})
+
+it('discards a fallback registration if the original representative is restored while generating its PNG', async () => {
+  const s = setup()
+  s.review.change('occurrence-1', { kind: 'decision', decision: 'excluded' })
+  const task = s.registration.register('occurrence-2', s.draft, { groupId: 'group-1', linkGroupMembers: true })
+  s.review.change('occurrence-1', { kind: 'decision', decision: 'pending' })
+  s.callbacks[0]!.finish(new Blob(['stale fallback PNG'], { type: 'image/png' }))
+  expect(await task).toBeNull()
+  expect(s.store.assets).toHaveLength(1)
+  expect(s.store.assetDiscovery!.groups[0]!.representativeId).toBe('occurrence-1')
+})
+
 it('rejects a second registration while its PNG is pending', async () => {
   const s = setup()
   const first = s.registration.register('occurrence-1', s.draft)
@@ -195,7 +221,7 @@ it('releases a failed PNG canvas and allows a successful retry', async () => {
   const s = setup()
   const first = s.registration.register('occurrence-1', s.draft)
   s.callbacks[0]!.finish(null)
-  await expect(first).rejects.toThrow('アセット画像')
+  await expect(first).rejects.toThrow('アイコン画像')
   expect(s.callbacks[0]!.canvas.width).toBe(1)
   expect(s.registration.running.value).toBe(false)
   const retry = s.registration.register('occurrence-1', s.draft)

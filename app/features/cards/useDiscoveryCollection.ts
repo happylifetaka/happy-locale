@@ -1,5 +1,5 @@
 import type { useProjectRuntime } from '~/composables/useProjectRuntime'
-import type { DiscoveryCard } from '~/services/asset-discovery/collect'
+import type { DiscoveryCard, IconCollectionScope } from '~/services/asset-discovery/collect'
 import type { IconDiscoverySettings } from '~/services/asset-discovery/types'
 import type { OCRProvider } from '~/services/ocr/types'
 import type { useProjectStore } from '~/stores/project'
@@ -63,7 +63,7 @@ export function useDiscoveryCollection({ store, runtime, currentImageId, getProv
     result.value = null
   })
 
-  async function start(cardIds: readonly string[]): Promise<CollectionResult | null> {
+  async function start(cardIds: readonly string[], collectionScope: IconCollectionScope = 'auto'): Promise<CollectionResult | null> {
     if (disposed || busy() || running.value)
       return null
     active.value = null
@@ -139,6 +139,7 @@ export function useDiscoveryCollection({ store, runtime, currentImageId, getProv
         draftCardId: documentCards ? undefined : imageId,
         batch: {
           cards,
+          scope: collectionScope,
           provider,
           settings: JSON.parse(initialSettings) as IconDiscoverySettings,
           maximumProposedCandidates: ASSET_DISCOVERY_LIMITS.project,

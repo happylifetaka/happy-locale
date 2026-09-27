@@ -10,7 +10,7 @@ it('separates source protection from errors and routes to the exact region or ic
   const region = regionFromCandidate(card.ocrCandidates![0]!, 0)
   card.regions = [region]
   const protectedIssue = { regionId: region.id, message: 'OCR履歴がないため、原文を保護しました', preview: true }
-  const iconIssue = { message: 'グループのアセット割当を確認', occurrenceId: 'icon', regionId: region.id }
+  const iconIssue = { message: 'グループのアイコン割当を確認', occurrenceId: 'icon', regionId: region.id }
   const props = { cards: [card], issues: [{ cardId: card.id, cardName: card.imageName, messages: [], details: [protectedIssue, iconIssue] }] }
   const wrapper = mount(RegionApplyResultsDialog, { props })
   expect(wrapper.text()).toContain('原文・アイコン・枠の更新を保留')
@@ -19,7 +19,7 @@ it('separates source protection from errors and routes to the exact region or ic
   expect(wrapper.get('.problem-summary').text()).toContain('1枚')
   expect(wrapper.findAll('blockquote')[0]!.text()).toContain(region.originalText)
   const button = (name: string) => wrapper.findAll('button').find(button => button.text() === name)!
-  await button('変更案を比較').trigger('click')
+  await button('OCR結果と比較').trigger('click')
   expect(wrapper.emitted('resolve')?.[0]).toEqual([card.id, protectedIssue, 'preview'])
   await wrapper.get('select').setValue('problem')
   expect(wrapper.findAll('.issue-row')).toHaveLength(1)
