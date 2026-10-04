@@ -35,18 +35,18 @@
     "pinia": "^4.0.3",
     "tesseract.js": "^7.0.0",
     "tesseract.js-core": "^7.0.0",
-    "vue": "^3.5.42"
+    "vue": "^3.5.43"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^9.5.1",
     "@playwright/test": "^1.63.0",
-    "@types/node": "^24.13.4",
+    "@types/node": "^26.6.3",
     "@vitejs/plugin-vue": "^6.0.9",
-    "@vue/test-utils": "^2.5.0",
-    "eslint": "^10.10.0",
+    "@vue/test-utils": "^2.5.1",
+    "eslint": "^10.11.0",
     "happy-dom": "^20.14.5",
-    "typescript": "^5.9.3",
-    "vitest": "^5.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3",
     "vue-tsc": "^3.3.11"
   }
 }
